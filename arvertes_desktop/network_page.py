@@ -1,4 +1,4 @@
-"""Central de dispositivos: interface de planejamento, sem transporte USB."""
+"""Central de dispositivos: interface de planejamento, sem transporte implementado."""
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QCheckBox, QFrame, QGridLayout, QHBoxLayout, QLabel, QPushButton,
@@ -36,7 +36,7 @@ def device(title, connection, state, work):
 
 def build_network(layout):
     banner, banner_layout = card()
-    banner_layout.addWidget(text("ARVERTES NETWORK  /  USB EXCLUSIVO", "networkTag"))
+    banner_layout.addWidget(text("ARVERTES NETWORK  /  USB  +  WI-FI LOCAL", "networkTag"))
     banner_layout.addWidget(text(
         "Distribua trabalhos entre dispositivos autorizados, com Atlas na coordenação. "
         "A comunicação e a execução distribuída ainda não estão implementadas."
@@ -67,7 +67,7 @@ def build_network(layout):
     real_layout.addWidget(text("Computador principal", "networkTitle"))
     real_layout.addWidget(text("Exibição local · monitoramento ainda indisponível", "muted"))
     real_layout.addWidget(text(
-        "Nenhuma sessão USB pode ser verificada nesta versão. "
+        "Nenhuma sessão USB ou Wi-Fi pode ser verificada nesta versão. "
         "O pareamento com o aplicativo Android será desenvolvido separadamente."
     ))
     layout.addWidget(real_view)
@@ -80,7 +80,7 @@ def build_network(layout):
     for index, spec in enumerate((
         ("Computador", "Local", "Exemplo", "Forge · geometria e Blender"),
         ("Celular A", "USB", "Exemplo", "Atlas · planejamento"),
-        ("Celular B", "USB", "Exemplo", "Echo · áudio"),
+        ("Celular B", "Wi-Fi local", "Exemplo", "Echo · áudio"),
     )):
         demo_layout.addWidget(device(*spec), 1, index)
         demo_layout.setColumnStretch(index, 1)
@@ -91,7 +91,7 @@ def build_network(layout):
     policies, policies_layout = card()
     policies_layout.addWidget(text("Política de distribuição", "networkTitle"))
     for rule in (
-        "Celulares: somente cabo USB de dados. Sem Wi-Fi, Bluetooth ou internet.",
+        "Celulares: cabo USB de dados ou Wi-Fi local autenticado. Sem Bluetooth ou acesso remoto pela internet.",
         "Pareamento e autorização explícita do proprietário; processamento desligado por padrão.",
         "Preservar o uso cotidiano do aparelho; respeitar limites de RAM, bateria e temperatura.",
         "Uma tarefa pesada por nó inicialmente; Atlas deve verificar compatibilidade.",
@@ -101,9 +101,9 @@ def build_network(layout):
     help_button = QPushButton("Como será a conexão")
     help_button.setCheckable(True)
     help_details = text(
-        "Fluxo previsto: instalar o aplicativo Android, conectar por cabo de dados, "
+        "Fluxo previsto: instalar o aplicativo Android, conectar por cabo de dados ou rede Wi-Fi local, "
         "autorizar o pareamento nos dois aparelhos e optar pelo compartilhamento. "
-        "O transporte USB e a verificação de identidade ainda precisam ser implementados e testados.",
+        "Os transportes USB/Wi-Fi e a verificação de identidade ainda precisam ser implementados e testados.",
         "muted",
     )
     help_details.hide()

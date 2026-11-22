@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
 
 from .navigation import SECTIONS
 from .network_page import build_network
+from .sentinel_page import build_sentinel
 from .roster import AGENTS
 from .pages import WorkspacePages, build_agents
 from .workspace import Workspace
@@ -49,13 +50,14 @@ def panel() -> tuple[QFrame, QVBoxLayout]:
 
 
 class StudioWindow(QMainWindow):
-    def __init__(self):
+    def __init__(self, *, config_dir=None):
         super().__init__()
         self.setWindowTitle("Arvertes Studio — 0.2.0 dev")
         self.setMinimumSize(860, 540)
         self.resize(1200, 760)
         self.setStyleSheet(DARK_THEME)
-        config_dir = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppConfigLocation)
+        if config_dir is None:
+            config_dir = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppConfigLocation)
         self.config_path = Path(config_dir) / "settings.json"
         self.load_error = ""
         try:
@@ -123,6 +125,8 @@ class StudioWindow(QMainWindow):
                 self._settings_page(layout)
             elif section.key == "agents":
                 build_agents(layout)
+            elif section.key == "sentinel":
+                build_sentinel(layout)
             elif section.key == "network":
                 build_network(layout)
             elif section.key in ("projects", "library", "tasks"):
@@ -175,13 +179,16 @@ class StudioWindow(QMainWindow):
         side_layout.addWidget(label("26 especialistas · 5 departamentos", "muted"))
         for agent in (AGENTS[0], AGENTS[1], AGENTS[22]):
             side_layout.addWidget(label(f"{agent.name} — {agent.role}"))
-        side_layout.addWidget(label("Nenhum agente conectado", "muted"))
+        side_layout.addWidget(label("Sentinel local · produção não conectada", "muted"))
         agents_button = QPushButton("Ver equipe")
         agents_button.clicked.connect(lambda: self._navigate("agents"))
         side_layout.addWidget(agents_button)
         network_button = QPushButton("Central de dispositivos")
         network_button.clicked.connect(lambda: self._navigate("network"))
         side_layout.addWidget(network_button)
+        sentinel_button = QPushButton("Revisar segurança")
+        sentinel_button.clicked.connect(lambda: self._navigate("sentinel"))
+        side_layout.addWidget(sentinel_button)
         side_layout.addStretch()
         split.addWidget(preview)
         split.addWidget(sidebar)

@@ -59,4 +59,4 @@ Checklist manual pendente para Windows:
 8. Criar três rascunhos, reordenar, cancelar um e reiniciar para conferir persistência.
 9. Buscar Atlas e Aegis, filtrar departamentos; abrir as quinze áreas.
 
-A dependência GUI não está instalada no ambiente Linux de desenvolvimento utilizado para esta entrega. Nesta ampliação, os seis novos testes de catálogo e banco local passaram em Python 3.13.5 no Linux, com os três hashes dos arquivos testados conferidos contra o GitHub. Os cinco testes anteriores foram atualizados para a nova contagem de seções e agentes; a suíte gráfica e a verificação de um Blender real seguem pendentes.
+A dependência GUI não está instalada no ambiente Linux de desenvolvimento utilizado para esta entrega. Nesta ampliação, os 11 testes do núcleo desktop passaram em Python 3.13.5 no Linux, incluindo catálogo, banco local, navegação e configurações. Os sete hashes dos arquivos Python usados nos testes coincidem com os do GitHub. A janela e a verificação de um Blender real seguem pendentes.

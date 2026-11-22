@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="dark"><title>Arvertes Studio Web</title><link rel="stylesheet" href="./studio.css"></head><body>
+<header><div><b>ARVERTES</b><span>STUDIO / WEB</span></div><span class="tag">Prévia · R$ 0 · sem executor</span></header>
+<div class="shell"><nav aria-label="Áreas do Studio">
+<button data-page="office" aria-current="page">▦ Escritório</button>
+<button data-page="production">◇ Produção 3D</button>
+<button data-page="library">▤ Biblioteca</button>
+<button data-page="agents">♙ Agentes</button>
+<button data-page="tasks">☷ Tarefas</button>
+<button data-page="security">▣ Sentinel</button>
+</nav><main>
+<section id="office"><div class="heading"><div><small>ARVERTES HQ</small><h1>Escritório</h1><p>26 especialistas cadastrados. Nenhuma execução remota ligada.</p></div><button data-go="production" class="primary">Nova produção</button></div><div id="office-frame"></div></section>
+<section id="production" hidden><small>ATLAS / FORGE</small><h1>Produção de personagem</h1><p>Prepare a referência e importe o resultado do motor 3D. A geração integrada aguarda um executor gratuito.</p><form id="draft"><label>Nome da produção<input id="name" required maxlength="100" placeholder="Ex.: GVS"></label><label>Instruções<textarea id="instruction" required maxlength="2000" placeholder="Descreva o personagem, estilo e resultado desejado"></textarea></label><label>Imagem de referência (opcional, apenas nesta aba)<input id="reference" type="file" accept="image/png,image/jpeg,image/webp"></label><img id="reference-preview" hidden alt="Prévia da referência"><button class="primary">Preparar tarefa</button></form><div class="panel"><h2>Motor candidato: TRELLIS.2</h2><p>Teste manual na demonstração oficial, sujeito às cotas e regras do serviço. Nenhum envio automático de imagens.</p><a href="https://huggingface.co/spaces/microsoft/TRELLIS.2" target="_blank" rel="noopener noreferrer">Abrir demonstração oficial ↗</a><p><button data-go="library">Importar GLB gerado</button></p><button disabled>Gerar no Studio · executor indisponível</button></div></section>
+<section id="library" hidden><small>NEXUS / ARGUS</small><h1>Biblioteca e análise inicial</h1><p>Selecione um GLB. O navegador lê somente o arquivo escolhido, sem enviar para qualquer servidor.</p><label>Modelo (.glb, até 16 MiB)<input id="glb" type="file" accept=".glb,model/gltf-binary"></label><p id="asset-status" role="status">Nenhum modelo selecionado.</p><dl id="stats"></dl><p class="muted">Inspeção de estrutura declarada no GLB. Não substitui análise de topologia, renderização, rig ou testes no Blender e Unreal.</p></section>
+<section id="agents" hidden><small>EQUIPE</small><h1>26 especialistas</h1><p>Catálogo original; as ferramentas remotas ainda não estão ligadas.</p><div id="roster"></div></section>
+<section id="tasks" hidden><small>ATLAS</small><h1>Tarefas</h1><p>Rascunhos preparados nesta sessão do navegador. Não são enviados nem executados.</p><div id="tasks-list"></div></section>
+<section id="security" hidden><small>SEGURANÇA</small><h1>Sentinel</h1><div class="panel"><h2>Execução bloqueada</h2><p>Orçamento autorizado: R$ 0 de novos gastos. O site não possui credenciais de GPU, rotas de execução ou autorização de cobrança.</p><p>Antes de liberar produção: autenticação, armazenamento privado, fila persistente, cotas verificadas no provedor e revisão humana.</p></div></section>
+</main></div><footer>Arvertes Studio Web · prévia de desenvolvimento · Habblaud / MIT</footer><script type="module" src="./studio.mjs"></script></body></html>

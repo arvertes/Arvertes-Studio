@@ -7,7 +7,8 @@ from .sentinel import evaluate_release, REQUIRED
 
 SCOPES = {"desktop_diagnostic": "Windows — diagnóstico",
           "android_diagnostic": "Android — diagnóstico",
-          "usb_processing": "USB — processamento"}
+          "usb_processing": "USB — processamento",
+          "wifi_processing": "Wi-Fi local — processamento"}
 LABELS = {"missing": "ausente", "stale": "outra revisão", "fail": "falha", "pending": "pendente"}
 
 

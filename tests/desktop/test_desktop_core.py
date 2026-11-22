@@ -43,7 +43,7 @@ class DesktopCoreTests(unittest.TestCase):
         self.assertEqual(len(SECTIONS), 16)
         self.assertIn("network", {section.key for section in SECTIONS})
         self.assertEqual(len({section.key for section in SECTIONS}), len(SECTIONS))
-        self.assertEqual(len(set(AGENT_NAMES)), 25)
+        self.assertEqual(len(set(AGENT_NAMES)), 26)
 
 
 if __name__ == "__main__":

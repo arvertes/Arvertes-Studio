@@ -1,0 +1,139 @@
+"""Optional offline renderer. Serve only reviewed static build files on loopback."""
+from functools import partial
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+from threading import Thread
+from urllib.parse import unquote, urlsplit
+import mimetypes
+
+from PySide6.QtWidgets import QLabel, QPushButton, QVBoxLayout, QWidget
+
+BUILD = Path(__file__).resolve().parent / "habblaud_client"
+MAX_FILE = 32 * 1024 * 1024
+
+
+class StaticHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        server = self.server
+        if self.headers.get("Host") != f"127.0.0.1:{server.server_port}":
+            self.send_error(403)
+            return
+        try:
+            path = unquote(urlsplit(self.path).path).lstrip("/") or "index.html"
+            file = (server.root / path).resolve()
+            if not file.is_relative_to(server.root) or not file.is_file():
+                self.send_error(404)
+                return
+            if file.stat().st_size > MAX_FILE:
+                self.send_error(413)
+                return
+            data = file.read_bytes()
+        except (OSError, ValueError):
+            self.send_error(404)
+            return
+        kind = mimetypes.guess_type(file.name)[0] or "application/octet-stream"
+        if file.suffix == ".js":
+            kind = "text/javascript"
+        self.send_response(200)
+        self.send_header("Content-Type", kind)
+        self.send_header("Content-Length", str(len(data)))
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Content-Security-Policy", "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'")
+        self.end_headers()
+        self.wfile.write(data)
+
+    def log_message(self, *args):
+        pass
+
+
+class PreviewServer:
+    def __init__(self, root):
+        root = Path(root).resolve(strict=True)
+        if not (root / "index.html").is_file():
+            raise ValueError("Bundle visual ausente.")
+        self.server = ThreadingHTTPServer(("127.0.0.1", 0), StaticHandler)
+        self.server.root = root
+        self.thread = Thread(target=self.server.serve_forever, daemon=True,
+                             kwargs={"poll_interval": 0.1})
+        self.thread.start()
+
+    @property
+    def url(self):
+        return f"http://127.0.0.1:{self.server.server_port}/"
+
+    def close(self):
+        self.server.shutdown()
+        self.server.server_close()
+
+
+class OfficePreview(QWidget):
+    """Explicit, optional WebEngine preview; no process runs until requested."""
+    def __init__(self):
+        super().__init__()
+        self.server = None
+        self.view = None
+        self.box = QVBoxLayout(self)
+        self.box.setContentsMargins(0, 0, 0, 0)
+        self.button = QPushButton("Abrir escritório original (experimental)")
+        self.box.addWidget(self.button)
+        self.message = QLabel("Motor visual Habblaud (MIT). Requer bundle validado e Qt WebEngine opcional. Sem acesso às sessões Claude/Codex.")
+        self.message.setWordWrap(True)
+        self.box.addWidget(self.message)
+        self.button.clicked.connect(self.toggle)
+
+    def toggle(self):
+        if self.view is not None:
+            self.stop()
+            return
+        if not (BUILD / "index.html").is_file():
+            self.message.setText("Bundle Habblaud ainda não instalado nesta edição. Use o mapa leve abaixo.")
+            return
+        try:
+            from PySide6.QtCore import QUrl
+            from PySide6.QtWebEngineCore import QWebEnginePage, QWebEngineProfile, QWebEngineUrlRequestInterceptor
+            from PySide6.QtWebEngineWidgets import QWebEngineView
+        except ImportError:
+            self.message.setText("Qt WebEngine opcional indisponível; mapa leve mantido.")
+            return
+        try:
+            self.server = PreviewServer(BUILD)
+            origin = QUrl(self.server.url)
+            class LocalOnly(QWebEngineUrlRequestInterceptor):
+                def interceptRequest(self, info):
+                    url = info.requestUrl()
+                    info.block(not (url.scheme() == "http" and url.host() == "127.0.0.1" and url.port() == origin.port()))
+            self.view = QWebEngineView(self)
+            self.view.setMinimumHeight(440)
+            # Off-the-record profile; no account, history or persistent cookies.
+            self.profile = QWebEngineProfile(self.view)
+            self.interceptor = LocalOnly(self.profile)
+            self.profile.setUrlRequestInterceptor(self.interceptor)
+            self.profile.downloadRequested.connect(lambda download: download.cancel())
+            self.page = QWebEnginePage(self.profile, self.view)
+            self.view.setPage(self.page)
+            self.box.addWidget(self.view, 1)
+            self.view.load(origin)
+            self.button.setText("Fechar escritório original")
+            self.message.setText("Prévia original · sem execução de tarefas. Menu lateral do Studio permanece funcional.")
+        except (OSError, RuntimeError, ValueError) as error:
+            self.stop()
+            self.message.setText("Não foi possível abrir a prévia: " + str(error))
+
+    def stop(self):
+        if self.view is not None:
+            self.view.stop()
+            self.box.removeWidget(self.view)
+            self.view.hide()
+            self.view.deleteLater()
+            self.view = None
+        if self.server is not None:
+            self.server.close()
+            self.server = None
+        self.button.setText("Abrir escritório original (experimental)")
+        self.message.setText("Prévia fechada. Mapa leve disponível.")
+
+    def hideEvent(self, event):
+        if self.server is not None or self.view is not None:
+            self.stop()
+        super().hideEvent(event)

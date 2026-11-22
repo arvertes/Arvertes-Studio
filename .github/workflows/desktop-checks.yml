@@ -89,10 +89,16 @@ jobs:
       - name: Blender 5.3.0 oficial
         run: |
           cd "$RUNNER_TEMP"
-          release=https://download.blender.org/release/Blender5.3
-          curl -fsSLO "$release/blender-5.3.0-linux-x64.tar.xz"
-          curl -fsSL "$release/blender-5.3.0.sha256" | grep 'linux-x64.tar.xz' | sha256sum -c
-          tar -xJf blender-5.3.0-linux-x64.tar.xz
+          archive=blender-5.3.0-linux-x64.tar.xz
+          checksum=dacb8264197a3f7fda6001285a5a506fc97ee943881261c2c3bd63c882f22e05
+          for base in https://download.blender.org/release https://mirrors.ocf.berkeley.edu/blender/release https://mirror.clarkson.edu/blender/release; do
+            if curl -fsSL --max-time 180 --retry 1 --retry-all-errors "$base/Blender5.3/$archive" -o "$archive" \
+              && printf '%s  %s\n' "$checksum" "$archive" | sha256sum -c; then
+              tar -xJf "$archive"
+              exit 0
+            fi
+          done
+          exit 1
       - name: Add-on e executor de cópia local
         run: |
           blender="$RUNNER_TEMP/blender-5.3.0-linux-x64/blender"

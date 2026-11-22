@@ -4,6 +4,8 @@ import android.app.Activity;
 import android.app.Instrumentation;
 import android.content.Intent;
 import android.os.Bundle;
+import java.net.ConnectException;
+import java.net.SocketTimeoutException;
 import javax.net.ssl.SSLException;
 import org.json.JSONObject;
 
@@ -36,6 +38,7 @@ public final class LocalSessionTest extends Instrumentation {
         Activity activity = startActivitySync(launch);
         try {
             StudioSession client = StudioSession.invite(invitation);
+            waitForRoute(client);
             StudioSession badPin = new StudioSession(client.transport, client.host, client.port,
                     "0".repeat(64), client.id, client.token);
             try {
@@ -43,7 +46,6 @@ public final class LocalSessionTest extends Instrumentation {
                 throw new AssertionError("Identidade divergente aceita.");
             } catch (SSLException expected) {}
 
-            expectRejected(client, "disconnect", new JSONObject());
             String code = invitation.substring(invitation.lastIndexOf(':') + 1);
             client.request("pair", new JSONObject().put("name", "Android CI").put("code", code));
             expectRejected(StudioSession.invite(invitation), "pair",
@@ -100,6 +102,19 @@ public final class LocalSessionTest extends Instrumentation {
             throw new AssertionError("Troca de mensagens e revogação não concluídas.");
         } finally {
             runOnMainSync(activity::finish);
+        }
+    }
+
+    private static void waitForRoute(StudioSession client) throws Exception {
+        // O emulador pode anunciar boot concluído antes de estabilizar a rota 10.0.2.2.
+        for (int attempt = 0; ; attempt++) {
+            try {
+                expectRejected(client, "disconnect", new JSONObject());
+                return;
+            } catch (ConnectException | SocketTimeoutException error) {
+                if (attempt == 5) throw error;
+                Thread.sleep(750);
+            }
         }
     }
 

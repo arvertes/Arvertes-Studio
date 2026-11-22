@@ -51,3 +51,7 @@ Os checks e o download dos artefatos da revisão atual ficam na [PR do Studio](h
 - **Emulado.** O Android real no emulador usa Keystore e TLS, executa quatro etapas de SHA-256 e reconecta no primeiro checkpoint pendente. A disponibilidade de bateria e memória para o cálculo usa fixture. O APK de instalação paralela é iniciado ao lado do aplicativo normal no mesmo emulador.
 - **Automatizado com executável real.** Blender 5.3.0 importa, organiza e reabre um .blend de trabalho e verifica que o GLB de origem mantém o mesmo hash. O teste está em `tests/integration/check_blender_worker.py`.
 - **Físico.** Os testes do notebook e dos celulares permanecem para a bancada. Descoberta Wi-Fi e USB reais, consumo do WebEngine e execução prolongada precisam ser observados nesses aparelhos.
+
+### Falhas de infraestrutura observadas na CI
+
+A execução 45061809311 recebeu HTTP 403 ao obter a distribuição do Blender. A obtenção passou a usar SHA-256 fixado e espelhos públicos do mesmo arquivo. Na primeira tentativa 45061809307, o emulador iniciou, mas a conexão com o alias do host ainda estava indisponível. A instrumentação passou a aguardar a rota com uma requisição que deve ser recusada, antes de parear. O pareamento e a troca TLS continuam obrigatórios.

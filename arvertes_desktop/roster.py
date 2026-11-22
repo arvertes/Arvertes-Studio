@@ -36,6 +36,7 @@ AGENTS = (
     Agent("auditor", "Aegis", "Auditor final", "Qualidade"),
     Agent("continuidade", "Lore", "Especialista em continuidade", "Qualidade"),
     Agent("integrador_unreal", "Bridge", "Integrador Unreal", "Qualidade"),
+    Agent("seguranca", "Sentinel", "Segurança e validação de testes", "Qualidade"),
 )
 DEPARTMENTS = tuple(dict.fromkeys(agent.department for agent in AGENTS))
 

@@ -4,18 +4,18 @@ import android.app.Activity;
 import android.app.Instrumentation;
 import android.content.Intent;
 import android.os.Bundle;
-import java.net.ConnectException;
-import java.net.SocketTimeoutException;
 import javax.net.ssl.SSLException;
 import org.json.JSONObject;
 
 /** Exercita o cliente Android contra o servidor real do Studio em um emulador de CI. */
 public final class LocalSessionTest extends Instrumentation {
     private String invitation;
+    private boolean useAdbReverse;
 
     @Override public void onCreate(Bundle arguments) {
         super.onCreate(arguments);
         invitation = arguments.getString("invitation");
+        useAdbReverse = "yes".equals(arguments.getString("adb_reverse"));
         start();
     }
 
@@ -38,9 +38,10 @@ public final class LocalSessionTest extends Instrumentation {
         Activity activity = startActivitySync(launch);
         try {
             StudioSession client = StudioSession.invite(invitation);
-            waitForRoute(client);
             StudioSession badPin = new StudioSession(client.transport, client.host, client.port,
                     "0".repeat(64), client.id, client.token);
+            expectRejected(testRoute(client), "disconnect", new JSONObject());
+            testRoute(badPin);
             try {
                 badPin.request("disconnect", new JSONObject());
                 throw new AssertionError("Identidade divergente aceita.");
@@ -48,14 +49,16 @@ public final class LocalSessionTest extends Instrumentation {
 
             String code = invitation.substring(invitation.lastIndexOf(':') + 1);
             client.request("pair", new JSONObject().put("name", "Android CI").put("code", code));
-            expectRejected(StudioSession.invite(invitation), "pair",
+            expectRejected(testRoute(StudioSession.invite(invitation)), "pair",
                     new JSONObject().put("name", "Repetição CI").put("code", code));
+            if (useAdbReverse) setHost(client, "10.0.2.2");
             PairingStore store = new PairingStore(getTargetContext());
             store.save(client);
             StudioSession restored = store.load();
             if (restored == null || !restored.id.equals(client.id) || !restored.fingerprint.equals(client.fingerprint))
                 throw new AssertionError("Credencial não persistiu.");
 
+            testRoute(restored);
             JSONObject reading = new MobileMetrics().sample(getTargetContext()).payload();
             restored.request("poll", new JSONObject().put("metrics", reading)
                     .put("consent", false).put("reply", JSONObject.NULL));
@@ -105,17 +108,17 @@ public final class LocalSessionTest extends Instrumentation {
         }
     }
 
-    private static void waitForRoute(StudioSession client) throws Exception {
-        // O emulador pode anunciar boot concluído antes de estabilizar a rota 10.0.2.2.
-        for (int attempt = 0; ; attempt++) {
-            try {
-                expectRejected(client, "disconnect", new JSONObject());
-                return;
-            } catch (ConnectException | SocketTimeoutException error) {
-                if (attempt == 5) throw error;
-                Thread.sleep(750);
-            }
-        }
+    private StudioSession testRoute(StudioSession session) throws Exception {
+        // Só a instrumentação troca o destino depois de conferir o código. O APK
+        // principal continua aceitando apenas endereços IPv4 locais do contrato.
+        if (useAdbReverse) setHost(session, "127.0.0.1");
+        return session;
+    }
+
+    private static void setHost(StudioSession session, String host) throws Exception {
+        java.lang.reflect.Field field = StudioSession.class.getDeclaredField("host");
+        field.setAccessible(true);
+        field.set(session, host);
     }
 
     private static void expectRejected(StudioSession session, String action, JSONObject fields) throws Exception {

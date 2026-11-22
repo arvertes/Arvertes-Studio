@@ -54,4 +54,4 @@ Os checks e o download dos artefatos da revisão atual ficam na [PR do Studio](h
 
 ### Falhas de infraestrutura observadas na CI
 
-A execução 45061809311 recebeu HTTP 403 ao obter a distribuição do Blender. A obtenção passou a usar SHA-256 fixado e espelhos públicos do mesmo arquivo. Na primeira tentativa 45061809307, o emulador iniciou, mas a conexão com o alias do host ainda estava indisponível. A instrumentação passou a aguardar a rota com uma requisição que deve ser recusada, antes de parear. O pareamento e a troca TLS continuam obrigatórios.
+A execução 45061809311 recebeu HTTP 403 ao obter a distribuição do Blender. A obtenção passou a usar SHA-256 fixado e espelhos públicos do mesmo arquivo. Na primeira tentativa 45061809307, o emulador iniciou, mas a conexão com o alias do host ainda estava indisponível. A tentativa de aguardar a rota também falhou na execução 45062271468. Para estabilizar a CI, somente o APK de instrumentação usa o encaminhamento ADB local do emulador. A condição de identidade falsa, o pareamento e a troca TLS continuam obrigatórios. O APK entregue mantém suas regras de endereços e não precisa de ADB para se conectar.

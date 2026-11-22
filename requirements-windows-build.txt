@@ -1,0 +1,3 @@
+# Interface atual usa somente Qt Core, Gui e Widgets.
+PySide6-Essentials==6.8.3
+pyinstaller==6.16.0

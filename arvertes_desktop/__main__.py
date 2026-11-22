@@ -32,6 +32,11 @@ def smoke_test(app, window_type):
             app.processEvents()
             assert window.workspace is not None
             assert window.pages.count() == len(SECTIONS)
+            project = window.workspace.create_project("Projeto smoke")
+            window.workspace.add_task(project, "Rascunho smoke", "Diagnóstico")
+            window.refresh_dashboard()
+            values = [l.text() for l in window.pages.widget(0).findChildren(QLabel) if l.objectName() == "metric"]
+            assert values == ["1", "0", "1"], values
             for index in range(len(SECTIONS)):
                 window.menu.setCurrentRow(index)
                 app.processEvents()

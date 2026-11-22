@@ -1,2 +1,5 @@
 # Instalar em ambiente virtual separado do Python interno do Blender.
 PySide6>=6.8,<7
+cryptography>=44,<51
+psutil>=6,<8
+zeroconf>=0.146,<1

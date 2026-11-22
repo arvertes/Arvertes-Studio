@@ -1,31 +1,30 @@
 package com.arvertes.mobile;
 
 import android.app.Activity;
-import android.app.ActivityManager;
-import android.content.Context;
-import android.content.Intent;
-import android.content.IntentFilter;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
-import android.hardware.usb.UsbAccessory;
-import android.hardware.usb.UsbManager;
-import android.os.BatteryManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
-import android.os.PowerManager;
-import android.view.View;
+import android.text.InputType;
 import android.view.WindowInsets;
 import android.widget.Button;
+import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.Switch;
 import android.widget.TextView;
-import java.util.Locale;
+import java.io.IOException;
+import java.net.ConnectException;
+import java.net.SocketTimeoutException;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ExecutorService;
+import javax.net.ssl.SSLException;
+import org.json.JSONObject;
 
-/** Diagnostic front end; no transport, job execution, background service or network permission. */
+/** Sessão em primeiro plano com pareamento explícito e pausa local imediata. */
 public final class MainActivity extends Activity {
     private static final int BG = Color.rgb(24, 28, 36);
     private static final int PANEL = Color.rgb(34, 40, 51);
@@ -33,12 +32,23 @@ public final class MainActivity extends Activity {
     private static final int MUTED = Color.rgb(161, 174, 189);
     private static final int TEAL = Color.rgb(114, 214, 202);
     private final Handler handler = new Handler(Looper.getMainLooper());
-    private TextView usb, battery, memory, thermal, status;
+    private TextView usb, battery, memory, thermal, cpu, status, connectionStatus, discoveryStatus;
+    private Button reconnect;
+    private EditText invitation, endpoint;
+    private PairingStore store;
+    private StudioDiscovery discovery;
+    private final MobileMetrics metrics = new MobileMetrics();
+    private final ExecutorService io = Executors.newSingleThreadExecutor();
+    private StudioSession paired, connected, savedPairing;
+    private String reply;
+    private boolean active, busy;
+    private int generation, failures, pairAttempt;
     private Switch consent;
     private final Runnable tick = new Runnable() {
         @Override public void run() {
-            refresh();
-            handler.postDelayed(this, 3000);
+            MobileMetrics.Sample sample = refresh();
+            if (active && paired != null && !busy) poll(sample);
+            handler.postDelayed(this, failures >= 3 ? 6000 : 2500);
         }
     };
 
@@ -63,95 +73,277 @@ public final class MainActivity extends Activity {
         }
         setContentView(scroll);
         content.addView(line("ARVERTES  /  MOBILE", 13, TEAL, true));
-        content.addView(line("Central de processamento", 25, TEXT, true));
-        content.addView(line(Build.MANUFACTURER + " " + Build.MODEL + "  •  v0.1 dev", 14, MUTED, false));
+        content.addView(line("Conectar ao Studio", 25, TEXT, true));
+        content.addView(line(Build.MANUFACTURER + " " + Build.MODEL, 14, MUTED, false));
+        store = new PairingStore(this);
+        discovery = new StudioDiscovery(this);
 
-        LinearLayout connection = card(content, "01   Conexão USB");
-        connection.addView(line("Studio: sessão não verificada", 17, TEAL, true));
+        LinearLayout connection = card(content, "Conexão local por USB ou Wi-Fi");
+        connectionStatus = metric(connection);
         usb = metric(connection);
-        connection.addView(line("Cabo ou carregamento não comprovam conexão de dados. "
-                + "Pareamento autenticado ainda não implementado.", 13, MUTED, false));
+        discoveryStatus = metric(connection);
+        invitation = field(connection, "Código de pareamento do Studio", true);
+        action(connection, "Parear e conectar", this::pair);
+        endpoint = field(connection, "Novo endereço IPv4:porta (opcional)", false);
+        reconnect = action(connection, "Reconectar ao Studio", this::resumePairing);
+        action(connection, "Pausar conexão agora", () -> pause("Conexão pausada neste aparelho."));
+        action(connection, "Esquecer pareamento local", () -> {
+            pause("Pareamento local removido. Revogue o aparelho no Studio.");
+            pairAttempt++;
+            savedPairing = paired = null;
+            reconnect.setEnabled(false);
+            io.execute(store::forget);
+        });
 
-        LinearLayout metrics = card(content, "02   Recursos do aparelho");
-        battery = metric(metrics);
-        memory = metric(metrics);
-        thermal = metric(metrics);
-        metrics.addView(line("Dados do Android, atualizados enquanto esta tela está aberta.", 12, MUTED, false));
+        LinearLayout resources = card(content, "Recursos do aparelho");
+        battery = metric(resources);
+        memory = metric(resources);
+        thermal = metric(resources);
+        cpu = metric(resources);
 
-        LinearLayout policy = card(content, "03   Controle do proprietário");
+        LinearLayout jobs = card(content, "Diagnóstico de mensagens");
         consent = new Switch(this);
-        consent.setText("Autorizar teste local de disponibilidade");
+        consent.setText("Autorizar respostas de diagnóstico");
         consent.setTextColor(TEXT);
         consent.setTextSize(14);
-        consent.setChecked(false);
         consent.setSaveEnabled(false);
-        policy.addView(consent);
-        status = metric(policy);
-        policy.addView(line("A autorização vale apenas nesta sessão. Nada é executado ou enviado. "
-                + "Pausa ao sair da tela; sem trabalho em segundo plano.", 13, MUTED, false));
-        consent.setOnCheckedChangeListener((button, checked) -> refresh());
+        jobs.addView(consent);
+        status = metric(jobs);
+        consent.setOnCheckedChangeListener((button, checked) -> {
+            reply = null;
+            refresh();
+        });
 
-        LinearLayout jobs = card(content, "04   Fila do Atlas");
-        jobs.addView(line("Nenhuma tarefa recebida", 17, TEXT, true));
-        jobs.addView(line("Execução remota e IA local serão integradas depois dos testes USB.", 13, MUTED, false));
-        Button update = new Button(this);
-        update.setText("Atualizar diagnóstico");
-        update.setAllCaps(false);
-        update.setOnClickListener(v -> refresh());
-        content.addView(update);
-        content.addView(line("OFFLINE  •  USB EXCLUSIVO  •  SEM PERMISSÃO DE INTERNET", 11, TEAL, true));
-        refresh();
+        reconnect.setEnabled(false);
+        connectionStatus.setText("Aguardando pareamento.");
+        io.execute(() -> {
+            StudioSession stored = null;
+            String problem = null;
+            try {
+                stored = store.load();
+            } catch (Exception error) {
+                problem = "Não foi possível ler o pareamento. Gere um novo código no Studio.";
+            }
+            StudioSession savedSession = stored;
+            String message = problem;
+            handler.post(() -> {
+                if (isDestroyed() || pairAttempt != 0) return;
+                if (savedSession != null) {
+                    savedPairing = paired = savedSession;
+                    reconnect.setEnabled(true);
+                    connectionStatus.setText("Pareamento salvo. Toque em Reconectar para abrir a sessão.");
+                } else if (message != null) {
+                    connectionStatus.setText(message);
+                }
+            });
+        });
     }
 
     @Override protected void onStart() {
         super.onStart();
-        handler.removeCallbacks(tick);
+        discovery.start();
         handler.post(tick);
     }
 
     @Override protected void onStop() {
         handler.removeCallbacks(tick);
-        consent.setChecked(false);
+        discovery.stop();
+        pause("Conexão pausada ao sair da tela.");
         super.onStop();
     }
 
-    private void refresh() {
-        Intent state = registerReceiver(null, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
-        int level = state == null ? -1 : state.getIntExtra(BatteryManager.EXTRA_LEVEL, -1);
-        int scale = state == null ? -1 : state.getIntExtra(BatteryManager.EXTRA_SCALE, -1);
-        int percent = level >= 0 && scale > 0 ? (int) (100L * level / scale) : -1;
-        int plugged = state == null ? 0 : state.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0);
-        boolean usbPower = (plugged & BatteryManager.BATTERY_PLUGGED_USB) != 0;
+    @Override protected void onDestroy() {
+        io.shutdown();
+        super.onDestroy();
+    }
 
-        UsbManager manager = (UsbManager) getSystemService(Context.USB_SERVICE);
-        int accessoryCount = -1;
+    private void pair() {
+        String code = invitation.getText().toString().trim();
+        StudioSession candidate;
         try {
-            if (manager != null && getPackageManager().hasSystemFeature("android.hardware.usb.accessory")) {
-                UsbAccessory[] accessories = manager.getAccessoryList();
-                accessoryCount = accessories == null ? 0 : accessories.length;
-            }
-        } catch (RuntimeException ignored) {
-            // Unknown, not proof of connection.
+            candidate = StudioSession.invite(code);
+        } catch (IllegalArgumentException error) {
+            connectionStatus.setText(error.getMessage());
+            return;
         }
-        usb.setText("Alimentação USB: " + (state == null ? "desconhecida" : usbPower ? "detectada" : "não detectada")
-                + "\nAcessórios USB enumerados: " + (accessoryCount < 0 ? "indisponível" : accessoryCount));
-        battery.setText("Bateria: " + (percent < 0 || percent > 100 ? "indisponível" : percent + "%"));
+        invitation.setText("");
+        pause("Verificando identidade e autorização no Studio…");
+        int request = generation;
+        int attempt = ++pairAttempt;
+        busy = true;
+        io.execute(() -> {
+            try {
+                candidate.request("pair", new JSONObject()
+                        .put("code", code.substring(code.lastIndexOf(':') + 1))
+                        .put("name", (Build.MANUFACTURER + " " + Build.MODEL).trim()));
+                store.save(candidate);
+                handler.post(() -> {
+                    if (pairAttempt != attempt || isDestroyed()) return;
+                    savedPairing = paired = candidate;
+                    reconnect.setEnabled(true);
+                    if (generation != request) return;
+                    active = true;
+                    busy = false;
+                    connectionStatus.setText("Pareado. Abrindo sessão autenticada…");
+                    poll(refresh());
+                });
+            } catch (Exception error) {
+                handler.post(() -> {
+                    if (generation != request) return;
+                    busy = false;
+                    connectionStatus.setText(describe(error));
+                });
+            }
+        });
+    }
 
-        ActivityManager am = (ActivityManager) getSystemService(Context.ACTIVITY_SERVICE);
-        ActivityManager.MemoryInfo info = new ActivityManager.MemoryInfo();
-        if (am != null) am.getMemoryInfo(info);
-        long available = info.availMem / (1024L * 1024L);
-        memory.setText(info.totalMem > 0 ? String.format(Locale.forLanguageTag("pt-BR"),
-                "RAM disponível estimada: %,.0f MiB\nRAM reportada pelo Android: %,.0f MiB",
-                (double) available, info.totalMem / (1024.0 * 1024.0)) : "RAM: indisponível");
+    private void resumePairing() {
+        if (paired == null) return;
+        String address = endpoint.getText().toString().trim();
+        try {
+            if (!address.isEmpty()) {
+                String[] parts = address.split(":", -1);
+                if (parts.length != 2 || !parts[1].matches("[0-9]{1,5}"))
+                    throw new IllegalArgumentException("Informe endereço IPv4:porta.");
+                paired = paired.endpoint(parts[0], Integer.parseInt(parts[1]));
+            }
+        } catch (IllegalArgumentException error) {
+            connectionStatus.setText(error.getMessage());
+            return;
+        }
+        pause("Abrindo sessão autenticada…");
+        active = true;
+        poll(refresh());
+    }
 
-        PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
-        int thermalState = pm == null ? -1 : pm.getCurrentThermalStatus();
-        String[] states = {"normal", "leve", "moderado", "grave", "crítico", "emergência", "desligamento"};
-        thermal.setText("Estado térmico: " + (thermalState >= 0 && thermalState < states.length
-                ? states[thermalState] : "indisponível"));
-        status.setText(Readiness.evaluate(consent.isChecked(), usbPower, accessoryCount,
-                percent, thermalState, am == null || info.lowMemory, available));
+    private void pause(String reason) {
+        boolean wasActive = active;
+        StudioSession previous = connected != null ? connected : wasActive ? paired : null;
+        generation++;
+        active = busy = false;
+        failures = 0;
+        connected = null;
+        reply = null;
+        consent.setChecked(false);
+        connectionStatus.setText(reason);
+        if (previous != null) io.execute(() -> {
+            try {
+                previous.request("disconnect", new JSONObject());
+            } catch (Exception ignored) {
+                // Studio marca a sessão desconectada pelo prazo de presença.
+            }
+        });
+    }
+
+    private void poll(MobileMetrics.Sample sample) {
+        String response = reply;
+        StudioSession session = paired;
+        boolean allowed = sample.pauseReason(consent.isChecked()) == null;
+        int request = generation;
+        busy = true;
+        io.execute(() -> {
+            try {
+                JSONObject result = session.request("poll", new JSONObject().put("metrics", sample.payload())
+                        .put("reply", response != null && allowed ? response : JSONObject.NULL)
+                        .put("consent", allowed));
+                String nonce = result.isNull("probe") ? null : result.getString("probe");
+                if (nonce != null && !nonce.matches("[0-9a-f]{32}"))
+                    throw new IOException("Mensagem de diagnóstico inválida.");
+                handler.post(() -> {
+                    if (generation != request) return;
+                    connected = session;
+                    if (savedPairing != session) {
+                        savedPairing = session;
+                        io.execute(() -> {
+                            try {
+                                store.save(session);
+                            } catch (Exception error) {
+                                handler.post(() -> {
+                                    if (generation == request) {
+                                        savedPairing = null;
+                                        connectionStatus.setText("Sessão aberta. O novo endereço ainda não foi salvo.");
+                                    }
+                                });
+                            }
+                        });
+                    }
+                    failures = 0;
+                    connectionStatus.setText("Sessão autenticada · "
+                            + (session.transport.equals("usb") ? "rede USB" : "Wi-Fi local"));
+                    if (nonce != null && allowed && consent.isChecked()) {
+                        reply = nonce;
+                        status.setText("Mensagem autenticada recebida. Respondendo…");
+                    } else {
+                        reply = null;
+                    }
+                    busy = false;
+                });
+            } catch (Exception error) {
+                handler.post(() -> {
+                    if (generation != request) return;
+                    busy = false;
+                    connected = null;
+                    reply = null;
+                    if (error instanceof StudioSession.Rejected
+                            && ((StudioSession.Rejected) error).status == 401) {
+                        pause(describe(error) + " Gere novo código no Studio.");
+                        return;
+                    }
+                    failures++;
+                    connectionStatus.setText(describe(error) + " Tentando reconectar.");
+                    discovery.resolve(session, next -> handler.post(() -> {
+                        if (generation == request && failures > 0) paired = next;
+                    }));
+                });
+            }
+        });
+    }
+
+    private static String describe(Exception error) {
+        if (error instanceof StudioSession.Rejected) return error.getMessage();
+        if (error instanceof SSLException) return "Identidade TLS do Studio não pôde ser confirmada.";
+        if (error instanceof SocketTimeoutException) return "Sem resposta. Confira rede, interface e firewall privado.";
+        if (error instanceof ConnectException) return "Studio inacessível no endereço; confira se o transporte está ativo.";
+        return "Falha na sessão local ou na gravação do pareamento.";
+    }
+
+    private MobileMetrics.Sample refresh() {
+        MobileMetrics.Sample sample = metrics.sample(this);
+        usb.setText("Alimentação USB: " + (sample.usbPower() ? "detectada" : "não detectada"));
+        discoveryStatus.setText(discovery.diagnostic + " · Studios anunciados: " + discovery.count());
+        battery.setText("Bateria: " + (sample.battery() < 0 ? "indisponível" : sample.battery() + "%"));
+        memory.setText(sample.total() <= 0 ? "RAM: indisponível"
+                : "RAM disponível: " + sample.available() + " / " + sample.total() + " MiB");
+        thermal.setText("Estado térmico: " + (sample.thermal() < 0 || sample.thermal() >= MobileMetrics.THERMAL.length
+                ? "indisponível" : MobileMetrics.THERMAL[sample.thermal()]));
+        cpu.setText("CPU do Mobile: " + (sample.cpuPercent() == null ? "indisponível" : sample.cpuPercent() + "%"));
+        String blocked = sample.pauseReason(consent.isChecked());
+        status.setText(blocked != null ? blocked : reply == null
+                ? "Disponível para mensagens de diagnóstico." : "Mensagem autenticada pronta para responder.");
+        return sample;
+    }
+
+    private EditText field(LinearLayout parent, String hint, boolean secret) {
+        EditText input = new EditText(this);
+        input.setHint(hint);
+        input.setTextColor(TEXT);
+        input.setHintTextColor(MUTED);
+        input.setSingleLine();
+        input.setSaveEnabled(false);
+        input.setImportantForAutofill(android.view.View.IMPORTANT_FOR_AUTOFILL_NO);
+        input.setInputType(InputType.TYPE_CLASS_TEXT | (secret
+                ? InputType.TYPE_TEXT_VARIATION_PASSWORD : InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS));
+        parent.addView(input);
+        return input;
+    }
+
+    private Button action(LinearLayout parent, String title, Runnable callback) {
+        Button button = new Button(this);
+        button.setText(title);
+        button.setAllCaps(false);
+        button.setOnClickListener(view -> callback.run());
+        parent.addView(button);
+        return button;
     }
 
     private int dp(int value) {

@@ -7,8 +7,9 @@ ANDROID = "{http://schemas.android.com/apk/res/android}"
 
 def check(path):
     root = ET.parse(path).getroot()
-    if any(node.tag.startswith("uses-permission") for node in root):
-        raise ValueError("Diagnostic must not request permissions.")
+    if [(node.tag, node.get(ANDROID + "name")) for node in root
+        if node.tag.startswith("uses-permission")] != [("uses-permission", "android.permission.INTERNET")]:
+        raise ValueError("Only the socket permission is allowed.")
     application = root.find("application")
     if application is None:
         raise ValueError("Missing application.")

@@ -1,32 +1,23 @@
-# Arvertes Network — Central de dispositivos
+# Arvertes Network
 
-## Interface v0.2
+Studio e Mobile trocam mensagens de diagnóstico por TLS em uma rede de confiança. O Studio mantém uma interface IPv4 privada por transporte ativo, na porta TCP 41873. A lista de interfaces é atualizada automaticamente. Um Studio ativo anuncia `_arvertes._tcp.local.` por DNS-SD/mDNS, e o Mobile procura anúncios com a tela aberta. O Studio identifica aparelhos após autenticação. A central admite até 32 pareamentos e atende sessões em paralelo, inclusive uma interface Wi-Fi e uma USB simultâneas.
 
-A página Dispositivos apresenta a central local, espaço para nós auxiliares, política de distribuição e um exemplo opcional de três dispositivos com tarefas distintas. O exemplo é explicitamente ilustrativo; não mostra métricas ou conexões reais. Por padrão está oculto.
+## Parear e testar
 
-## Regras aprovadas de arquitetura
+1. Para **Wi-Fi**, conecte o Windows e o Android à mesma rede local de confiança. Para **USB**, conecte um cabo de dados e ative **Compartilhamento de internet por USB** no Android. No Windows, procure a interface de rede criada pelo Android (RNDIS/NCM). O Studio usa TCP nessa interface. MTP e alimentação pelo cabo são indicadores distintos. A aplicação não solicita depuração USB, driver próprio, alteração de firewall público ou porta no roteador.
+2. No Studio, abra **Dispositivos**, escolha o transporte e a interface correspondente e clique em **Ativar**. Se houver um aviso do firewall do Windows, a regra de entrada deve se limitar ao perfil privado e à sub-rede confiável. Redes de convidados podem isolar os clientes ou bloquear o mDNS.
+3. Gere o código e transfira-o diretamente para o seu Mobile. O código é individual, dura dois minutos e só funciona na interface escolhida. No Mobile, cole-o em **Parear e conectar**. Gere outro para cada celular.
+4. No Mobile, verifique a sessão autenticada e ative **Autorizar respostas de diagnóstico**. No Studio, selecione o aparelho e clique em **Enviar diagnóstico**. O estado **Confirmada** significa que o Studio enviou um desafio e recebeu a resposta correspondente na sessão autenticada. Com a ponte Agents conectada, **Atlas · escolher aparelho** aplica a recomendação à lista de sessões atuais.
+5. Teste **Pausar conexão agora**, **Cancelar mensagem**, o desligamento do transporte e **Revogar pareamento**. Em caso de perda de enlace, o Studio encerra a presença e cancela mensagens pendentes após 15 segundos. O Mobile tenta reconectar enquanto a tela está aberta. Se o endereço mudou e o mDNS estiver indisponível, reative a interface no Studio e use **Novo endereço IPv4:porta** no Mobile para a mesma identidade pareada. A mudança de transporte requer novo pareamento.
 
-- Regra atualizada: celulares podem usar USB de dados ou Wi-Fi na mesma rede local confiável, com sessão autenticada. Sem Bluetooth, exposição pública, acesso remoto pela internet ou fallback automático sem autorização.
-- Cada aparelho exige autorização do proprietário e pareamento revogável. Compartilhamento de processamento desabilitado por padrão.
-- O Studio coordena a fila; Atlas escolhe tarefas compatíveis com capacidades e limites de cada nó. Os agentes permanecem independentes do transporte.
-- O celular continua disponível para uso pessoal. O futuro cliente deverá respeitar as restrições do Android, limites de memória, bateria e temperatura e permitir interromper o trabalho.
-- Não somar RAM dos nós como se fosse memória de uma única máquina. Cada tarefa deve caber no nó designado.
-- Desconexão exige reencaminhamento seguro e checkpoints; jamais marcar uma tarefa como concluída sem resultado validado.
+## Identidade e limites
 
-## Próximas fases (não implementadas)
+O código contém endereço, transporte, impressão SHA-256 do certificado e um segredo aleatório de 128 bits. O Mobile valida o certificado antes de enviar sua credencial aleatória de 256 bits. O Studio verifica o hash da credencial em cada requisição e remove o registro ao revogar. A base local `devices.sqlite3` contém a identidade TLS e os hashes de pareamento, separada de `workspace.sqlite3`. Preserve-a no perfil do usuário para manter a identidade. No Android, as credenciais são cifradas pelo Keystore.
 
-1. Prototipar USB e Wi-Fi local autenticados Windows/Android, com criptografia, identidade verificada e revogação; não expor serviços à internet. Verificar múltiplos aparelhos simultâneos.
-2. Definir protocolo versionado de capacidades, autorização, revogação, estado, tarefas e resultados.
-3. Implementar cliente Android, limites locais e retomada de tarefas com identificadores idempotentes.
-4. Integrar com a fila persistente e o coordenador Atlas; medir consumo, latência, estabilidade e compatibilidade.
-5. Implementar painel de telemetria real e controle de dispositivos.
+O listener aceita apenas o IPv4 privado selecionado e pares da mesma sub-rede. DNS-SD é descoberta. O certificado fixado no pareamento é a identidade. Cada mensagem de diagnóstico é vinculada a um aparelho e expira em 12 segundos. Sentinel rejeita operações fora do protocolo e exige sessão atual, consentimento, bateria de pelo menos 30%, 512 MiB disponíveis e estado térmico normal ou leve antes de enfileirar. O Mobile também respeita o indicador de pouca memória do Android. Sair da tela desativa sessão e consentimento local. O diagnóstico não recebe conteúdo de assets nem inicia produção.
 
-A página atual não detecta hardware, não abre portas nem inicia conexões Wi-Fi, não executa comandos USB, não transfere dados e não despacha tarefas. Os nós apresentados no exemplo são genéricos. Não publicar identificadores, dados ou caminhos pessoais no repositório.
+A RAM exibida é a disponível em cada nó, em MiB. No Windows, CPU representa carga do sistema, e o estado térmico fica indisponível. No Android, CPU é o consumo do processo Mobile normalizado pelo número de núcleos disponíveis, e o estado térmico vem do Android. Bateria ausente ou métrica inacessível aparece como indisponível. A seleção do Atlas filtra por capacidade e limites e prioriza RAM disponível entre os elegíveis. A ativação do compartilhamento USB também pode criar uma rota de internet do sistema operacional. O Arvertes usa apenas a interface e o destino locais escolhidos.
 
-## Revisão manual
+## Diagnóstico físico
 
-- Abrir Dispositivos e confirmar que o exemplo começa oculto.
-- Alternar Mostrar exemplo e confirmar que todos os dispositivos apresentados são rotulados como exemplo.
-- Abrir e fechar Como será a conexão; confirmar o texto de limitações.
-- Redimensionar a janela e testar rolagem.
-- Confirmar visualmente que a página não alega conexões reais e que não há controles de pareamento ativos.
+No notebook e no POCO, registre separadamente Wi-Fi, USB, dois aparelhos, suspensão, desconexão e revogação. Confira primeiro se surgiu uma interface de rede no Windows. Se houver interface, anote se o problema foi timeout, recusa de conexão, certificado divergente, código expirado ou credencial revogada. Confirme que a mensagem só chega a **Confirmada** após resposta autenticada. Mantenha endereços, códigos, identificadores, relatórios e nomes reais fora do Git. A instrumentação Android usa o endereço de loopback do runner via emulador e não valida cabos, controladores, ROMs ou o firewall do notebook.

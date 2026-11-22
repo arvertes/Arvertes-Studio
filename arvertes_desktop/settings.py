@@ -9,6 +9,8 @@ import tempfile
 @dataclass(frozen=True)
 class Settings:
     blender_path: str = ""
+    agents_python: str = ""
+    agents_checkout: str = ""
 
 
 def load_settings(path: Path) -> Settings:
@@ -16,9 +18,10 @@ def load_settings(path: Path) -> Settings:
         return Settings()
     data = json.loads(path.read_text(encoding="utf-8"))
     if (not isinstance(data, dict) or type(data.get("version")) is not int
-            or data["version"] != 1 or not isinstance(data.get("blender_path"), str)):
+            or data["version"] != 1 or not isinstance(data.get("blender_path"), str)
+            or any(not isinstance(data.get(key, ""), str) for key in ("agents_python", "agents_checkout"))):
         raise ValueError("Configuração inválida ou incompatível.")
-    return Settings(blender_path=data["blender_path"])
+    return Settings(data["blender_path"], data.get("agents_python", ""), data.get("agents_checkout", ""))
 
 
 def save_settings(path: Path, settings: Settings) -> None:

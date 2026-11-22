@@ -1,7 +1,7 @@
 """Central local de evidências. Não autentica alegações nem libera operações."""
 import json
 from pathlib import Path
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QTimer, Qt
 from PySide6.QtWidgets import QComboBox, QFrame, QLabel, QLineEdit, QPlainTextEdit, QPushButton, QVBoxLayout
 from .sentinel import evaluate_release, REQUIRED
 
@@ -22,7 +22,7 @@ def current_revision():
     return ""
 
 
-def build_sentinel(layout):
+def build_sentinel(layout, hub=None, bridge=None):
     panel = QFrame()
     panel.setObjectName("panel")
     box = QVBoxLayout(panel)
@@ -37,6 +37,18 @@ def build_sentinel(layout):
     label("SENTINEL — segurança e validação independente")
     label("Revisão do pacote: " + (current_revision() or "não identificada (código-fonte)"))
     label("Nenhuma instalação ou execução é autorizada por este painel. Evidências coladas são declarações não autenticadas.")
+    runtime = label("Monitoramento de sessões locais em espera.")
+    if hub is not None:
+        timer = QTimer(panel)
+        timer.timeout.connect(lambda: runtime.setText(hub.notice) if hub.notice else None)
+        timer.start(2000)
+    if bridge is not None:
+        def agent_notice(message):
+            if message.startswith("Sentinel bloqueou:"):
+                if hub is not None:
+                    hub.alert(message)
+                runtime.setText(message)
+        bridge.notice.connect(agent_notice)
     scope = QComboBox()
     for key, title in SCOPES.items():
         scope.addItem(title, key)

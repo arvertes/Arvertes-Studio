@@ -1,4 +1,6 @@
 """Escritório visual original do Arvertes, sem serviços, assets externos ou IA simulada."""
+from shiboken6 import isValid
+
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QBrush, QPen, QFont, QPainter
 from PySide6.QtWidgets import (
@@ -34,11 +36,11 @@ class OfficeView(QGraphicsView):
         self.fitInView(self.sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
 
 
-def build_office(layout, navigate):
+def build_office(layout, navigate, bridge):
     intro = QLabel("ARVERTES HQ  •  26 especialistas em cinco departamentos")
     intro.setObjectName("networkTag")
     layout.addWidget(intro)
-    notice = QLabel("Mapa interativo de planejamento. As posições são ilustrativas; não há tarefas executadas nem agentes remotos conectados.")
+    notice = QLabel("Selecione um personagem para acompanhar as consultas do Studio e a disponibilidade de suas ferramentas.")
     notice.setWordWrap(True)
     layout.addWidget(notice)
     preview = OfficePreview()
@@ -69,7 +71,7 @@ def build_office(layout, navigate):
         item.setPos(x, y)
         return item
 
-    seats = {}
+    seats, indicators = {}, {}
     by_id = {a.id: a for a in AGENTS}
     rooms = (*DEPARTMENTS, "Convivência")
     for index, name in enumerate(rooms):
@@ -112,6 +114,7 @@ def build_office(layout, navigate):
                 rect(sx + 53, sy + 67, 9, 6, "#171f2d"),
                 rect(sx + 85, sy + 7, 7, 7, "#67d8af" if agent.id == "seguranca" else "#8a98a6"),
             ]
+            indicators[agent.id] = items[-1]
             title = text(agent.name, sx, sy + 76, 9, "#edf2f8", True)
             title.setX(sx + (100 - title.boundingRect().width()) / 2)
             items.append(title)
@@ -146,14 +149,15 @@ def build_office(layout, navigate):
 
     def show_agent():
         agent = by_id[select.currentData()]
-        status = ("Avaliação local disponível; nenhuma autorização automática."
-                  if agent.id == "seguranca" else "Perfil cadastrado; não conectado à execução.")
+        status = bridge.status(agent.id)
         detail.setText(f"{agent.name}  •  {agent.role}  •  {agent.department}\n{status}")
         if not seats[agent.id].isSelected():
             scene.clearSelection()
             seats[agent.id].setSelected(True)
 
     def choose_from_scene():
+        if not isValid(scene) or not isValid(select):
+            return
         selected = scene.selectedItems()
         if selected:
             key = selected[0].data(0)
@@ -161,6 +165,17 @@ def build_office(layout, navigate):
             if index >= 0:
                 select.setCurrentIndex(index)
 
+    def update_status():
+        colors = {"Trabalhando": "#f5ce66", "Disponível": "#67d8af", "Consulta concluída": "#67d8af",
+                  "Consulta interrompida": "#f08a82", "Regras locais · monitoramento": "#67d8af"}
+        statuses = {key: bridge.status(key) for key in by_id}
+        for key, status in statuses.items():
+            indicators[key].setBrush(QBrush(QColor(colors.get(status, "#8a98a6"))))
+            seats[key].setToolTip(by_id[key].name + " · " + status)
+        preview.update_states(statuses)
+        show_agent()
+
+    bridge.changed.connect(update_status)
     select.currentIndexChanged.connect(show_agent)
     scene.selectionChanged.connect(choose_from_scene)
-    show_agent()
+    update_status()

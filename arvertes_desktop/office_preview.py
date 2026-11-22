@@ -3,6 +3,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from threading import Thread
 from urllib.parse import unquote, urlsplit
+import json
 import mimetypes
 
 from PySide6.QtCore import Signal
@@ -17,6 +18,9 @@ class StaticHandler(BaseHTTPRequestHandler):
         server = self.server
         if self.headers.get("Host") != f"127.0.0.1:{server.server_port}":
             self.send_error(403)
+            return
+        if self.path == "/office-state.json":
+            self.respond("application/json", server.states)
             return
         try:
             path = unquote(urlsplit(self.path).path).lstrip("/") or "index.html"
@@ -34,6 +38,9 @@ class StaticHandler(BaseHTTPRequestHandler):
         kind = mimetypes.guess_type(file.name)[0] or "application/octet-stream"
         if file.suffix == ".js":
             kind = "text/javascript"
+        self.respond(kind, data)
+
+    def respond(self, kind, data):
         self.send_response(200)
         self.send_header("Content-Type", kind)
         self.send_header("Content-Length", str(len(data)))
@@ -54,6 +61,7 @@ class PreviewServer:
             raise ValueError("Bundle visual ausente.")
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), StaticHandler)
         self.server.root = root
+        self.server.states = b"{}"
         self.thread = Thread(target=self.server.serve_forever, daemon=True,
                              kwargs={"poll_interval": 0.1})
         self.thread.start()
@@ -74,6 +82,7 @@ class OfficePreview(QWidget):
         super().__init__()
         self.server = None
         self.view = None
+        self.states = {}
         self.box = QVBoxLayout(self)
         self.box.setContentsMargins(0, 0, 0, 0)
         self.button = QPushButton("Abrir escritório original (experimental)")
@@ -82,6 +91,11 @@ class OfficePreview(QWidget):
         self.message.setWordWrap(True)
         self.box.addWidget(self.message)
         self.button.clicked.connect(self.toggle)
+
+    def update_states(self, states):
+        self.states = states
+        if self.server:
+            self.server.server.states = json.dumps(states).encode("ascii")
 
     def toggle(self):
         if self.view is not None:
@@ -99,6 +113,7 @@ class OfficePreview(QWidget):
             return
         try:
             self.server = PreviewServer(BUILD)
+            self.update_states(self.states)
             origin = QUrl(self.server.url)
             class LocalOnly(QWebEngineUrlRequestInterceptor):
                 def interceptRequest(self, info):
@@ -116,7 +131,7 @@ class OfficePreview(QWidget):
             self.box.addWidget(self.view, 1)
             self.view.load(origin)
             self.button.setText("Fechar escritório original")
-            self.message.setText("Prévia original · sem execução de tarefas. Menu lateral do Studio permanece funcional.")
+            self.message.setText("Habblaud · estados das consultas locais do Studio.")
             self.active_changed.emit(True)
         except (OSError, RuntimeError, ValueError) as error:
             self.stop()

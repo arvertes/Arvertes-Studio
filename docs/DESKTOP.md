@@ -18,7 +18,7 @@ python -m venv .venv
 
 - Janela principal escura em português; navegação em dezoito áreas.
 - Painel inicial com indicadores reais do banco local, quatro rascunhos recentes e atalhos. Visualização 3D ainda não implementada.
-- Vinte e seis especialistas nomeados, em cinco departamentos, pesquisáveis pelo nome, cargo e ID; Sentinel local; demais agentes não conectados.
+- Vinte e seis especialistas em cinco departamentos. A integração opcional confere o catálogo do Agents e mostra o estado real das ferramentas.
 - Projetos locais com nome, biblioteca de referências (apenas caminhos; não copia nem modifica os originais) e fila persistente de rascunhos com prioridade e cancelamento.
 - Telas de áudio, efeitos, qualidade, AutoPipeline e Central de Dispositivos, além das áreas existentes. As funcionalidades de produção ainda não estão conectadas.
 - Configuração do executável do Blender pelo seletor de arquivos e persistência em JSON v1 no diretório de configuração do usuário.
@@ -40,9 +40,13 @@ O banco SQLite v1 é criado no diretório de configuração local do usuário, s
 | arvertes_desktop/roster.py | IDs estáveis e nomes visuais dos 26 agentes |
 | arvertes_desktop/workspace.py | Banco SQLite local; projetos, referências e rascunhos |
 | arvertes_desktop/pages.py | Telas de projetos, biblioteca, fila e equipe |
-| arvertes_desktop/network_page.py | Central de dispositivos USB/Wi-Fi local; layout sem transporte ou telemetria |
+| arvertes_desktop/network_page.py | Sessões TLS USB/Wi-Fi, telemetria e diagnóstico de mensagens |
 
-Os agentes futuramente serão integrados por contrato local versionado, sem depender das classes da interface. O aplicativo será responsável pela aprovação, armazenamento, execução de operações autorizadas, cópias e versões. O processamento pesado deverá ser sob demanda e sequencial por padrão. A próxima etapa proposta é validar as telas e integrar o motor Blender e o protocolo Agents. Os nomes são uma decisão de design revisável; os IDs dos dez perfis existentes são preservados.
+## Conectar Agents
+
+Em **Agentes IA**, selecione o executável Python 3.10+ e o diretório de um checkout local e confiável do Agents atualizado para o protocolo de diagnóstico. Clique em **Conectar Agents** para conferir nomes, IDs, cargos e departamentos dos 26 perfis. As preferências ficam na configuração do usuário. A conexão exige ação explícita ao reabrir o Studio.
+
+Atlas propõe planos e recomenda sessões de diagnóstico. Nexus classifica pelo nome informado. Argus verifica indicadores do relatório Blender, e Aegis recebe os mesmos achados e encaminha correções para revisão. O painel permite escolher a tentativa de auditoria para consulta. O restante da equipe mantém suas responsabilidades cadastradas. A interpretação opcional usa um único Ollama local, com o modelo já instalado informado pelo operador. A ponte limita operações, dados de entrada e tempo de execução. Para testar rede e cancelamento, veja [Conexão local](NETWORK.md).
 
 ## Validação
 

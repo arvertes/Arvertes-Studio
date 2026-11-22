@@ -50,7 +50,7 @@ def smoke_test(app, window_type):
             selector.setCurrentIndex(selector.findData("seguranca"))
             app.processEvents()
             assert "Sentinel" in detail.text()
-            assert "nenhuma autorização automática" in detail.text()
+            assert "monitoramento" in detail.text()
             assert len(view.scene().selectedItems()) == 1
             assert view.scene().selectedItems()[0].data(0) == "seguranca"
             view.scene().clearSelection()
@@ -58,7 +58,11 @@ def smoke_test(app, window_type):
             atlas.setSelected(True)
             app.processEvents()
             assert selector.currentData() == "coordenador"
-            assert "não conectado" in detail.text()
+            assert "Não conectado" in detail.text()
+            window._navigate("network")
+            network = window.pages.currentWidget()
+            assert network.findChild(QLabel, "networkFeedback") is not None
+            assert not window.network.listeners
             window._navigate("sentinel")
             page = window.pages.currentWidget()
             feedback = page.findChild(QLabel, "sentinelFeedback")

@@ -1,4 +1,5 @@
 """Janela inicial; sem importação de bpy e sem agentes executores."""
+from dataclasses import replace
 from pathlib import Path
 import sqlite3
 
@@ -9,7 +10,10 @@ from PySide6.QtWidgets import (
     QStackedWidget, QVBoxLayout, QWidget, QStyle, QListWidgetItem,
 )
 
+from .agent_bridge import AgentBridge
+from .agent_panel import build_agent_tools
 from .navigation import SECTIONS
+from .network import DeviceHub
 from .network_page import build_network
 from .dashboard import build_dashboard
 from .office import build_office
@@ -74,6 +78,13 @@ class StudioWindow(QMainWindow):
             self.workspace = Workspace(self.config_path.parent / "workspace.sqlite3")
         except (OSError, ValueError, sqlite3.Error) as error:
             self.workspace_error = str(error)
+        self.network = None
+        self.network_error = ""
+        try:
+            self.network = DeviceHub(self.config_path.parent / "devices.sqlite3")
+        except (OSError, ValueError, sqlite3.Error) as error:
+            self.network_error = str(error)
+        self.agent_bridge = AgentBridge(self)
         self.work_pages = WorkspacePages(self, self.workspace) if self.workspace else None
 
         self.process = QProcess(self)
@@ -140,13 +151,14 @@ class StudioWindow(QMainWindow):
             elif section.key == "settings":
                 self._settings_page(layout)
             elif section.key == "agents":
-                build_agents(layout)
+                build_agents(layout, self.agent_bridge)
+                build_agent_tools(layout, self.agent_bridge, self.settings, self._save_agents)
             elif section.key == "office":
-                build_office(layout, self._navigate)
+                build_office(layout, self._navigate, self.agent_bridge)
             elif section.key == "sentinel":
-                build_sentinel(layout)
+                build_sentinel(layout, self.network, self.agent_bridge)
             elif section.key == "network":
-                build_network(layout)
+                build_network(layout, self.network, self.network_error, self.agent_bridge)
             elif section.key in ("projects", "library", "tasks"):
                 if self.work_pages is None:
                     layout.addWidget(label("Banco local indisponível: " + self.workspace_error, "muted"))
@@ -179,7 +191,7 @@ class StudioWindow(QMainWindow):
         self.menu.currentRowChanged.connect(self.pages.setCurrentIndex)
         self.menu.currentRowChanged.connect(lambda row: self.refresh_dashboard() if row == 0 else None)
         self.menu.setCurrentRow(0)
-        self.statusBar().showMessage("Versão de desenvolvimento • Modo de planejamento, sem execução")
+        self.statusBar().showMessage("Versão de desenvolvimento • Conexões locais de diagnóstico")
 
     def _navigate(self, key):
         self.menu.setCurrentRow(next(i for i, section in enumerate(SECTIONS) if section.key == key))
@@ -230,12 +242,20 @@ class StudioWindow(QMainWindow):
             value = self.path.text().strip()
             if value:
                 validate_blender_path(value)
-            settings = Settings(value)
+            settings = replace(self.settings, blender_path=value)
             save_settings(self.config_path, settings)
             self.settings = settings
             self.feedback.setText("Configuração salva localmente.")
         except (OSError, ValueError) as error:
             QMessageBox.warning(self, "Configuração não salva", str(error))
+
+    def _save_agents(self, python, checkout):
+        try:
+            settings = replace(self.settings, agents_python=python, agents_checkout=checkout)
+            save_settings(self.config_path, settings)
+            self.settings = settings
+        except OSError as error:
+            QMessageBox.warning(self, "Conexão não gravada", str(error))
 
     def _set_busy(self, busy):
         for widget in (self.path, self.browse, self.test_button, self.save_button):
@@ -283,6 +303,9 @@ class StudioWindow(QMainWindow):
         self.blender_status.setText("Blender não verificado")
 
     def closeEvent(self, event):
+        self.agent_bridge.close()
+        if self.network is not None:
+            self.network.close()
         self.timeout.stop()
         if self.process.state() != QProcess.ProcessState.NotRunning:
             self.process.kill()

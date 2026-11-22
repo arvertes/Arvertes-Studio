@@ -77,6 +77,7 @@ def build_dashboard(layout, workspace, navigate):
     tb.addWidget(label("26 especialistas · 5 departamentos", "muted"))
     tb.addWidget(label("ATLAS   /   Planejamento", "eyebrow"))
     tb.addWidget(label("Agentes de produção ainda não conectados.", "muted"))
+    tb.addWidget(action("Abrir escritório", navigate, "office", primary=True))
     tb.addWidget(action("Explorar agentes", navigate, "agents"))
     tb.addWidget(action("Dispositivos · USB / Wi-Fi", navigate, "network"))
     tb.addStretch()

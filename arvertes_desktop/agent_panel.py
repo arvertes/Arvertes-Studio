@@ -41,6 +41,7 @@ def build_agent_tools(layout, bridge, settings, save):
     for title, action in (("Atlas · plano", "plan_production"),
                           ("Nexus · catalogar nome de arquivo", "catalog_file"),
                           ("Argus e Aegis · inspecionar e auditar", "inspect_and_review"),
+                          ("Vector · comparar orçamento de triângulos", "assess_triangle_budget"),
                           ("Atlas · interpretar com Ollama local", "interpret_instruction")):
         tools.addItem(title, action)
     layout.addWidget(tools)
@@ -65,8 +66,9 @@ def build_agent_tools(layout, bridge, settings, save):
     budget.setValue(100_000)
     attempt = QSpinBox()
     attempt.setRange(1, 3)
-    for title, widget in (("Triângulos", budget), ("Tentativa", attempt)):
-        requirements.addWidget(plain(title))
+    captions = {"budget": plain("Triângulos"), "attempt": plain("Tentativa")}
+    for key, widget in (("budget", budget), ("attempt", attempt)):
+        requirements.addWidget(captions[key])
         requirements.addWidget(widget)
     layout.addLayout(requirements)
 
@@ -82,12 +84,16 @@ def build_agent_tools(layout, bridge, settings, save):
                 fields = {"workflow": workflow.currentData()}
             elif action == "catalog_file":
                 fields = {"file_name": source.toPlainText().strip()}
-            elif action == "inspect_and_review":
+            elif action in ("inspect_and_review", "assess_triangle_budget"):
                 raw = source.toPlainText()
                 if len(raw.encode("utf-8")) > 60000:
                     raise ValueError("Resumo JSON acima do limite de 60 KB.")
-                fields = {"report": json.loads(raw), "attempt": attempt.value(), "requirements": {
-                    **{key: widget.isChecked() for key, widget in flags.items()}, "triangle_budget": budget.value()}}
+                fields = {"report": json.loads(raw)}
+                if action == "inspect_and_review":
+                    fields.update(attempt=attempt.value(), requirements={
+                        **{key: widget.isChecked() for key, widget in flags.items()}, "triangle_budget": budget.value()})
+                else:
+                    fields["triangle_budget"] = budget.value()
             else:
                 fields = {"instruction": source.toPlainText(), "model": model.text().strip()}
             bridge.call(action, fields)
@@ -101,16 +107,20 @@ def build_agent_tools(layout, bridge, settings, save):
     def update():
         action = tools.currentData()
         auditing = action == "inspect_and_review"
+        geometry = auditing or action == "assess_triangle_budget"
         workflow.setVisible(action == "plan_production")
         source.setVisible(action != "plan_production")
         model.setVisible(action == "interpret_instruction")
         source.setPlaceholderText({
             "catalog_file": "Nome e extensão, sem caminho",
             "inspect_and_review": "Cole um objeto JSON com schema_version e summary do relatório Studio",
+            "assess_triangle_budget": "Cole um objeto JSON com schema_version e summary do relatório Studio",
             "interpret_instruction": "Descreva o fluxo de produção para o modelo local",
         }.get(action, ""))
-        for index in range(requirements.count()):
-            requirements.itemAt(index).widget().setVisible(auditing)
+        for widget in (*flags.values(), attempt, captions["attempt"]):
+            widget.setVisible(auditing)
+        budget.setVisible(geometry)
+        captions["budget"].setVisible(geometry)
         execute.setEnabled(bridge.connected and not bridge.busy)
 
     def show_result(action, value):

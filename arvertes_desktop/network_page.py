@@ -104,8 +104,9 @@ def build_network(layout, hub, hub_error, bridge):
                               THERMAL_STATES[heat] if heat is not None else "—")
                 else:
                     values = ("Desconectado", "—", "—", "—", "—")
-                results.append((name, *values, PROBE_STATES.get(probe.get("state"), "—")))
+                results.append((f"{name} · {identity[-6:]}", *values, PROBE_STATES.get(probe.get("state"), "—")))
             if results != refresh.previous:
+                devices.clearSelection()
                 rows(devices, results)
                 refresh.previous = results
                 if selected in records:

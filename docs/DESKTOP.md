@@ -46,7 +46,7 @@ O banco SQLite v1 é criado no diretório de configuração local do usuário, s
 
 Em **Agentes IA**, selecione o executável Python 3.10+ e o diretório de um checkout local e confiável do Agents atualizado para o protocolo de diagnóstico. Clique em **Conectar Agents** para conferir nomes, IDs, cargos e departamentos dos 26 perfis. As preferências ficam na configuração do usuário. A conexão exige ação explícita ao reabrir o Studio.
 
-Atlas propõe planos e recomenda sessões de diagnóstico. Nexus classifica pelo nome informado. Argus verifica indicadores do relatório Blender, e Aegis recebe os mesmos achados e encaminha correções para revisão. O painel permite escolher a tentativa de auditoria para consulta. O restante da equipe mantém suas responsabilidades cadastradas. A interpretação opcional usa um único Ollama local, com o modelo já instalado informado pelo operador. A ponte limita operações, dados de entrada e tempo de execução. Para testar rede e cancelamento, veja [Conexão local](NETWORK.md).
+Atlas propõe planos e recomenda sessões de diagnóstico. Nexus classifica pelo nome informado. Argus verifica indicadores do relatório Blender, e Aegis recebe os mesmos achados e encaminha correções para revisão. O painel permite escolher a tentativa de auditoria para consulta. Vector compara triângulos originais e avaliados com o orçamento. Os outros especialistas preservam suas responsabilidades no catálogo. A interpretação opcional usa um único Ollama local, com o modelo já instalado informado pelo operador. A ponte limita operações, dados de entrada e tempo de execução. Para testar rede e cancelamento, veja [Conexão local](NETWORK.md).
 
 ## Validação
 

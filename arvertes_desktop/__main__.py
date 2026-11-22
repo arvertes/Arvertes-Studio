@@ -22,6 +22,10 @@ def main() -> int:
 
 def smoke_test(app, window_type):
     """Executa diagnóstico em pasta temporária, sem os dados reais do usuário."""
+    from contextlib import closing
+    from hashlib import sha256
+    from http.client import HTTPSConnection
+    import ssl
     from tempfile import TemporaryDirectory
     from PySide6.QtWidgets import QLabel, QPushButton, QComboBox, QGraphicsView
     from .navigation import SECTIONS
@@ -63,6 +67,17 @@ def smoke_test(app, window_type):
             network = window.pages.currentWidget()
             assert network.findChild(QLabel, "networkFeedback") is not None
             assert not window.network.listeners
+            listener = window.network.start("127.0.0.1/8", "wifi_local", advertise=False, test_loopback=True)
+            context = ssl.create_default_context(cadata=window.network.registry.identity()[0].decode("ascii"))
+            context.check_hostname = False
+            with closing(HTTPSConnection("127.0.0.1", listener.server_port, context=context, timeout=3)) as client:
+                client.connect()
+                assert sha256(client.sock.getpeercert(binary_form=True)).hexdigest() == window.network.fingerprint
+                client.request("POST", "/v1/session", '{"version":1,"action":"poll"}',
+                               {"Content-Type": "application/json"})
+                response = client.getresponse()
+                assert response.status == 401 and b"Sentinel" in response.read()
+            window.network.stop("wifi_local")
             window._navigate("sentinel")
             page = window.pages.currentWidget()
             feedback = page.findChild(QLabel, "sentinelFeedback")

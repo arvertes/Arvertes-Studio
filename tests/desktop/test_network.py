@@ -75,6 +75,8 @@ class NetworkTests(unittest.TestCase):
         usb = self.start("usb")
         other = {"id": secrets.token_hex(16), "token": secrets.token_hex(32)}
         self.pair(other, usb)
+        self.assertEqual(self.poll(listener=usb)[0], 401)
+        self.assertEqual(self.poll(other)[0], 401)
         self.assertEqual(self.poll()[0], 200)
         self.assertEqual(self.poll(other, usb)[0], 200)
         self.hub.send_probe(self.identity["id"])

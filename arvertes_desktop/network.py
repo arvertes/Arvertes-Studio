@@ -43,8 +43,10 @@ def local_address(address):
 
 def interfaces():
     """Retorna endereços IPv4 locais, sem inferir o meio pelo nome da interface."""
+    stats = psutil.net_if_stats()
     return sorted((name, str(interface))
                   for name, addresses in psutil.net_if_addrs().items()
+                  if name not in stats or stats[name].isup
                   for address in addresses
                   if address.family == socket.AF_INET and address.netmask
                   and local_address((interface := IPv4Interface(f"{address.address}/{address.netmask}")).ip))
@@ -69,9 +71,14 @@ class Registry:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.path.touch(mode=0o600, exist_ok=True)
         with closing(self.connect()) as db, db:
+            db.execute("BEGIN IMMEDIATE")
             db.execute("CREATE TABLE IF NOT EXISTS identity (id INTEGER PRIMARY KEY, cert BLOB, key BLOB)")
             db.execute("""CREATE TABLE IF NOT EXISTS devices (
-                id TEXT PRIMARY KEY, name TEXT NOT NULL, token_hash BLOB NOT NULL)""")
+                id TEXT PRIMARY KEY, name TEXT NOT NULL, token_hash BLOB NOT NULL,
+                transport TEXT NOT NULL)""")
+            columns = {column[1] for column in db.execute("PRAGMA table_info(devices)")}
+            if "transport" not in columns:
+                db.execute("ALTER TABLE devices ADD COLUMN transport TEXT")
 
     def connect(self):
         return sqlite3.connect(self.path)
@@ -99,19 +106,19 @@ class Registry:
         with closing(self.connect()) as db:
             return db.execute("SELECT id, name FROM devices ORDER BY name, id").fetchall()
 
-    def enroll(self, device, name, token):
+    def enroll(self, device, name, token, transport):
         with closing(self.connect()) as db, db:
             db.execute("BEGIN IMMEDIATE")
             if db.execute("SELECT count(*) FROM devices").fetchone()[0] >= MAX_DEVICES:
                 raise Denied(409, "Limite de aparelhos pareados.")
             try:
-                db.execute("INSERT INTO devices VALUES (?, ?, ?)", (device, name, digest(token)))
+                db.execute("INSERT INTO devices VALUES (?, ?, ?, ?)", (device, name, digest(token), transport))
             except sqlite3.IntegrityError as error:
                 raise Denied(409, "Identificador já pareado.") from error
 
-    def authenticate(self, device, token):
+    def authenticate(self, device, token, transport):
         with closing(self.connect()) as db:
-            record = db.execute("SELECT token_hash FROM devices WHERE id=?", (device,)).fetchone()
+            record = db.execute("SELECT token_hash FROM devices WHERE id=? AND transport=?", (device, transport)).fetchone()
         return record is not None and hmac.compare_digest(record[0], digest(token))
 
     def revoke(self, device):
@@ -281,11 +288,11 @@ class DeviceHub:
                     raise Denied(401, SENTINEL + "código inválido, utilizado ou expirado.")
                 if not isinstance(name, str) or not name.strip() or len(name) > 80 or not name.isprintable():
                     raise Denied(400, "Nome de aparelho inválido.")
-                self.registry.enroll(device, name.strip(), token)
+                self.registry.enroll(device, name.strip(), token, listener.transport)
                 self.ticket = None
                 return {}
-            if not self.registry.authenticate(device, token):
-                raise Denied(401, SENTINEL + "aparelho desconhecido ou revogado.")
+            if not self.registry.authenticate(device, token, listener.transport):
+                raise Denied(401, SENTINEL + "pareamento ausente, revogado ou incompatível com este transporte.")
             if action == "disconnect" and data.keys() == base:
                 self.disconnect(device, "Aparelho pausou a sessão.")
                 return {}
@@ -302,7 +309,9 @@ class DeviceHub:
                                      "metrics": metrics, "consent": consent, "seen": monotonic()}
             probe = self.probes.get(device)
             if probe and probe["state"] in ("queued", "sent") and (not consent or not limits_ok(metrics)):
-                probe.update(state="cancelled", detail="Sentinel pausou por consentimento ou recursos.")
+                message = "Sentinel pausou o diagnóstico por consentimento ou recursos."
+                probe.update(state="cancelled", detail=message)
+                self.alert(message)
             if probe and probe["state"] == "sent" and probe["id"] == reply:
                 probe.update(state="confirmed", detail="Resposta autenticada recebida.")
             if probe and probe["state"] in ("queued", "sent"):

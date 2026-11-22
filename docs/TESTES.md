@@ -35,3 +35,12 @@ O modelo é um personagem abstrato com 58 malhas e sem materiais, texturas, UVs,
 3. Clique em **Analisar asset**. Compare a contagem de malhas, a cobertura de UV e a presença de armadura com o cenário de referência informado para esse arquivo (58 malhas, sem UVs, texturas, armadura ou animações). Se quiser conferir texturas e animações, inspecione também os materiais e as ações no Blender.
 4. Confira as malhas visualmente antes de aceitar ou corrigir sugestões de categoria. Use **Organizar por categoria** e salve um novo `.blend`. Reabra a cópia para conferir a organização e as classificações.
 5. Exporte o JSON para um diretório local, compare os totais e registre a versão do Blender, o commit testado e qualquer divergência. Mantenha o GLB, a cópia `.blend` e o relatório do modelo real fora do repositório público.
+
+## Conectividade e agentes
+
+- **Automatizado em Windows e Linux.** As suítes do Studio usam sockets TLS reais em loopback para autenticação, revogação, troca bidirecional, dois clientes, troca de transporte recusada, cancelamento e persistência. Os dados de recursos dos clientes de teste e a expiração adiantada usam fixtures.
+- **Emulador Android.** O workflow Android Mobile abre a atividade e exercita o cliente TLS com um Studio real no runner. Valida a identidade do servidor, um aparelho desconhecido, o código de uso único, o Keystore, telemetria, reconexão, mensagens e revogação. Os recursos usados para habilitar o teste de mensagens são simulados.
+- **Integração Blender.** O binário Linux 4.3.2 falhou por falta de `BlendData.all_ids`. O Blender 5.3.0, build `02f0899d78e3`, passou os nove testes headless com as mesmas fixtures do add-on.
+- **Físico.** USB RNDIS/NCM, mDNS no notebook, POCO X7 Pro, Galaxy S21 e consumo nesses aparelhos exigem a bancada do [manual de conexão](NETWORK.md). O resultado de um build ou de um emulador não confirma esses itens.
+
+Os checks e o download dos artefatos da revisão atual ficam na [PR do Studio](https://github.com/arvertes/Arvertes-Studio/pull/2/checks).

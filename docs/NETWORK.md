@@ -12,7 +12,7 @@ Studio e Mobile trocam mensagens de diagnóstico por TLS em uma rede de confian�
 
 ## Identidade e limites
 
-O código contém endereço, transporte, impressão SHA-256 do certificado e um segredo aleatório de 128 bits. O Mobile valida o certificado antes de enviar sua credencial aleatória de 256 bits. O Studio verifica o hash da credencial em cada requisição e remove o registro ao revogar. A base local `devices.sqlite3` contém a identidade TLS e os hashes de pareamento, separada de `workspace.sqlite3`. Preserve-a no perfil do usuário para manter a identidade. No Android, as credenciais são cifradas pelo Keystore.
+O código contém endereço, transporte, impressão SHA-256 do certificado e um segredo aleatório de 128 bits. O Mobile valida o certificado antes de enviar sua credencial aleatória de 256 bits. O Studio verifica o hash da credencial e o transporte do pareamento em cada requisição e remove o registro ao revogar. A base local `devices.sqlite3` contém a identidade TLS e os hashes de pareamento, separada de `workspace.sqlite3`. Preserve-a no perfil do usuário para manter a identidade. No Android, as credenciais são cifradas pelo Keystore.
 
 O listener aceita apenas o IPv4 privado selecionado e pares da mesma sub-rede. DNS-SD é descoberta. O certificado fixado no pareamento é a identidade. Cada mensagem de diagnóstico é vinculada a um aparelho e expira em 12 segundos. Sentinel rejeita operações fora do protocolo e exige sessão atual, consentimento, bateria de pelo menos 30%, 512 MiB disponíveis e estado térmico normal ou leve antes de enfileirar. O Mobile também respeita o indicador de pouca memória do Android. Sair da tela desativa sessão e consentimento local. O diagnóstico não recebe conteúdo de assets nem inicia produção.
 

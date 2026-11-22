@@ -2,7 +2,7 @@
 import json
 from pathlib import Path
 
-from PySide6.QtCore import QObject, QProcess, QTimer, Signal
+from PySide6.QtCore import QObject, QProcess, QProcessEnvironment, QTimer, Signal
 
 from .network import limits_ok
 from .roster import AGENTS
@@ -17,6 +17,7 @@ ACTIONS = {
     "plan_production": ("coordenador",),
     "interpret_instruction": ("coordenador",),
     "inspect_and_review": ("inspetor", "auditor"),
+    "assess_triangle_budget": ("otimizador",),
     "recommend_device": ("coordenador",),
 }
 
@@ -33,6 +34,12 @@ class AgentBridge(QObject):
         self.latest = {}
         self.operation = None
         self.process = QProcess(self)
+        inherited = QProcessEnvironment.systemEnvironment()
+        environment = QProcessEnvironment()
+        for key in ("PATH", "SystemRoot", "WINDIR", "TEMP", "TMP", "TMPDIR", "LANG"):
+            if inherited.contains(key):
+                environment.insert(key, inherited.value(key))
+        self.process.setProcessEnvironment(environment)
         self.process.readyReadStandardOutput.connect(self.read_output)
         self.process.readyReadStandardError.connect(self.read_error)
         self.process.started.connect(self.send)

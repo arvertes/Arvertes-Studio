@@ -6,6 +6,7 @@ from PySide6.QtWidgets import (
     QLabel, QPushButton,
 )
 from .roster import AGENTS, DEPARTMENTS
+from .office_preview import OfficePreview
 
 PALETTE = {
     "Fundação": ("#3a5868", "#76d1cc"),
@@ -40,6 +41,7 @@ def build_office(layout, navigate):
     notice = QLabel("Mapa interativo de planejamento. As posições são ilustrativas; não há tarefas executadas nem agentes remotos conectados.")
     notice.setWordWrap(True)
     layout.addWidget(notice)
+    layout.addWidget(OfficePreview())
     scene = QGraphicsScene(0, 0, 1060, 576)
     scene.setBackgroundBrush(QColor("#111d27"))
 

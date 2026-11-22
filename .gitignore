@@ -19,3 +19,10 @@ __pycache__/
 *.[gG][lL][tT][fF]
 *.[fF][bB][xX]
 *.[oO][bB][jJ]
+
+# Dados privados do aplicativo desktop
+*.sqlite3
+*.sqlite3-journal
+*.sqlite3-wal
+*.sqlite3-shm
+/.vs/

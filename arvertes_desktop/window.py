@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
 from .navigation import SECTIONS
 from .network_page import build_network
 from .dashboard import build_dashboard
+from .office import build_office
 from .sentinel_page import build_sentinel
 from .roster import AGENTS
 from .pages import WorkspacePages, build_agents
@@ -53,7 +54,7 @@ def panel() -> tuple[QFrame, QVBoxLayout]:
 class StudioWindow(QMainWindow):
     def __init__(self, *, config_dir=None):
         super().__init__()
-        self.setWindowTitle("Arvertes Studio — 0.2.1 dev")
+        self.setWindowTitle("Arvertes Studio — 0.2.2 dev")
         self.setMinimumSize(860, 540)
         self.resize(1200, 760)
         self.setStyleSheet(DARK_THEME)
@@ -109,7 +110,7 @@ class StudioWindow(QMainWindow):
         self.menu.setObjectName("navigation")
         self.menu.setFixedWidth(194)
         icons = {
-            "home": "SP_ComputerIcon", "projects": "SP_DirIcon", "library": "SP_FileDialogContentsView",
+            "home": "SP_ComputerIcon", "office": "SP_DirHomeIcon", "projects": "SP_DirIcon", "library": "SP_FileDialogContentsView",
             "model": "SP_FileIcon", "materials": "SP_DialogApplyButton", "rig": "SP_FileDialogDetailedView",
             "animation": "SP_MediaPlay", "effects": "SP_BrowserReload", "audio": "SP_MediaVolume",
             "pipeline": "SP_ArrowForward", "quality": "SP_DialogYesButton", "agents": "SP_DirOpenIcon",
@@ -140,6 +141,8 @@ class StudioWindow(QMainWindow):
                 self._settings_page(layout)
             elif section.key == "agents":
                 build_agents(layout)
+            elif section.key == "office":
+                build_office(layout, self._navigate)
             elif section.key == "sentinel":
                 build_sentinel(layout)
             elif section.key == "network":

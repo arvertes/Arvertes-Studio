@@ -1,0 +1,258 @@
+"""Janela inicial; sem importação de bpy e sem agentes executores."""
+from pathlib import Path
+
+from PySide6.QtCore import QProcess, QStandardPaths, QTimer, Qt
+from PySide6.QtWidgets import (
+    QFileDialog, QFrame, QHBoxLayout, QLabel, QLineEdit, QListWidget,
+    QMainWindow, QMessageBox, QPushButton, QScrollArea, QSizePolicy,
+    QSplitter, QStackedWidget, QVBoxLayout, QWidget,
+)
+
+from .navigation import AGENT_NAMES, SECTIONS
+from .settings import Settings, load_settings, save_settings, validate_blender_path
+from .theme import DARK_THEME
+
+
+def label(text: str, style: str = "") -> QLabel:
+    result = QLabel(text)
+    result.setTextFormat(Qt.TextFormat.PlainText)
+    result.setWordWrap(True)
+    if style:
+        result.setObjectName(style)
+    return result
+
+
+def panel() -> tuple[QFrame, QVBoxLayout]:
+    frame = QFrame()
+    frame.setObjectName("panel")
+    layout = QVBoxLayout(frame)
+    layout.setContentsMargins(16, 16, 16, 16)
+    layout.setSpacing(10)
+    return frame, layout
+
+
+class StudioWindow(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("Arvertes Studio — 0.2.0 dev")
+        self.setMinimumSize(860, 540)
+        self.resize(1200, 760)
+        self.setStyleSheet(DARK_THEME)
+        config_dir = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppConfigLocation)
+        self.config_path = Path(config_dir) / "settings.json"
+        self.load_error = ""
+        try:
+            self.settings = load_settings(self.config_path)
+        except (OSError, ValueError, RecursionError) as error:
+            self.settings = Settings()
+            self.load_error = str(error)
+
+        self.process = QProcess(self)
+        self.process.setProcessChannelMode(QProcess.ProcessChannelMode.MergedChannels)
+        self.process.finished.connect(self._version_finished)
+        self.process.errorOccurred.connect(self._process_error)
+        self.timeout = QTimer(self)
+        self.timeout.setSingleShot(True)
+        self.timeout.timeout.connect(self._version_timeout)
+        self.timed_out = False
+        self._build()
+
+    def _build(self):
+        root = QWidget()
+        outer = QVBoxLayout(root)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+        top = QFrame()
+        top.setObjectName("topbar")
+        top_layout = QHBoxLayout(top)
+        top_layout.setContentsMargins(18, 12, 18, 12)
+        top_layout.addWidget(label("ARVERTES STUDIO", "brand"))
+        top_layout.addStretch()
+        top_layout.addWidget(label("Modo local", "muted"))
+        self.blender_status = label("Blender não verificado", "muted")
+        top_layout.addWidget(self.blender_status)
+        outer.addWidget(top)
+
+        body = QHBoxLayout()
+        body.setContentsMargins(0, 0, 0, 0)
+        body.setSpacing(0)
+        self.menu = QListWidget()
+        self.menu.setFixedWidth(180)
+        self.menu.addItems([section.title for section in SECTIONS])
+        body.addWidget(self.menu)
+        self.pages = QStackedWidget()
+        body.addWidget(self.pages, 1)
+        outer.addLayout(body, 1)
+        self.setCentralWidget(root)
+
+        for section in SECTIONS:
+            page = QWidget()
+            layout = QVBoxLayout(page)
+            layout.setContentsMargins(20, 20, 20, 20)
+            layout.setSpacing(12)
+            layout.addWidget(label(section.title, "heading"))
+            layout.addWidget(label(section.description, "muted"))
+            if section.key == "home":
+                self._home(layout)
+            elif section.key == "settings":
+                self._settings_page(layout)
+            elif section.key == "agents":
+                agents, agents_layout = panel()
+                self._agent_list(agents_layout)
+                layout.addWidget(agents)
+                layout.addStretch()
+            else:
+                box, box_layout = panel()
+                box_layout.addWidget(label("Funcionalidade planejada"))
+                box_layout.addWidget(label("Etapa prevista: v" + section.milestone + ". Ainda não implementada.", "muted"))
+                layout.addWidget(box)
+                layout.addStretch()
+
+            scroll = QScrollArea()
+            scroll.setWidgetResizable(True)
+            scroll.setWidget(page)
+            self.pages.addWidget(scroll)
+
+        self.menu.currentRowChanged.connect(self.pages.setCurrentIndex)
+        self.menu.setCurrentRow(0)
+        self.statusBar().showMessage("Versão de desenvolvimento • Nenhum arquivo de projeto carregado")
+
+    def _home(self, layout):
+        split = QSplitter(Qt.Orientation.Horizontal)
+        preview, preview_layout = panel()
+        preview_layout.addWidget(label("Área de visualização"))
+        preview_layout.addStretch()
+        empty = label("Nenhum modelo carregado\n\nVisualização 3D prevista para uma próxima etapa.", "muted")
+        empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        preview_layout.addWidget(empty)
+        preview_layout.addStretch()
+        sidebar, side_layout = panel()
+        self._agent_list(side_layout)
+        side_layout.addStretch()
+        split.addWidget(preview)
+        split.addWidget(sidebar)
+        split.setStretchFactor(0, 3)
+        split.setStretchFactor(1, 2)
+        split.setChildrenCollapsible(False)
+        split.setSizes([600, 300])
+        layout.addWidget(split, 1)
+        footer, footer_layout = panel()
+        footer_layout.addWidget(label("Primeiros passos"))
+        footer_layout.addWidget(label("Configure o Blender. Projetos, biblioteca e execução de agentes serão integrados em etapas.", "muted"))
+        button = QPushButton("Abrir configurações")
+        button.setObjectName("primary")
+        button.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
+        button.clicked.connect(lambda: self.menu.setCurrentRow(len(SECTIONS) - 1))
+        footer_layout.addWidget(button)
+        layout.addWidget(footer)
+
+    def _agent_list(self, layout):
+        layout.addWidget(label("Equipe de agentes"))
+        layout.addWidget(label("Perfis planejados • integração pendente", "muted"))
+        for name in AGENT_NAMES:
+            layout.addWidget(label(name + " — não conectado"))
+
+    def _settings_page(self, layout):
+        frame, form = panel()
+        form.addWidget(label("Executável do Blender"))
+        form.addWidget(label("Selecione uma instalação confiável. O teste apenas executa blender --version.", "muted"))
+        self.path = QLineEdit(self.settings.blender_path)
+        self.path.setPlaceholderText("C:/Program Files/Blender Foundation/.../blender.exe")
+        self.path.textChanged.connect(self._path_changed)
+        row = QHBoxLayout()
+        row.addWidget(self.path, 1)
+        self.browse = QPushButton("Procurar")
+        self.browse.clicked.connect(self._browse)
+        row.addWidget(self.browse)
+        form.addLayout(row)
+        actions = QHBoxLayout()
+        self.test_button = QPushButton("Verificar Blender")
+        self.test_button.clicked.connect(self._check_version)
+        self.save_button = QPushButton("Salvar configuração")
+        self.save_button.setObjectName("primary")
+        self.save_button.clicked.connect(self._save)
+        actions.addWidget(self.test_button)
+        actions.addWidget(self.save_button)
+        actions.addStretch()
+        form.addLayout(actions)
+        self.feedback = label("Nenhum teste realizado.", "muted")
+        form.addWidget(self.feedback)
+        if self.load_error:
+            form.addWidget(label("Não foi possível carregar a configuração anterior: " + self.load_error, "muted"))
+        form.addWidget(label("Configuração local: " + str(self.config_path), "muted"))
+        layout.addWidget(frame)
+        layout.addStretch()
+
+    def _path_changed(self):
+        self.blender_status.setText("Blender não verificado")
+        self.feedback.setText("Caminho alterado. Verifique e salve se desejar.")
+
+    def _browse(self):
+        path, _ = QFileDialog.getOpenFileName(self, "Selecionar Blender", self.path.text(),
+                                              "Blender (blender.exe blender);;Todos os arquivos (*)")
+        if path:
+            self.path.setText(path)
+
+    def _save(self):
+        try:
+            value = self.path.text().strip()
+            if value:
+                validate_blender_path(value)
+            settings = Settings(value)
+            save_settings(self.config_path, settings)
+            self.settings = settings
+            self.feedback.setText("Configuração salva localmente.")
+        except (OSError, ValueError) as error:
+            QMessageBox.warning(self, "Configuração não salva", str(error))
+
+    def _set_busy(self, busy):
+        for widget in (self.path, self.browse, self.test_button, self.save_button):
+            widget.setEnabled(not busy)
+
+    def _check_version(self):
+        if self.process.state() != QProcess.ProcessState.NotRunning:
+            return
+        try:
+            path = validate_blender_path(self.path.text().strip())
+        except (OSError, ValueError) as error:
+            self.feedback.setText(str(error))
+            return
+        self.timed_out = False
+        self._set_busy(True)
+        self.feedback.setText("Verificando versão...")
+        self.blender_status.setText("Blender em verificação")
+        self.timeout.start(10000)
+        self.process.start(str(path), ["--version"])
+
+    def _version_timeout(self):
+        self.timed_out = True
+        self.process.kill()
+
+    def _process_error(self, error):
+        if error == QProcess.ProcessError.FailedToStart:
+            self.timeout.stop()
+            self._set_busy(False)
+            self.feedback.setText("Não foi possível iniciar o Blender.")
+            self.blender_status.setText("Blender não verificado")
+
+    def _version_finished(self, exit_code, exit_status):
+        self.timeout.stop()
+        output = bytes(self.process.readAllStandardOutput()).decode("utf-8", errors="replace")
+        self._set_busy(False)
+        first_line = output.strip().splitlines()[0] if output.strip() else ""
+        if self.timed_out:
+            self.feedback.setText("Verificação interrompida: tempo limite.")
+        elif exit_status == QProcess.ExitStatus.NormalExit and exit_code == 0 and first_line.startswith("Blender "):
+            self.feedback.setText("Versão encontrada: " + first_line[:150])
+            self.blender_status.setText("Blender verificado")
+            return
+        else:
+            self.feedback.setText("O executável não retornou uma versão válida do Blender.")
+        self.blender_status.setText("Blender não verificado")
+
+    def closeEvent(self, event):
+        self.timeout.stop()
+        if self.process.state() != QProcess.ProcessState.NotRunning:
+            self.process.kill()
+            self.process.waitForFinished(500)
+        super().closeEvent(event)

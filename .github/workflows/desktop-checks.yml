@@ -7,17 +7,44 @@ permissions:
 jobs:
   windows:
     runs-on: windows-2025
-    timeout-minutes: 15
+    timeout-minutes: 20
     env:
       QT_QPA_PLATFORM: offscreen
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - run: python -m pip install -r requirements-desktop.txt
+          architecture: 'x64'
+      - run: python -m pip install -r requirements-windows-build.txt
       - run: python -m unittest discover -s tests/desktop -v
-      - name: Import desktop UI
-        run: python -c "from arvertes_desktop.window import StudioWindow; print(StudioWindow.__name__)"
+      - name: Smoke test source
+        run: python -m arvertes_desktop --self-test
+      - name: Build diagnostic portable
+        shell: pwsh
+        run: |
+          git rev-parse HEAD | Set-Content -Encoding ascii arvertes_desktop/build_revision.txt
+          python -m PyInstaller --noconfirm --clean --onedir --windowed --name ArvertesStudio --add-data "arvertes_desktop/build_revision.txt:arvertes_desktop" desktop_launcher.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Smoke test executable
+        shell: pwsh
+        run: |
+          $p = Start-Process -FilePath "dist/ArvertesStudio/ArvertesStudio.exe" -ArgumentList "--self-test" -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "Executable smoke test failed: $($p.ExitCode)" }
+      - name: Package
+        shell: pwsh
+        run: |
+          Copy-Item docs/WINDOWS.md dist/ArvertesStudio/LEIA-ME.md
+          Compress-Archive -Path dist/ArvertesStudio -DestinationPath dist/ArvertesStudio-Windows-x64-diagnostico.zip
+          Get-FileHash dist/ArvertesStudio-Windows-x64-diagnostico.zip -Algorithm SHA256 | Format-List | Out-File dist/SHA256.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ArvertesStudio-Windows-x64-diagnostico
+          path: |
+            dist/ArvertesStudio-Windows-x64-diagnostico.zip
+            dist/SHA256.txt
+          if-no-files-found: error
+          retention-days: 14

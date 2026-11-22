@@ -46,6 +46,19 @@ class Workspace:
     def close(self):
         self.db.close()
 
+    def dashboard_summary(self):
+        counts = self.db.execute("""
+            SELECT (SELECT COUNT(*) FROM project),
+                   (SELECT COUNT(*) FROM asset),
+                   (SELECT COUNT(*) FROM task WHERE status='draft')
+        """).fetchone()
+        recent = self.db.execute("""
+            SELECT project.name, task.title FROM task
+            JOIN project ON task.project_id=project.id
+            WHERE task.status='draft' ORDER BY task.id DESC LIMIT 4
+        """).fetchall()
+        return tuple(counts), [(row["name"], row["title"]) for row in recent]
+
     def projects(self):
         return self.db.execute("SELECT * FROM project ORDER BY name COLLATE NOCASE").fetchall()
 

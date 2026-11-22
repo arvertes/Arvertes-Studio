@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="pt-BR">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Arvertes HQ · Habblaud</title>
+<style>
+html,body{margin:0;height:100%;background:#12151d;color:#eff4fa;font:14px system-ui,sans-serif;overflow:hidden}
+body{display:grid;grid-template-rows:auto 1fr auto}
+header,footer{background:#202631;padding:10px 14px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+header strong{color:#72d6ca}header span{color:#b5c5d6}
+canvas{display:block;width:100%;height:100%;min-height:0;image-rendering:pixelated}
+button,select{background:#303b49;color:#edf2f8;border:1px solid #516172;border-radius:5px;padding:6px}
+#details{flex:1}#hint{font-size:12px;color:#b5c5d6}
+</style></head>
+<body>
+<header><strong>ARVERTES HQ</strong><span>Escritório virtual · 26 perfis cadastrados</span><select id="agents" aria-label="Selecionar agente"></select><button id="overview">Visão geral</button><button id="minus">−</button><button id="plus">+</button></header>
+<canvas id="world"></canvas>
+<footer><div id="details" role="status">Selecione um personagem.</div><div id="hint">Prévia visual, sem tarefas em execução · motor visual Habblaud / Márcio Junior (MIT)</div></footer>
+<script type="module" src="/src/arvertes-preview.ts"></script>
+</body></html>

@@ -1,5 +1,6 @@
 """Janela inicial; sem importação de bpy e sem agentes executores."""
 from pathlib import Path
+import sqlite3
 
 from PySide6.QtCore import QProcess, QStandardPaths, QTimer, Qt
 from PySide6.QtWidgets import (
@@ -8,9 +9,24 @@ from PySide6.QtWidgets import (
     QSplitter, QStackedWidget, QVBoxLayout, QWidget,
 )
 
-from .navigation import AGENT_NAMES, SECTIONS
+from .navigation import SECTIONS
+from .roster import AGENTS
+from .pages import WorkspacePages, build_agents
+from .workspace import Workspace
 from .settings import Settings, load_settings, save_settings, validate_blender_path
 from .theme import DARK_THEME
+
+CAPABILITIES = {
+    "model": ("Importação e análise de modelos", "Edição seletiva", "Variações e kits modulares"),
+    "materials": ("Materiais PBR", "UVs e bake", "Presets e texturas"),
+    "rig": ("Topologia", "Esqueletos e pesos", "Validação de deformações"),
+    "animation": ("Ciclos de movimento", "Expressões", "Transferência de animações"),
+    "effects": ("Partículas", "Simulações", "Cinematografia"),
+    "audio": ("Vozes originais", "Efeitos sonoros", "Trilhas", "Sincronização labial"),
+    "pipeline": ("Imagem para pacote", "Modelo para pacote", "Dependências e aprovação"),
+    "quality": ("Inspeção técnica", "Auditoria final", "Ciclos de correção e continuidade"),
+    "export": ("Validação Unreal", "Pacotes de assets", "Relatórios e formatos de exportação"),
+}
 
 
 def label(text: str, style: str = "") -> QLabel:
@@ -46,6 +62,14 @@ class StudioWindow(QMainWindow):
         except (OSError, ValueError, RecursionError) as error:
             self.settings = Settings()
             self.load_error = str(error)
+
+        self.workspace = None
+        self.workspace_error = ""
+        try:
+            self.workspace = Workspace(self.config_path.parent / "workspace.sqlite3")
+        except (OSError, ValueError, sqlite3.Error) as error:
+            self.workspace_error = str(error)
+        self.work_pages = WorkspacePages(self, self.workspace) if self.workspace else None
 
         self.process = QProcess(self)
         self.process.setProcessChannelMode(QProcess.ProcessChannelMode.MergedChannels)
@@ -97,14 +121,26 @@ class StudioWindow(QMainWindow):
             elif section.key == "settings":
                 self._settings_page(layout)
             elif section.key == "agents":
-                agents, agents_layout = panel()
-                self._agent_list(agents_layout)
-                layout.addWidget(agents)
-                layout.addStretch()
+                build_agents(layout)
+            elif section.key in ("projects", "library", "tasks"):
+                if self.work_pages is None:
+                    layout.addWidget(label("Banco local indisponível: " + self.workspace_error, "muted"))
+                    layout.addStretch()
+                else:
+                    getattr(self.work_pages, section.key + "_page")(layout)
             else:
                 box, box_layout = panel()
                 box_layout.addWidget(label("Funcionalidade planejada"))
-                box_layout.addWidget(label("Etapa prevista: v" + section.milestone + ". Ainda não implementada.", "muted"))
+                milestone = section.milestone
+                if not milestone.startswith("Etapa"):
+                    milestone = "v" + milestone
+                box_layout.addWidget(label("Etapa prevista: " + milestone + ". Ferramentas ainda não conectadas.", "muted"))
+                for capability in CAPABILITIES.get(section.key, ()):
+                    box_layout.addWidget(label("• " + capability))
+                navigate = QPushButton("Planejar tarefa")
+                navigate.clicked.connect(lambda: self._navigate("tasks"))
+                navigate.setEnabled(self.work_pages is not None)
+                box_layout.addWidget(navigate)
                 layout.addWidget(box)
                 layout.addStretch()
 
@@ -113,9 +149,14 @@ class StudioWindow(QMainWindow):
             scroll.setWidget(page)
             self.pages.addWidget(scroll)
 
+        if self.work_pages:
+            self.work_pages.refresh()
         self.menu.currentRowChanged.connect(self.pages.setCurrentIndex)
         self.menu.setCurrentRow(0)
         self.statusBar().showMessage("Versão de desenvolvimento • Nenhum arquivo de projeto carregado")
+
+    def _navigate(self, key):
+        self.menu.setCurrentRow(next(i for i, section in enumerate(SECTIONS) if section.key == key))
 
     def _home(self, layout):
         split = QSplitter(Qt.Orientation.Horizontal)
@@ -127,7 +168,14 @@ class StudioWindow(QMainWindow):
         preview_layout.addWidget(empty)
         preview_layout.addStretch()
         sidebar, side_layout = panel()
-        self._agent_list(side_layout)
+        side_layout.addWidget(label("Equipe de produção"))
+        side_layout.addWidget(label("25 especialistas · 5 departamentos", "muted"))
+        for agent in (AGENTS[0], AGENTS[1], AGENTS[22]):
+            side_layout.addWidget(label(f"{agent.name} — {agent.role}"))
+        side_layout.addWidget(label("Nenhum agente conectado", "muted"))
+        agents_button = QPushButton("Ver equipe")
+        agents_button.clicked.connect(lambda: self._navigate("agents"))
+        side_layout.addWidget(agents_button)
         side_layout.addStretch()
         split.addWidget(preview)
         split.addWidget(sidebar)
@@ -138,19 +186,20 @@ class StudioWindow(QMainWindow):
         layout.addWidget(split, 1)
         footer, footer_layout = panel()
         footer_layout.addWidget(label("Primeiros passos"))
-        footer_layout.addWidget(label("Configure o Blender. Projetos, biblioteca e execução de agentes serão integrados em etapas.", "muted"))
+        footer_layout.addWidget(label("Crie projetos, registre referências e prepare a fila. Os agentes ainda não executam tarefas.", "muted"))
+        shortcuts = QHBoxLayout()
+        for key, title in (("projects", "Projetos"), ("library", "Biblioteca"), ("tasks", "Fila de produção")):
+            shortcut = QPushButton(title)
+            shortcut.clicked.connect(lambda checked=False, target=key: self._navigate(target))
+            shortcut.setEnabled(self.work_pages is not None)
+            shortcuts.addWidget(shortcut)
+        footer_layout.addLayout(shortcuts)
         button = QPushButton("Abrir configurações")
         button.setObjectName("primary")
         button.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
         button.clicked.connect(lambda: self.menu.setCurrentRow(len(SECTIONS) - 1))
         footer_layout.addWidget(button)
         layout.addWidget(footer)
-
-    def _agent_list(self, layout):
-        layout.addWidget(label("Equipe de agentes"))
-        layout.addWidget(label("Perfis planejados • integração pendente", "muted"))
-        for name in AGENT_NAMES:
-            layout.addWidget(label(name + " — não conectado"))
 
     def _settings_page(self, layout):
         frame, form = panel()
@@ -255,4 +304,7 @@ class StudioWindow(QMainWindow):
         if self.process.state() != QProcess.ProcessState.NotRunning:
             self.process.kill()
             self.process.waitForFinished(500)
+        if self.workspace is not None:
+            self.workspace.close()
+            self.workspace = None
         super().closeEvent(event)

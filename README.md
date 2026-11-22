@@ -17,6 +17,10 @@ A interface está em português brasileiro na aba **Arvertes Studio** da barra l
 
 Para gerar e instalar o pacote de desenvolvimento ou ativar a partir do código-fonte, siga o [manual de instalação](docs/INSTALACAO.md). Consulte também a [arquitetura](docs/ARQUITETURA.md), o [manual de testes](docs/TESTES.md) e o [histórico de alterações](CHANGELOG.md).
 
+## Nova direção desktop (v0.2.0 em desenvolvimento)
+
+A interface independente está em desenvolvimento no pacote `arvertes_desktop`, separado do add-on. Consulte o [manual desktop](docs/DESKTOP.md) para instalação, limites e testes. O roadmap abaixo registra as capacidades inicialmente planejadas para o add-on; a evolução desktop reorganiza as etapas de entrega, preservando essas metas. A integração de agentes locais e a biblioteca de projetos ainda são etapas futuras.
+
 ## Tecnologias
 
 - Blender e API Python (`bpy`)

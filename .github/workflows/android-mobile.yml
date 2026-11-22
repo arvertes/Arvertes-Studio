@@ -9,10 +9,12 @@ permissions:
   contents: read
 jobs:
   debug-apk:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -26,9 +28,22 @@ jobs:
           javac --release 17 -encoding UTF-8 -d /tmp/arvertes-mobile-test mobile/app/src/main/java/com/arvertes/mobile/Readiness.java mobile/tests/ReadinessTest.java
           java -cp /tmp/arvertes-mobile-test com.arvertes.mobile.ReadinessTest
       - name: Android SDK
-        run: sdkmanager "platforms;android-35" "build-tools;34.0.0"
+        run: |
+          : "${ANDROID_HOME:?Android SDK unavailable}"
+          test -f "$ANDROID_HOME/platforms/android-35/android.jar"
+          test -x "$ANDROID_HOME/build-tools/34.0.0/apksigner"
+      - name: Review source manifest
+        run: python mobile/tests/check_manifest.py mobile/app/src/main/AndroidManifest.xml
       - name: Build debug APK
-        run: gradle -p mobile --no-daemon :app:assembleDebug
+        run: gradle -p mobile --no-daemon :app:lintDebug :app:assembleDebug
+      - name: Verify debug APK signature and merged permissions
+        run: |
+          apk=mobile/app/build/outputs/apk/debug/app-debug.apk
+          "$ANDROID_HOME/build-tools/34.0.0/apksigner" verify --verbose "$apk"
+          "$ANDROID_HOME/build-tools/34.0.0/aapt" dump permissions "$apk" > /tmp/arvertes-permissions.txt
+          cat /tmp/arvertes-permissions.txt
+          if grep -q "uses-permission" /tmp/arvertes-permissions.txt; then echo "Unexpected permission"; exit 1; fi
+          sha256sum "$apk"
       - uses: actions/upload-artifact@v4
         with:
           name: arvertes-mobile-debug

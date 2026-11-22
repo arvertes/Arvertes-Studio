@@ -40,8 +40,9 @@ class DesktopCoreTests(unittest.TestCase):
                     validate_blender_path(value)
 
     def test_navigation(self):
-        self.assertEqual(len(SECTIONS), 16)
+        self.assertEqual(len(SECTIONS), 17)
         self.assertIn("network", {section.key for section in SECTIONS})
+        self.assertIn("sentinel", {section.key for section in SECTIONS})
         self.assertEqual(len({section.key for section in SECTIONS}), len(SECTIONS))
         self.assertEqual(len(set(AGENT_NAMES)), 26)
 

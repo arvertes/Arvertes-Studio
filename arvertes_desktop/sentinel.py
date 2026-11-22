@@ -4,6 +4,8 @@ import re
 REQUIRED = {
     "android_diagnostic": ("unit_tests", "build", "apk_signature", "manifest_review", "code_review", "emulator_smoke"),
     "desktop_diagnostic": ("unit_tests", "windows_smoke", "code_review", "resource_review"),
+    "wifi_processing": ("unit_tests", "build", "authenticated_lan", "encrypted_transport", "consent_revocation",
+                        "disconnect_recovery", "resource_limits", "device_test", "code_review"),
     "usb_processing": ("unit_tests", "build", "authenticated_usb", "consent_revocation",
                        "disconnect_recovery", "resource_limits", "device_test", "code_review"),
 }

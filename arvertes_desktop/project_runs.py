@@ -9,7 +9,8 @@ FLOW = (
     ("catalog", "catalogador", ()),
     ("blender", "modelador", ("catalog",)),
     ("budget", "otimizador", ("blender",)),
-    ("inspect", "inspetor", ("blender", "budget")),
+    ("materials", "texturizador", ("blender",)),
+    ("inspect", "inspetor", ("blender", "budget", "materials")),
     ("audit", "auditor", ("inspect",)),
     ("gate", "seguranca", ("audit",)),
 )
@@ -143,9 +144,10 @@ class ProjectRuns:
                 raise ValueError("Sentinel bloqueou: ordem de execução inválida.")
             agent = STEPS[step][0]
             self.db.execute("UPDATE inspection SET expires=? WHERE id=?", (time() + LEASE_SECONDS, run))
-            if step == "budget":
-                self.event(run, "inspetor", agent, "help_requested", step,
-                           "Comparar a geometria original e avaliada ao orçamento.")
+            question = {"budget": "Comparar a geometria original e avaliada ao orçamento.",
+                        "materials": "Verificar a cobertura de materiais nas malhas."}.get(step)
+            if question:
+                self.event(run, "inspetor", agent, "help_requested", step, question)
             self.event(run, agent, "coordenador", "started", step)
 
     def complete(self, run, token, step, output):
@@ -157,7 +159,7 @@ class ProjectRuns:
                 raise ValueError("Sentinel bloqueou: resposta fora da etapa atual.")
             self.db.execute("INSERT INTO inspection_checkpoint VALUES (?,?,?)", (run, step, encoded))
             agent = STEPS[step][0]
-            recipient = {"inspect": "auditor", "audit": "seguranca", "budget": "inspetor"}.get(step, "coordenador")
+            recipient = {"inspect": "auditor", "audit": "seguranca", "budget": "inspetor", "materials": "inspetor"}.get(step, "coordenador")
             self.event(run, agent, recipient, "result", step)
             if step == "gate":
                 status = "blocked" if output.get("reason") else "review"

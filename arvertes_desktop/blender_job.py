@@ -88,6 +88,10 @@ def validated_summary(report):
     if type(summary.get("has_armature")) is not bool:
         raise ValueError("Indicador de armadura inválido.")
     result["has_armature"] = summary["has_armature"]
+    materials = summary.get("materials")
+    if not isinstance(materials, list) or len(materials) > 10000 or any(not isinstance(name, str) for name in materials):
+        raise ValueError("Inventário Blender de materiais inválido.")
+    result["material_count"] = len(set(materials))
     for key in ("geometry_original", "geometry_evaluated"):
         item = summary.get(key)
         if key == "geometry_evaluated" and item is None:

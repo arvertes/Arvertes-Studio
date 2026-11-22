@@ -76,11 +76,12 @@ class ProjectRunTests(unittest.TestCase):
     def test_help_history_and_snapshot_summary(self):
         run = self.queue()
         token = self.runs.reserve(run)
-        for key in ("catalog", "blender", "budget"):
+        for key in ("catalog", "blender", "budget", "materials"):
             self.runs.begin(run, token, key)
             self.runs.complete(run, token, key, {"fixture": True})
-        event = next(row for row in self.runs.history(run) if row["kind"] == "help_requested")
-        self.assertEqual((event["sender"], event["recipient"]), ("inspetor", "otimizador"))
+        helpers = {(row["sender"], row["recipient"]) for row in self.runs.history(run)
+                   if row["kind"] == "help_requested"}
+        self.assertEqual(helpers, {("inspetor", "otimizador"), ("inspetor", "texturizador")})
         data = snapshot(self.workspace, None, None)
         self.assertEqual(data["projects"][0]["reference_count"], 1)
         self.assertEqual({item["kind"] for item in data["tasks"]}, {"draft", "inspection"})

@@ -73,7 +73,7 @@ A dependência GUI não está instalada no ambiente Linux de desenvolvimento uti
 
 Em **Agentes IA**, conecte o checkout atualizado do Agents. Em **Configurações**, selecione um Blender 5.3.0 confiável. Registre um GLB na **Biblioteca** e abra **Tarefas → Inspeções GLB**. Escolha o orçamento de triângulos e, opcionalmente, solicite a cópia organizada em .blend. Delegar cria as mensagens e a fila. Iniciar autoriza uma inspeção sequencial.
 
-Nexus classifica o nome. O executor fixo do Blender importa uma cópia com materiais embutidos, analisa a geometria e gera o relatório técnico. A opção de organização aplica as coleções existentes em um .blend separado. Argus solicita o orçamento a Vector, envia achados a Aegis e o Sentinel verifica a geometria e a auditoria antes de encaminhar para revisão humana. O fluxo não publica nem aplica as correções ao original.
+Nexus classifica o nome. O executor fixo do Blender importa uma cópia com materiais embutidos, analisa a geometria e gera o relatório técnico. A opção de organização aplica as coleções existentes em um .blend separado. Argus solicita o orçamento a Vector e a cobertura dos materiais a Chroma, envia achados a Aegis e o Sentinel verifica a geometria e a auditoria antes de encaminhar para revisão humana. O fluxo não publica nem aplica as correções ao original.
 
 A fila usa tabelas aditivas no SQLite existente. A memória por projeto guarda delegações, pedidos de ajuda, eventos e resultados por etapa. **Pausar** preserva checkpoints para retomada manual. **Cancelar** encerra a inspeção. Após encerramento inesperado, uma reserva sem renovação expira em até 150 segundos. A fila volta a oferecer a inspeção interrompida. Uma referência modificada entre autorização e cópia exige nova inspeção.
 

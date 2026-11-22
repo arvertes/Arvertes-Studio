@@ -133,17 +133,28 @@ class Production(QObject):
             elif step == "budget":
                 self.consult("assess_triangle_budget", {"report": done["blender"]["report"],
                              "triangle_budget": record["budget"]}, self.budget)
+            elif step == "materials":
+                report = done["blender"]["report"]
+                if "material_count" not in report["summary"]:
+                    restored = read_result(self.directory(run), record["organize"])
+                    if any(restored["summary"].get(key) != value for key, value in report["summary"].items()):
+                        raise ValueError("Sentinel bloqueou: relatório não corresponde ao checkpoint Blender.")
+                    report = restored
+                self.consult("inspect_material_coverage", {"report": report},
+                             lambda value: self.materials(value, report["summary"]))
             elif step == "inspect":
                 self.consult("inspect_report", {"report": done["blender"]["report"], "requirements": {
                     "require_uv": True, "require_materials": False, "require_rig": False,
-                    "triangle_budget": record["budget"]}}, lambda value: {"findings": validated_findings(value)})
+                    "triangle_budget": record["budget"]}}, lambda value: {
+                        "findings": validated_findings({"findings": validated_findings(value) +
+                                                        validated_findings(done["materials"])})})
             elif step == "audit":
                 findings = validated_findings(done["inspect"])
                 self.consult("review_stage", {"attempt": 1, "findings": findings},
                              lambda value: self.audit(value, findings))
             else:
                 self.finish(review_gate(done, record["budget"]))
-        except (OSError, ValueError, KeyError, sqlite3.Error) as error:
+        except (OSError, ValueError, KeyError, RecursionError, sqlite3.Error) as error:
             self.halt(str(error))
 
     def consult(self, action, fields, validate):
@@ -185,6 +196,15 @@ class Production(QObject):
                 type(result[key]) not in (int, type(None)) for key in keys):
             raise ValueError("Orçamento fora do protocolo.")
         return {key: result[key] for key in keys}
+
+    @staticmethod
+    def materials(value, summary):
+        keys = ("material_count", "mesh_count", "meshes_without_materials")
+        findings = validated_findings(value)
+        if (any(type(value.get(key)) is not int or value[key] != summary[key] for key in keys)
+                or any(item["agent_id"] != "texturizador" or item["severity"] != "warning" for item in findings)):
+            raise ValueError("Parecer de materiais incompatível.")
+        return {**{key: value[key] for key in keys}, "findings": findings}
 
     @staticmethod
     def audit(value, findings):

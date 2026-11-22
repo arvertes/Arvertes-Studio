@@ -1,10 +1,12 @@
 """Ponte local para uma instalação do Agents selecionada pelo operador."""
 import json
 from pathlib import Path
+import sqlite3
 
 from PySide6.QtCore import QObject, QProcess, QProcessEnvironment, QTimer, Signal
 
 from .network import limits_ok
+from .remote_work import KIND, RESERVATION_MIB
 from .roster import AGENTS
 
 MAX_REQUEST = 65536
@@ -15,6 +17,7 @@ ACTIONS = {
     "list_team": (),
     "delegate_inspection": ("coordenador",),
     "inspect_report": ("inspetor",),
+    "inspect_material_coverage": ("texturizador",),
     "review_stage": ("auditor",),
     "catalog_file": ("catalogador",),
     "plan_production": ("coordenador",),
@@ -165,7 +168,7 @@ class AgentBridge(QObject):
             self.notice.emit(message)
             if failed:
                 failed(message)
-        except (ValueError, OSError) as error:
+        except (ValueError, OSError, sqlite3.Error) as error:
             self.notice.emit(str(error))
             if failed:
                 failed(str(error))
@@ -193,18 +196,26 @@ class AgentBridge(QObject):
         self.notice.emit("Catálogo conferido · 26 perfis conectados.")
 
     def recommend_probe(self, hub):
+        self.recommend_target(hub, "session_probe")
+
+    def recommend_work(self, hub):
+        self.recommend_target(hub, KIND)
+
+    def recommend_target(self, hub, capability):
+        work = capability == KIND
         nodes = []
         candidates = set()
         for device, _, session, probe in hub.snapshot():
             if not session:
                 continue
             metrics = session["metrics"]
+            reserved = hub.work.latest(device)[0] in ("queued", "running", "paused")
             nodes.append({"id": device, "kind": "mobile", "transport": session["transport"],
-                          "authorized": True, "enabled": session["consent"],
-                          "busy": probe.get("state") in ("queued", "sent"),
-                          "limits_ok": limits_ok(metrics),
+                          "authorized": True, "enabled": session["work_enabled"] if work else session["consent"],
+                          "busy": reserved or probe.get("state") in ("queued", "sent"),
+                          "limits_ok": hub.work_limits(metrics) if work else limits_ok(metrics),
                           "available_ram_mib": metrics["ram_available"] or 0,
-                          "capabilities": ["session_probe"]})
+                          "capabilities": [capability]})
             candidates.add(device)
 
         def recommend(result):
@@ -216,10 +227,15 @@ class AgentBridge(QObject):
             selected = result.get("device_id")
             if result.get("status") != "recommended" or not isinstance(selected, str) or selected not in candidates:
                 raise ValueError("Sentinel bloqueou: Atlas indicou uma sessão desconhecida.")
-            hub.send_probe(selected)
-            self.notice.emit("Atlas selecionou uma sessão. Diagnóstico enfileirado.")
+            if work:
+                hub.queue_work(selected)
+                self.notice.emit("Atlas selecionou o aparelho. Cálculo leve reservado.")
+            else:
+                hub.send_probe(selected)
+                self.notice.emit("Atlas selecionou uma sessão. Diagnóstico enfileirado.")
 
-        self.call("recommend_device", {"capability": "session_probe", "required_ram_mib": 512,
+        self.call("recommend_device", {"capability": capability,
+                                       "required_ram_mib": 512 + RESERVATION_MIB if work else 512,
                                        "devices": nodes}, recommend)
 
     def close(self):

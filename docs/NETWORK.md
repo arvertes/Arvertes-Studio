@@ -24,7 +24,7 @@ No notebook e no POCO, registre separadamente Wi-Fi, USB, dois aparelhos, suspen
 
 ## Trabalho leve com checkpoint
 
-O Mobile atualizado pode autorizar **cálculo leve de diagnóstico** enquanto está visível. Com o aparelho selecionado no Studio, use **Iniciar cálculo leve**. A única ferramenta móvel é uma sequência SHA-256 sobre dados sintéticos criados para a tarefa. O Studio verifica cada resultado antes de salvar o checkpoint. A reserva é de 8 MiB por aparelho acima de 512 MiB livres e só admite uma tarefa ativa por telefone. O teste de mensagens e o cálculo não são despachados juntos para o mesmo aparelho.
+O Mobile atualizado pode autorizar **cálculo leve de diagnóstico** enquanto está visível. Com o aparelho selecionado no Studio, use **Iniciar cálculo leve** ou peça ao Atlas para escolher um aparelho elegível. A única ferramenta móvel é uma sequência SHA-256 sobre dados sintéticos criados para a tarefa. O Studio verifica cada resultado antes de salvar o checkpoint. A reserva é de 8 MiB por aparelho acima de 512 MiB livres e só admite uma tarefa ativa por telefone. O teste de mensagens e o cálculo não são despachados juntos para o mesmo aparelho.
 
 Desconexão, pausa ou perda de consentimento invalidam a reserva e preservam o último checkpoint. Ao reconectar e autorizar, a tarefa recomeça na primeira etapa pendente. Cancelamento e revogação encerram a tarefa. Comandos, arquivos e operações de produção ficam fora do contrato móvel. O nome de exibição pode ser alterado no Studio e fica associado à identidade pareada, sem trocar o certificado.
 

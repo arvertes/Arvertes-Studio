@@ -16,7 +16,7 @@ EVENTS = {"delegated": "delegou", "help_requested": "solicitou ajuda", "started"
           "reserved": "reservou", "interrupted": "interrompeu", "cancelled": "cancelou", "blocked": "bloqueou",
           "review": "encaminhou para revisão"}
 LABELS = {"catalog": "Catalogação", "blender": "Importação e análise Blender", "budget": "Orçamento de geometria",
-          "inspect": "Inspeção técnica", "audit": "Auditoria", "gate": "Verificação"}
+          "materials": "Cobertura de materiais", "inspect": "Inspeção técnica", "audit": "Auditoria", "gate": "Verificação"}
 
 
 def event_label(row):

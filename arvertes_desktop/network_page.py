@@ -172,7 +172,9 @@ def build_network(layout, hub, hub_error, bridge):
         selected = selected_id() is not None
         for control in (send, cancel, revoke, rename, work, stop_work):
             control.setEnabled(selected)
-        atlas.setEnabled(bridge.connected and bool(records) and not bridge.busy)
+        able = bridge.connected and bool(records) and not bridge.busy
+        atlas.setEnabled(able)
+        atlas_work.setEnabled(able)
 
     start = QPushButton("Ativar")
     start.clicked.connect(lambda: run(toggle))
@@ -194,6 +196,9 @@ def build_network(layout, hub, hub_error, bridge):
     work = QPushButton("Iniciar cálculo leve")
     work.clicked.connect(lambda: run(hub.queue_work, selected_id()))
     controls.addWidget(work)
+    atlas_work = QPushButton("Atlas · escolher para cálculo")
+    atlas_work.clicked.connect(lambda: run(bridge.recommend_work, hub))
+    controls.addWidget(atlas_work)
     stop_work = QPushButton("Cancelar cálculo leve")
     stop_work.clicked.connect(lambda: run(hub.cancel_work, selected_id()))
     controls.addWidget(stop_work)

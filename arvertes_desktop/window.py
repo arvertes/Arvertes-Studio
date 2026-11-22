@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
 )
 
 from .navigation import SECTIONS
+from .network_page import build_network
 from .roster import AGENTS
 from .pages import WorkspacePages, build_agents
 from .workspace import Workspace
@@ -122,6 +123,8 @@ class StudioWindow(QMainWindow):
                 self._settings_page(layout)
             elif section.key == "agents":
                 build_agents(layout)
+            elif section.key == "network":
+                build_network(layout)
             elif section.key in ("projects", "library", "tasks"):
                 if self.work_pages is None:
                     layout.addWidget(label("Banco local indisponível: " + self.workspace_error, "muted"))
@@ -176,6 +179,9 @@ class StudioWindow(QMainWindow):
         agents_button = QPushButton("Ver equipe")
         agents_button.clicked.connect(lambda: self._navigate("agents"))
         side_layout.addWidget(agents_button)
+        network_button = QPushButton("Central de dispositivos")
+        network_button.clicked.connect(lambda: self._navigate("network"))
+        side_layout.addWidget(network_button)
         side_layout.addStretch()
         split.addWidget(preview)
         split.addWidget(sidebar)

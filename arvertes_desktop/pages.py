@@ -43,7 +43,7 @@ def rows(widget, values):
 
 
 def build_agents(layout):
-    layout.addWidget(plain("25 especialistas planejados · 5 departamentos · nenhum agente conectado"))
+    layout.addWidget(plain("26 especialistas · 5 departamentos · Sentinel local; demais agentes não conectados"))
     filters = QHBoxLayout()
     department = QComboBox()
     department.addItem("Todos os departamentos", "")
@@ -58,7 +58,7 @@ def build_agents(layout):
     layout.addWidget(view, 1)
 
     def refresh():
-        rows(view, [(a.name, a.role, a.department, "Não conectado")
+        rows(view, [(a.name, a.role, a.department, "Regras locais" if a.id == "seguranca" else "Não conectado")
                     for a in filter_agents(department.currentData(), search.text())])
     department.currentIndexChanged.connect(refresh)
     search.textChanged.connect(refresh)

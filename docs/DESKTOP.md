@@ -16,13 +16,15 @@ python -m venv .venv
 
 ## O que funciona nesta entrega
 
-- Janela principal escura em português; navegação em onze áreas.
+- Janela principal escura em português; navegação em quinze áreas.
 - Painel inicial com divisão redimensionável e indicação explícita de que a visualização 3D ainda não está implementada.
-- Dez especialidades exibidas como perfis não conectados.
+- Vinte e cinco especialistas nomeados, em cinco departamentos, pesquisáveis pelo nome, cargo e ID; todos exibidos como não conectados.
+- Projetos locais com nome, biblioteca de referências (apenas caminhos; não copia nem modifica os originais) e fila persistente de rascunhos com prioridade e cancelamento.
+- Telas de áudio, efeitos, qualidade e AutoPipeline, além das áreas existentes. As funcionalidades de produção ainda não estão conectadas.
 - Configuração do executável do Blender pelo seletor de arquivos e persistência em JSON v1 no diretório de configuração do usuário.
 - Verificação assíncrona da versão usando apenas o executável escolhido pelo usuário e o argumento --version; tempo limite de 10 segundos. Isso não configura uma conexão de controle do Blender.
 
-Biblioteca, projetos, edição 3D, execução de tarefas e agentes ainda não funcionam nesta etapa. Não há progressos simulados nem operações sobre assets.
+O banco SQLite v1 é criado no diretório de configuração local do usuário, separado dos arquivos de código. A biblioteca não cataloga conteúdo; a fila não executa tarefas. Edição 3D, execução de agentes e AutoPipeline ainda não funcionam. Não há progressos simulados nem operações sobre assets.
 
 ## Arquitetura
 
@@ -33,8 +35,11 @@ Biblioteca, projetos, edição 3D, execução de tarefas e agentes ainda não fu
 | arvertes_desktop/theme.py | Estilo visual separado |
 | arvertes_desktop/navigation.py | Identificadores estáveis das seções e perfis |
 | arvertes_desktop/settings.py | Persistência local e validação sem dependências gráficas |
+| arvertes_desktop/roster.py | IDs estáveis e nomes visuais dos 25 agentes |
+| arvertes_desktop/workspace.py | Banco SQLite local; projetos, referências e rascunhos |
+| arvertes_desktop/pages.py | Telas de projetos, biblioteca, fila e equipe |
 
-Os agentes futuramente serão integrados por contrato local versionado, sem depender das classes da interface. O aplicativo será responsável pela aprovação, armazenamento, execução de operações autorizadas, cópias e versões. O processamento pesado deverá ser sob demanda e sequencial por padrão. A próxima etapa proposta é o gerenciador de projetos e biblioteca, seguida da integração com o motor Blender.
+Os agentes futuramente serão integrados por contrato local versionado, sem depender das classes da interface. O aplicativo será responsável pela aprovação, armazenamento, execução de operações autorizadas, cópias e versões. O processamento pesado deverá ser sob demanda e sequencial por padrão. A próxima etapa proposta é validar as telas e integrar o motor Blender e o protocolo Agents. Os nomes são uma decisão de design revisável; os IDs dos dez perfis existentes são preservados.
 
 ## Validação
 
@@ -50,5 +55,8 @@ Checklist manual pendente para Windows:
 4. Confirmar que o aplicativo não inicia o Blender até clicar em Verificar Blender.
 5. Observar RAM em repouso e ao verificar a versão, sem exigir abertura simultânea da Unreal.
 6. Reexecutar os testes do add-on conforme TESTES.md.
+7. Criar dois projetos, registrar arquivo sintético, confirmar que o original permanece intacto e que cada projeto mostra apenas suas referências.
+8. Criar três rascunhos, reordenar, cancelar um e reiniciar para conferir persistência.
+9. Buscar Atlas e Aegis, filtrar departamentos; abrir as quinze áreas.
 
-A dependência GUI não está instalada no ambiente Linux de desenvolvimento utilizado para esta entrega. Os cinco testes do núcleo Python passaram em Python 3.13.5, mas a janela e a verificação de um Blender real não foram executadas.
+A dependência GUI não está instalada no ambiente Linux de desenvolvimento utilizado para esta entrega. Nesta ampliação, os seis novos testes de catálogo e banco local passaram em Python 3.13.5 no Linux, com os três hashes dos arquivos testados conferidos contra o GitHub. Os cinco testes anteriores foram atualizados para a nova contagem de seções e agentes; a suíte gráfica e a verificação de um Blender real seguem pendentes.

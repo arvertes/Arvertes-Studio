@@ -110,7 +110,7 @@ class Production(QObject):
             except (OSError, ValueError, sqlite3.Error) as error:
                 self.notice.emit(str(error))
 
-        self.bridge.call("delegate_inspection", {}, create, failed=self.notice.emit, quiet=True)
+        self.bridge.call("delegate_unreal_inspection", {}, create, failed=self.notice.emit, quiet=True)
 
     def start(self, run):
         if self.active or self.delivery_job or self.process.state() != QProcess.ProcessState.NotRunning:
@@ -161,7 +161,7 @@ class Production(QObject):
                     "triangle_budget": record["budget"]}}, lambda value: {
                         "findings": validated_findings({"findings": validated_findings(value) +
                                                         validated_findings(done["materials"]) +
-                                                        validated_findings(done["unreal"])})})
+                                                        validated_findings(done.get("unreal", {"findings": []}))})})
             elif step == "audit":
                 findings = validated_findings(done["inspect"])
                 self.consult("review_stage", {"attempt": 1, "findings": findings},
@@ -260,8 +260,9 @@ class Production(QObject):
             raise ValueError("Aguarde a operação local anterior.")
         executable = validate_blender_path(self.blender_path())
         self.process_budget = budget(reading())
-        checkpoint = self.runs.checkpoints(run).get("blender", {})
-        expected = checkpoint.get("blend_sha256")
+        checkpoints = self.runs.checkpoints(run)
+        checkpoint = checkpoints.get("blender", {})
+        expected = checkpoint.get("blend_sha256") if "unreal" in checkpoints else None
         if not isinstance(expected, str) or not re.fullmatch(r"[a-f0-9]{64}", expected):
             raise ValueError("Gere uma cópia organizada com a revisão atual antes de exportar FBX.")
         source = self.directory(run)

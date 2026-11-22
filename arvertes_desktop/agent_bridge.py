@@ -14,7 +14,7 @@ BOOTSTRAP = ("import sys; sys.path.insert(0, sys.argv[1]); "
              "from arvertes_agents.__main__ import main; sys.exit(main())")
 ACTIONS = {
     "list_team": (),
-    "delegate_inspection": ("coordenador",),
+    "delegate_unreal_inspection": ("coordenador",),
     "inspect_report": ("inspetor",),
     "unreal_preflight": ("integrador_unreal",),
     "inspect_audio": ("engenheiro_audio",),

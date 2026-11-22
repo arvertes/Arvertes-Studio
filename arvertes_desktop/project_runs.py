@@ -15,6 +15,8 @@ FLOW = (
     ("audit", "auditor", ("inspect",)),
     ("gate", "seguranca", ("audit",)),
 )
+LEGACY_FLOW = tuple((step, agent, tuple(dependency for dependency in deps if dependency != "unreal"))
+                    for step, agent, deps in FLOW if step != "unreal")
 STEPS = {step: (agent, dependencies) for step, agent, dependencies in FLOW}
 LEASE_SECONDS = 150
 MEMORY = {"error": "Erros", "correction": "Correções aprovadas", "preference": "Preferências",
@@ -52,6 +54,9 @@ class ProjectRuns:
                 step TEXT, detail TEXT NOT NULL, created TEXT NOT NULL
             );
             CREATE INDEX IF NOT EXISTS inspection_events ON inspection_event(run_id, id);
+            CREATE TABLE IF NOT EXISTS inspection_contract (
+                run_id INTEGER PRIMARY KEY REFERENCES inspection(id), profile TEXT NOT NULL
+            );
             CREATE TABLE IF NOT EXISTS inspection_delivery (
                 run_id INTEGER PRIMARY KEY REFERENCES inspection(id), state TEXT NOT NULL,
                 lease TEXT, expires REAL, directory TEXT, digest TEXT
@@ -117,6 +122,7 @@ class ProjectRuns:
             run = self.db.execute("""INSERT INTO inspection(project_id,asset_id,title,source_hash,organize,budget,status)
                                     VALUES (?,?,?,?,?,?,'queued')""",
                                   (project, asset, title[:120], source_hash, organize, chosen)).lastrowid
+            self.db.execute("INSERT INTO inspection_contract VALUES (?,'unreal')", (run,))
             if limit or previous_errors:
                 self.event(run, "coordenador", "inspetor", "delegated", None,
                            f"Memória consultada. Orçamento de {chosen} triângulos e {previous_errors} erros anteriores registrados.")
@@ -134,6 +140,10 @@ class ProjectRuns:
             return self.db.execute("SELECT id,project_id,title,status FROM inspection ORDER BY id DESC LIMIT 100").fetchall()
         return self.db.execute("""SELECT id,project_id,title,status FROM inspection
                                 WHERE project_id=? ORDER BY id DESC LIMIT 100""", (project,)).fetchall()
+
+    def flow(self, run):
+        record = self.db.execute("SELECT profile FROM inspection_contract WHERE run_id=?", (run,)).fetchone()
+        return FLOW if record and record[0] == "unreal" else LEGACY_FLOW
 
     def history(self, run):
         return self.db.execute("""SELECT sender,recipient,kind,step,detail,created FROM inspection_event
@@ -229,7 +239,7 @@ class ProjectRuns:
     def next_step(self, run, token):
         self.verify(run, token)
         done = self.checkpoints(run)
-        for step, _, depends in FLOW:
+        for step, _, depends in self.flow(run):
             if step not in done and all(key in done for key in depends):
                 return step
         raise ValueError("Sentinel bloqueou: dependência inexistente ou fila sem próxima etapa.")

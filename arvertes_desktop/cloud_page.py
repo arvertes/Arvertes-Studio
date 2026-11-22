@@ -11,7 +11,7 @@ from PySide6.QtWidgets import QCheckBox, QComboBox, QLineEdit
 from .cloud_projection import CATEGORIES, projection
 from .pages import button, plain
 
-TITLES = dict(zip(CATEGORIES, ("Projetos", "Tarefas", "Agentes", "Dispositivos", "Histórico", "Sentinel")))
+TITLES = dict(zip(CATEGORIES, ("Projetos", "Tarefas", "Agentes", "Dispositivos", "Histórico", "Relatórios técnicos", "Sentinel")))
 
 
 def endpoint(value):

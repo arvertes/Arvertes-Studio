@@ -6,7 +6,7 @@ from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import QCheckBox, QComboBox, QHBoxLayout, QInputDialog, QMessageBox, QPlainTextEdit, QSpinBox
 
 from .pages import button, plain, rows, table
-from .project_runs import FLOW, MEMORY, STEPS
+from .project_runs import MEMORY
 from .roster import AGENTS
 
 NAMES = {agent.id: agent.name for agent in AGENTS}
@@ -84,7 +84,7 @@ def build_production(layout, production, protect):
         start.setEnabled(active in ("queued", "interrupted") and not working)
         folder.setEnabled("blender" in checkpoints)
         delivery = production.runs.delivery(identity) if identity else None
-        ready = active == "review" and bool(checkpoints.get("blender", {}).get("blend_sha256")) and not working
+        ready = active == "review" and "unreal" in checkpoints and bool(checkpoints.get("blender", {}).get("blend_sha256")) and not working
         approve.setEnabled(ready and not (delivery and delivery["state"] == "exported"))
         delivered.setEnabled(bool(delivery and delivery["state"] == "exported"))
 
@@ -100,7 +100,7 @@ def build_production(layout, production, protect):
             done = len(production.runs.checkpoints(run))
             delivery = production.runs.delivery(run)
             state = {"running": "Exportando", "exported": "FBX verificado", "interrupted": "Exportação interrompida"}
-            listing_rows.append((entry["title"], f'{STATUS[entry["status"]]} · {done}/{len(FLOW)}',
+            listing_rows.append((entry["title"], f'{STATUS[entry["status"]]} · {done}/{len(production.runs.flow(run))}',
                                  state[delivery["state"]] if delivery else "—"))
         rows(listing, listing_rows)
         index = next((i for i, entry in enumerate(records) if entry["id"] == selected), -1)

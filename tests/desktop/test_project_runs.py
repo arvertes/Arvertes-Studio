@@ -98,6 +98,16 @@ class ProjectRunTests(unittest.TestCase):
         self.assertIsNone(self.runs.project_budget(other))
         self.assertFalse(self.runs.memory(other))
 
+    def test_old_queued_inspection_keeps_its_original_plan(self):
+        run = self.queue()
+        with self.runs.db:
+            self.runs.db.execute("DELETE FROM inspection_contract WHERE run_id=?", (run,))
+        token = self.runs.reserve(run)
+        for key in ("catalog", "blender", "budget", "materials"):
+            self.runs.begin(run, token, key)
+            self.runs.complete(run, token, key, {"legacy": True})
+        self.assertEqual(self.runs.next_step(run, token), "inspect")
+
     def test_export_requires_successful_sentinel_and_organized_copy(self):
         with self.assertRaisesRegex(ValueError, "Sentinel"):
             self.runs.reserve_delivery(self.queue())

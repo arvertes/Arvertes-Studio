@@ -9,7 +9,7 @@ from PySide6.QtWidgets import (
 )
 from .roster import AGENTS, DEPARTMENTS
 from .production_page import event_label, LABELS, NAMES
-from .project_runs import FLOW, STEPS
+from .project_runs import STEPS
 from .office_preview import OfficePreview
 
 PALETTE = {
@@ -196,7 +196,7 @@ def build_office(layout, navigate, bridge, production=None, auto=False):
             partner = {"budget": "Argus", "materials": "Argus", "audit": "Argus", "gate": "Aegis"}.get(step)
             team = NAMES[STEPS[step][0]] if step in STEPS else "Atlas"
             meeting = f" · colaboração {partner} ↔ {team}" if partner else f" · {team}"
-            flow = f"{done}/{len(FLOW)} etapas · {LABELS.get(step, 'Preparando')}{meeting}"
+            flow = f"{done}/{len(production.runs.flow(started))} etapas · {LABELS.get(step, 'Preparando')}{meeting}"
         elif production and production.delivery_job:
             flow = "Bridge · gerando FBX aprovado"
         progress.setText(flow or "Nenhuma inspeção ativa")

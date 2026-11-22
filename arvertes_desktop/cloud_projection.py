@@ -1,8 +1,8 @@
 """Projeção remota. Campos pessoais, caminhos e observações locais ficam fora."""
 from .roster import AGENTS
 
-CATEGORIES = ("projects", "tasks", "agents", "devices", "history", "sentinel")
-PROJECT_SECTIONS = frozenset(("projects", "tasks", "history", "sentinel"))
+CATEGORIES = ("projects", "tasks", "agents", "devices", "history", "reports", "sentinel")
+PROJECT_SECTIONS = frozenset(("projects", "tasks", "history", "reports", "sentinel"))
 EVENTS = frozenset(("delegated", "help_requested", "started", "result", "reserved", "interrupted",
                     "cancelled", "blocked", "review", "approved", "exported"))
 STEPS = frozenset(("", "catalog", "blender", "budget", "materials", "inspect", "audit", "gate",
@@ -47,6 +47,19 @@ def projection(workspace, hub, bridge, production, project, selected):
             sections[field] = [{"sender": row["sender"], "recipient": row["recipient"] or "",
                                 "event": row["kind"], "step": row["step"] or ""}
                                for row in rows if row["kind"] in EVENTS and (row["step"] or "") in STEPS]
+        elif field == "reports":
+            reports = []
+            for row in workspace.inspections.list(project):
+                if row["status"] not in ("review", "blocked"):
+                    continue
+                summary = workspace.inspections.checkpoints(row["id"]).get("blender", {}).get("report", {}).get("summary")
+                if summary:
+                    reports.append({"run": row["id"], "meshes": summary["mesh_count"],
+                                    "triangles": summary["geometry_original"]["triangles"],
+                                    "materials": summary.get("material_count", 0),
+                                    "topology": "measured" if summary.get("technical", {}).get("topology_measured")
+                                    else "not_measured"})
+            sections[field] = reports
         else:
             sections[field] = [{"run": row["id"], "decision":
                                "human_review" if row["status"] == "review" else "blocked"}

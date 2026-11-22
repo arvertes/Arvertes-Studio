@@ -26,6 +26,7 @@ SECTIONS = (
     Section("tasks", "Tarefas", "Fila, histórico e cancelamento de operações.", "0.4"),
     Section("export", "Exportação", "Validação e exportação para Unreal.", "0.9"),
     Section("network", "Dispositivos", "Arvertes Network: central local e nós móveis via USB.", "Etapa 1"),
+    Section("sentinel", "Sentinel", "Segurança e evidências de testes.", "0.2"),
     Section("settings", "Configurações", "Preferências locais e executável do Blender.", "0.2"),
 )
 

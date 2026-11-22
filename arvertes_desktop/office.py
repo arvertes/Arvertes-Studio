@@ -3,7 +3,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QBrush, QPen, QFont, QPainter
 from PySide6.QtWidgets import (
     QComboBox, QGraphicsItem, QGraphicsScene, QGraphicsView, QHBoxLayout,
-    QLabel, QPushButton,
+    QLabel, QPushButton, QVBoxLayout, QWidget,
 )
 from .roster import AGENTS, DEPARTMENTS
 from .office_preview import OfficePreview
@@ -41,7 +41,18 @@ def build_office(layout, navigate):
     notice = QLabel("Mapa interativo de planejamento. As posições são ilustrativas; não há tarefas executadas nem agentes remotos conectados.")
     notice.setWordWrap(True)
     layout.addWidget(notice)
-    layout.addWidget(OfficePreview())
+    preview = OfficePreview()
+    layout.addWidget(preview)
+    fallback = QWidget()
+    fallback_layout = QVBoxLayout(fallback)
+    fallback_layout.setContentsMargins(0, 0, 0, 0)
+    layout.addWidget(fallback, 1)
+
+    def switch_visual(active):
+        fallback.setVisible(not active)
+        layout.setStretchFactor(preview, int(active))
+
+    preview.active_changed.connect(switch_visual)
     scene = QGraphicsScene(0, 0, 1060, 576)
     scene.setBackgroundBrush(QColor("#111d27"))
 
@@ -111,7 +122,7 @@ def build_office(layout, navigate):
             seats[agent.id] = group
 
     view = OfficeView(scene)
-    layout.addWidget(view, 1)
+    fallback_layout.addWidget(view, 1)
     controls = QHBoxLayout()
     controls.addWidget(QLabel("Agente"))
     select = QComboBox()
@@ -125,13 +136,13 @@ def build_office(layout, navigate):
     guard = QPushButton("Abrir Sentinel")
     guard.clicked.connect(lambda: navigate("sentinel"))
     controls.addWidget(guard)
-    layout.addLayout(controls)
+    fallback_layout.addLayout(controls)
 
     detail = QLabel()
     detail.setTextFormat(Qt.TextFormat.PlainText)
     detail.setObjectName("officeDetail")
     detail.setWordWrap(True)
-    layout.addWidget(detail)
+    fallback_layout.addWidget(detail)
 
     def show_agent():
         agent = by_id[select.currentData()]

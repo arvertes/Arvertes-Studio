@@ -6,6 +6,9 @@ QLabel { background: transparent; }
 QLabel#heading { font-size: 23px; font-weight: bold; }
 QLabel#brand { font-size: 19px; font-weight: bold; color: #72d6ca; }
 QLabel#muted { color: #a1aebd; }
+QLabel#networkTitle { font-size: 16px; font-weight: bold; }
+QLabel#networkTag { color: #72d6ca; font-weight: bold; }
+QCheckBox { spacing: 8px; }
 QListWidget { background: #202631; border: 0; outline: none; padding: 5px; }
 QListWidget::item { min-height: 34px; padding-left: 10px; border-radius: 5px; }
 QListWidget::item:selected { background: #284640; color: #a0eee3; }

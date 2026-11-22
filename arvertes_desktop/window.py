@@ -172,7 +172,7 @@ class StudioWindow(QMainWindow):
         preview_layout.addStretch()
         sidebar, side_layout = panel()
         side_layout.addWidget(label("Equipe de produção"))
-        side_layout.addWidget(label("25 especialistas · 5 departamentos", "muted"))
+        side_layout.addWidget(label("26 especialistas · 5 departamentos", "muted"))
         for agent in (AGENTS[0], AGENTS[1], AGENTS[22]):
             side_layout.addWidget(label(f"{agent.name} — {agent.role}"))
         side_layout.addWidget(label("Nenhum agente conectado", "muted"))

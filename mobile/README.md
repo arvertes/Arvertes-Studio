@@ -38,4 +38,4 @@ Com OpenJDK 21 e compilação para Java 17, dez verificações de ReadinessTest 
 
 ## Próximos passos
 
-Prototipar transporte USB autenticado Windows/Android (avaliar Android Open Accessory, drivers e suporte real em ambos aparelhos); definir protocolo de sessão e revogação; integrar tarefas compatíveis com Atlas, limites por tarefa, pausa e checkpoints. Nenhum fallback por rede para celulares.
+Prototipar transporte USB autenticado Windows/Android (avaliar Android Open Accessory, drivers e suporte real em ambos aparelhos); definir protocolo de sessão e revogação; integrar tarefas compatíveis com Atlas, limites por tarefa, pausa e checkpoints. Regra futura atualizada: USB ou Wi-Fi local autenticado, sem exposição à internet; a versão atual continua sem permissão INTERNET e sem transporte de dados. O novo transporte Wi-Fi dependerá de validação do Sentinel antes de habilitar a rede.

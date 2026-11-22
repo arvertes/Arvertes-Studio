@@ -153,7 +153,7 @@ class StudioWindow(QMainWindow):
             self.work_pages.refresh()
         self.menu.currentRowChanged.connect(self.pages.setCurrentIndex)
         self.menu.setCurrentRow(0)
-        self.statusBar().showMessage("Versão de desenvolvimento • Nenhum arquivo de projeto carregado")
+        self.statusBar().showMessage("Versão de desenvolvimento • Modo de planejamento, sem execução")
 
     def _navigate(self, key):
         self.menu.setCurrentRow(next(i for i, section in enumerate(SECTIONS) if section.key == key))

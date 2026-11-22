@@ -1,0 +1,37 @@
+# Testar o Arvertes Studio
+
+Execute os comandos a partir da raiz do repositório. No Linux, `python3` pode ser o nome do executável do Python. Para executar os testes de integração, inclua o executável do Blender 5.3.0 no `PATH` ou use seu caminho completo.
+
+## Testes unitários
+
+```sh
+python -m unittest discover -s tests/unit -v
+```
+
+Essa suíte usa `unittest` e a biblioteca padrão do Python. Ela cobre a validação do arquivo GLB, as regras de classificação e a gravação do relatório JSON.
+
+## Testes de integração no Blender
+
+```sh
+blender --background --factory-startup --offline-mode --python-exit-code 1 --python tests/integration/test_blender.py
+```
+
+O script usa arquivos temporários e o importador glTF nativo. Os casos incluem o ciclo de registro da extensão, entradas inválidas, importações repetidas, renomeação com colisão, organização e persistência no `.blend`, análise e exportação do relatório. O parâmetro `--python-exit-code 1` faz o comando falhar se o script lançar uma exceção.
+
+## Teste visual com o GLB sintético
+
+Gere a fixture com o gerador em Python. O exemplo grava um GLB temporário de trabalho na raiz do repositório, onde o Git ignora a extensão `.glb`. Também é possível informar outro caminho com um diretório existente.
+
+```sh
+python tests/integration/fixture_glb.py personagem-sintetico.glb
+```
+
+O modelo é um personagem abstrato com 58 malhas e sem materiais, texturas, UVs, armadura ou animações. Na Vista 3D, use **Importar GLB**, **Analisar asset** e **Exportar JSON**. Confira a contagem de malhas e os avisos. Importe o mesmo arquivo novamente e verifique que cada importação pode ser selecionada e analisada separadamente. Selecione uma peça, altere o nome e a categoria e clique em **Organizar por categoria**. Salve e reabra o arquivo `.blend` para verificar a persistência. O gerador também aceita `--mesh-count 4` para criar um cenário menor em outro arquivo.
+
+## Teste local com o GLB real do GVS
+
+1. Guarde o arquivo de origem em um diretório de trabalho local fora do repositório. Abra uma nova cena no Blender e instale ou ative o Arvertes Studio pelo [manual de instalação](INSTALACAO.md).
+2. Importe o GLB em **Vista 3D → N → Arvertes Studio → Importar GLB**. Selecione a coleção da importação no campo **Asset**.
+3. Clique em **Analisar asset**. Compare a contagem de malhas, a cobertura de UV e a presença de armadura com o cenário de referência informado para esse arquivo (58 malhas, sem UVs, texturas, armadura ou animações). Se quiser conferir texturas e animações, inspecione também os materiais e as ações no Blender.
+4. Confira as malhas visualmente antes de aceitar ou corrigir sugestões de categoria. Use **Organizar por categoria** e salve um novo `.blend`. Reabra a cópia para conferir a organização e as classificações.
+5. Exporte o JSON para um diretório local, compare os totais e registre a versão do Blender, o commit testado e qualquer divergência. Mantenha o GLB, a cópia `.blend` e o relatório do modelo real fora do repositório público.

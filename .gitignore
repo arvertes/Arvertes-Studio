@@ -1,0 +1,21 @@
+# Python e ferramentas locais
+__pycache__/
+*.py[cod]
+.venv/
+.coverage
+.pytest_cache/
+
+# Empacotamento e arquivos locais de trabalho
+/dist/
+/build/
+/.local/
+.env
+.env.*
+
+# Fontes e cópias de trabalho do Blender e de importação
+*.blend
+*.blend[0-9]*
+*.[gG][lL][bB]
+*.[gG][lL][tT][fF]
+*.[fF][bB][xX]
+*.[oO][bB][jJ]

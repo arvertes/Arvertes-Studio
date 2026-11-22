@@ -40,9 +40,9 @@ class DesktopCoreTests(unittest.TestCase):
                     validate_blender_path(value)
 
     def test_navigation(self):
-        self.assertEqual(len(SECTIONS), 11)
+        self.assertEqual(len(SECTIONS), 15)
         self.assertEqual(len({section.key for section in SECTIONS}), len(SECTIONS))
-        self.assertEqual(len(set(AGENT_NAMES)), 10)
+        self.assertEqual(len(set(AGENT_NAMES)), 25)
 
 
 if __name__ == "__main__":

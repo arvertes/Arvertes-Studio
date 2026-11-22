@@ -16,11 +16,11 @@ python -m venv .venv
 
 ## O que funciona nesta entrega
 
-- Janela principal escura em português; navegação em quinze áreas.
+- Janela principal escura em português; navegação em dezesseis áreas.
 - Painel inicial com divisão redimensionável e indicação explícita de que a visualização 3D ainda não está implementada.
 - Vinte e cinco especialistas nomeados, em cinco departamentos, pesquisáveis pelo nome, cargo e ID; todos exibidos como não conectados.
 - Projetos locais com nome, biblioteca de referências (apenas caminhos; não copia nem modifica os originais) e fila persistente de rascunhos com prioridade e cancelamento.
-- Telas de áudio, efeitos, qualidade e AutoPipeline, além das áreas existentes. As funcionalidades de produção ainda não estão conectadas.
+- Telas de áudio, efeitos, qualidade, AutoPipeline e Central de Dispositivos, além das áreas existentes. As funcionalidades de produção ainda não estão conectadas.
 - Configuração do executável do Blender pelo seletor de arquivos e persistência em JSON v1 no diretório de configuração do usuário.
 - Verificação assíncrona da versão usando apenas o executável escolhido pelo usuário e o argumento --version; tempo limite de 10 segundos. Isso não configura uma conexão de controle do Blender.
 
@@ -38,6 +38,7 @@ O banco SQLite v1 é criado no diretório de configuração local do usuário, s
 | arvertes_desktop/roster.py | IDs estáveis e nomes visuais dos 25 agentes |
 | arvertes_desktop/workspace.py | Banco SQLite local; projetos, referências e rascunhos |
 | arvertes_desktop/pages.py | Telas de projetos, biblioteca, fila e equipe |
+| arvertes_desktop/network_page.py | Central de dispositivos USB; layout sem transporte ou telemetria |
 
 Os agentes futuramente serão integrados por contrato local versionado, sem depender das classes da interface. O aplicativo será responsável pela aprovação, armazenamento, execução de operações autorizadas, cópias e versões. O processamento pesado deverá ser sob demanda e sequencial por padrão. A próxima etapa proposta é validar as telas e integrar o motor Blender e o protocolo Agents. Os nomes são uma decisão de design revisável; os IDs dos dez perfis existentes são preservados.
 
@@ -57,6 +58,7 @@ Checklist manual pendente para Windows:
 6. Reexecutar os testes do add-on conforme TESTES.md.
 7. Criar dois projetos, registrar arquivo sintético, confirmar que o original permanece intacto e que cada projeto mostra apenas suas referências.
 8. Criar três rascunhos, reordenar, cancelar um e reiniciar para conferir persistência.
-9. Buscar Atlas e Aegis, filtrar departamentos; abrir as quinze áreas.
+9. Buscar Atlas e Aegis, filtrar departamentos; abrir as dezesseis áreas.
+10. Acessar Dispositivos e seguir a revisão manual em [NETWORK.md](NETWORK.md).
 
-A dependência GUI não está instalada no ambiente Linux de desenvolvimento utilizado para esta entrega. Nesta ampliação, os 11 testes do núcleo desktop passaram em Python 3.13.5 no Linux, incluindo catálogo, banco local, navegação e configurações. Os sete hashes dos arquivos Python usados nos testes coincidem com os do GitHub. A janela e a verificação de um Blender real seguem pendentes.
+A dependência GUI não está instalada no ambiente Linux de desenvolvimento utilizado para esta entrega. Nesta ampliação, os 11 testes do núcleo desktop passaram em Python 3.13.5 no Linux, incluindo catálogo, banco local, navegação e configurações. Os sete hashes dos arquivos Python usados nos testes coincidem com os do GitHub. A janela e a verificação de um Blender real seguem pendentes. A contagem da navegação foi atualizada para 16 na ampliação Network; os testes ainda precisam ser reexecutados para essa revisão.

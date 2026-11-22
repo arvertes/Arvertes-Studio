@@ -23,3 +23,5 @@ Descarregue o ZIP e o `UpdateManifest.json` do mesmo workflow **Desktop checks**
 Após conferir, faça backup do perfil local e extraia em outra pasta. Preserve a edição anterior para retornar com o mesmo perfil depois de fechar a nova. As tabelas da etapa 3 são aditivas. O Android continua sujeito à verificação de assinatura do sistema e dispõe da instalação paralela para preservar a edição antiga.
 
 As inspeções registradas na etapa 2 retomam o plano original. Para gerar uma entrega FBX, crie uma nova inspeção da etapa 3 e marque a criação de cópia organizada.
+
+O APK paralelo da etapa 3 usa o identificador `com.arvertes.mobile.stage3`. Ele pode coexistir com a edição normal e com a variante paralela da etapa 2. O pareamento da nova instalação é feito separadamente.

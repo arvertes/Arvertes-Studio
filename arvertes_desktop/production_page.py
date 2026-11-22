@@ -167,7 +167,7 @@ def build_production(layout, production, protect):
     delivered = button("Abrir entrega FBX", lambda: protect(
         lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(str(production.delivery_path(current_run()))))))
     start = button("Iniciar ou retomar", lambda: protect(lambda: production.start(current_run())))
-    pause = button("Pausar", lambda: production.halt("Inspeção pausada. Checkpoints preservados."))
+    pause = button("Pausar", lambda: production.halt("Inspeção pausada. Checkpoints preservados.", record_error=False))
     cancel = button("Cancelar", lambda: production.halt("Inspeção cancelada pelo operador.", cancelled=True))
     folder = button("Abrir pasta de resultados", lambda: protect(
         lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(str(production.directory(current_run()))))))

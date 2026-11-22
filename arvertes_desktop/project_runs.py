@@ -274,13 +274,13 @@ class ProjectRuns:
                 self.record_memory(self.get(run)["project_id"], "assessment",
                                    output.get("reason") or "Validação concluída. Revisão humana necessária.")
 
-    def stop(self, run, token, *, cancelled=False, reason=""):
+    def stop(self, run, token, *, cancelled=False, reason="", record_error=True):
         status = "cancelled" if cancelled else "interrupted"
         with self.transaction():
             changed = self.db.execute("""UPDATE inspection SET status=?,lease=NULL,expires=NULL WHERE id=?
                                        AND status='running' AND lease=?""", (status, run, token)).rowcount
             if changed:
                 self.event(run, "seguranca", "coordenador", status, None, reason[:200])
-                if not cancelled and reason:
+                if record_error and not cancelled and reason:
                     self.record_memory(self.get(run)["project_id"], "error", reason[:500])
         return bool(changed)

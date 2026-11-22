@@ -347,7 +347,7 @@ class Production(QObject):
             QTimer.singleShot(0, lambda: self.advance((run, token)))
         self.changed.emit()
 
-    def halt(self, message, *, cancelled=False):
+    def halt(self, message, *, cancelled=False, record_error=True):
         reservation, delivery = self.active, self.delivery_job
         if not reservation and not delivery:
             return
@@ -364,7 +364,7 @@ class Production(QObject):
             if delivery:
                 self.runs.stop_delivery(*delivery, message)
             else:
-                self.runs.stop(*reservation, reason=message, cancelled=cancelled)
+                self.runs.stop(*reservation, reason=message, cancelled=cancelled, record_error=record_error)
         except sqlite3.Error:
             message = "Não foi possível gravar a interrupção. A reserva expira automaticamente."
         self.notice.emit(message)
@@ -389,5 +389,5 @@ class Production(QObject):
 
     def close(self):
         self.refresh.stop()
-        self.halt("Studio foi fechado. Use Retomar para continuar dos checkpoints.")
+        self.halt("Studio foi fechado. Use Retomar para continuar dos checkpoints.", record_error=False)
         self.process.waitForFinished(1000)

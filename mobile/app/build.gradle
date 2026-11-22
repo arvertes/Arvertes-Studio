@@ -16,8 +16,8 @@ android {
     buildTypes {
         debug {
             if (project.hasProperty('parallelInstall')) {
-                applicationIdSuffix '.stage2'
-                resValue 'string', 'app_name', 'Arvertes Mobile · Etapa 2'
+                applicationIdSuffix '.stage3'
+                resValue 'string', 'app_name', 'Arvertes Mobile · Etapa 3'
             }
         }
     }

@@ -19,3 +19,5 @@ O APK de desenvolvimento fica em `mobile/app/build/outputs/apk/debug/app-debug.a
 Use o checklist do [manual de conexão](../docs/NETWORK.md) no POCO X7 Pro e, quando disponível, no Galaxy S21. Compare consumo normal de RAM, CPU e bateria antes e durante uma sessão. Para testar os limites sem aquecer o aparelho ou esgotar recursos, use as fixtures automatizadas.
 
 A versão 0.1.3 mostra latência da sessão, tentativas de reconexão e o progresso confirmado do cálculo leve. O histórico local guarda até 12 tarefas. **Pausar cálculo agora** desativa o processamento e preserva a conexão. **Limites conservadores** exige bateria de 60%, estado térmico normal e 768 MiB disponíveis. A tarefa continua sendo o cálculo sintético autorizado.
+
+O APK de instalação paralela da etapa 3 usa `com.arvertes.mobile.stage3` e aparece como **Arvertes Mobile · Etapa 3**. Mantém separadas as instalações de diagnóstico das etapas anteriores.

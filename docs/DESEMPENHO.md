@@ -10,3 +10,14 @@ Medição no ambiente Linux de desenvolvimento com Python 3.12.14 e PySide6 Esse
 | Primeira abertura do mapa Qt | 16,18 ms | 53,53 ms |
 
 A primeira abertura do mapa passou a carregar a interface adiada. No painel inicial da etapa 3, a pilha de rede não foi importada em nenhuma amostra. As medições não representam consumo do notebook, da GPU integrada ou dos celulares.
+
+## Habblaud no Chromium headless
+
+Renderizador original com viewport 1080 × 720 e GPU desativada no Chromium para comparar os modos. Medianas de três janelas de 3,3 segundos por modo. A CPU é a soma dos processos Chromium observados e 100% equivale a um núcleo ocupado.
+
+| Modo | FPS observados | CPU observada |
+| --- | ---: | ---: |
+| Normal | 60,2 | 61,2% |
+| Econômico | 15,1 | 21,8% |
+
+No mapa Qt, a amostra de 60 ciclos entre Escritório, Tarefas e Início passou de 77,36 a 77,66 MiB de RSS após aquecimento. A medição cobre esses ciclos locais e não implica ausência de vazamentos em sessões longas ou em outros sistemas.

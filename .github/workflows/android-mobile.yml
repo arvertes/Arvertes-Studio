@@ -56,11 +56,11 @@ jobs:
           mkdir -p "$RUNNER_TEMP/arvertes-apks"
           cp mobile/app/build/outputs/apk/debug/app-debug.apk "$RUNNER_TEMP/arvertes-apks/app-debug.apk"
           gradle -p mobile --no-daemon -PparallelInstall :app:lintDebug :app:assembleDebug
-          cp mobile/app/build/outputs/apk/debug/app-debug.apk "$RUNNER_TEMP/arvertes-apks/app-stage2-debug.apk"
+          cp mobile/app/build/outputs/apk/debug/app-debug.apk "$RUNNER_TEMP/arvertes-apks/app-stage3-debug.apk"
           cd "$RUNNER_TEMP/arvertes-apks"
-          "$ANDROID_HOME/build-tools/34.0.0/apksigner" verify --verbose app-stage2-debug.apk
-          "$ANDROID_HOME/build-tools/34.0.0/aapt" dump badging app-stage2-debug.apk | grep "name='com.arvertes.mobile.stage2'"
-          sha256sum app-debug.apk app-stage2-debug.apk > SHA256.txt
+          "$ANDROID_HOME/build-tools/34.0.0/apksigner" verify --verbose app-stage3-debug.apk
+          "$ANDROID_HOME/build-tools/34.0.0/aapt" dump badging app-stage3-debug.apk | grep "name='com.arvertes.mobile.stage3'"
+          sha256sum app-debug.apk app-stage3-debug.apk > SHA256.txt
       - name: Enable KVM for emulator
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
@@ -77,7 +77,7 @@ jobs:
           name: arvertes-mobile-debug
           path: |
             ${{ runner.temp }}/arvertes-apks/app-debug.apk
-            ${{ runner.temp }}/arvertes-apks/app-stage2-debug.apk
+            ${{ runner.temp }}/arvertes-apks/app-stage3-debug.apk
             ${{ runner.temp }}/arvertes-apks/SHA256.txt
           if-no-files-found: error
           retention-days: 14

@@ -24,7 +24,7 @@ adb shell am instrument -w -r -e invitation "$(cat "$fixture/invitation")" -e ad
     com.arvertes.mobile.test/com.arvertes.mobile.LocalSessionTest | tee "$fixture/instrumentation"
 grep -q 'ARVERTES_SESSION_OK' "$fixture/instrumentation"
 wait "$server"
-adb install -r "$RUNNER_TEMP/arvertes-apks/app-stage2-debug.apk"
-adb shell am start -W -n com.arvertes.mobile.stage2/com.arvertes.mobile.MainActivity | tee "$fixture/parallel"
+adb install -r "$RUNNER_TEMP/arvertes-apks/app-stage3-debug.apk"
+adb shell am start -W -n com.arvertes.mobile.stage3/com.arvertes.mobile.MainActivity | tee "$fixture/parallel"
 grep -q 'Status: ok' "$fixture/parallel"
 adb shell pm path com.arvertes.mobile | grep -q '^package:'

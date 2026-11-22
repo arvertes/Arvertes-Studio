@@ -16,6 +16,10 @@ QPushButton#primary { background: #27675f; border-color: #38847a; }
 QPushButton:disabled { color: #8391a0; background: #292e38; }
 QLineEdit { background: #121821; border: 1px solid #435364; border-radius: 5px; padding: 8px; }
 QLineEdit:focus { border-color: #72d6ca; }
+QTableWidget { background: #202631; border: 1px solid #343e4b; gridline-color: #343e4b; selection-background-color: #284640; }
+QHeaderView::section { background: #303b49; color: #e3e8ef; padding: 8px; border: 0; border-bottom: 1px solid #435364; }
+QComboBox, QPlainTextEdit { background: #121821; border: 1px solid #435364; border-radius: 5px; padding: 8px; }
+QComboBox QAbstractItemView { background: #202631; selection-background-color: #284640; }
 QScrollArea { border: 0; }
 QSplitter::handle { background: #343e4b; width: 3px; }
 """

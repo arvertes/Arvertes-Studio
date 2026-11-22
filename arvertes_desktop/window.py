@@ -6,11 +6,12 @@ from PySide6.QtCore import QProcess, QStandardPaths, QTimer, Qt
 from PySide6.QtWidgets import (
     QFileDialog, QFrame, QHBoxLayout, QLabel, QLineEdit, QListWidget,
     QMainWindow, QMessageBox, QPushButton, QScrollArea, QSizePolicy,
-    QSplitter, QStackedWidget, QVBoxLayout, QWidget,
+    QStackedWidget, QVBoxLayout, QWidget, QStyle, QListWidgetItem,
 )
 
 from .navigation import SECTIONS
 from .network_page import build_network
+from .dashboard import build_dashboard
 from .sentinel_page import build_sentinel
 from .roster import AGENTS
 from .pages import WorkspacePages, build_agents
@@ -52,7 +53,7 @@ def panel() -> tuple[QFrame, QVBoxLayout]:
 class StudioWindow(QMainWindow):
     def __init__(self, *, config_dir=None):
         super().__init__()
-        self.setWindowTitle("Arvertes Studio — 0.2.0 dev")
+        self.setWindowTitle("Arvertes Studio — 0.2.1 dev")
         self.setMinimumSize(860, 540)
         self.resize(1200, 760)
         self.setStyleSheet(DARK_THEME)
@@ -93,9 +94,10 @@ class StudioWindow(QMainWindow):
         top.setObjectName("topbar")
         top_layout = QHBoxLayout(top)
         top_layout.setContentsMargins(18, 12, 18, 12)
-        top_layout.addWidget(label("ARVERTES STUDIO", "brand"))
+        top_layout.addWidget(label("A  /  ARVERTES STUDIO", "brand"))
+        top_layout.addWidget(label("WORKSPACE", "eyebrow"))
         top_layout.addStretch()
-        top_layout.addWidget(label("Modo local", "muted"))
+        top_layout.addWidget(label("●  Modo diagnóstico", "networkTag"))
         self.blender_status = label("Blender não verificado", "muted")
         top_layout.addWidget(self.blender_status)
         outer.addWidget(top)
@@ -104,8 +106,21 @@ class StudioWindow(QMainWindow):
         body.setContentsMargins(0, 0, 0, 0)
         body.setSpacing(0)
         self.menu = QListWidget()
-        self.menu.setFixedWidth(180)
-        self.menu.addItems([section.title for section in SECTIONS])
+        self.menu.setObjectName("navigation")
+        self.menu.setFixedWidth(194)
+        icons = {
+            "home": "SP_ComputerIcon", "projects": "SP_DirIcon", "library": "SP_FileDialogContentsView",
+            "model": "SP_FileIcon", "materials": "SP_DialogApplyButton", "rig": "SP_FileDialogDetailedView",
+            "animation": "SP_MediaPlay", "effects": "SP_BrowserReload", "audio": "SP_MediaVolume",
+            "pipeline": "SP_ArrowForward", "quality": "SP_DialogYesButton", "agents": "SP_DirOpenIcon",
+            "tasks": "SP_FileDialogListView", "export": "SP_DialogSaveButton",
+            "network": "SP_DriveNetIcon", "sentinel": "SP_MessageBoxWarning", "settings": "SP_FileDialogInfoView",
+        }
+        for section in SECTIONS:
+            icon = self.style().standardIcon(getattr(QStyle.StandardPixmap, icons[section.key]))
+            item = QListWidgetItem(icon, section.title)
+            item.setToolTip(section.description)
+            self.menu.addItem(item)
         body.addWidget(self.menu)
         self.pages = QStackedWidget()
         body.addWidget(self.pages, 1)
@@ -115,12 +130,12 @@ class StudioWindow(QMainWindow):
         for section in SECTIONS:
             page = QWidget()
             layout = QVBoxLayout(page)
-            layout.setContentsMargins(20, 20, 20, 20)
+            layout.setContentsMargins(24, 20, 24, 20)
             layout.setSpacing(12)
             layout.addWidget(label(section.title, "heading"))
             layout.addWidget(label(section.description, "muted"))
             if section.key == "home":
-                self._home(layout)
+                self.refresh_dashboard = build_dashboard(layout, self.workspace, self._navigate)
             elif section.key == "settings":
                 self._settings_page(layout)
             elif section.key == "agents":
@@ -159,60 +174,12 @@ class StudioWindow(QMainWindow):
         if self.work_pages:
             self.work_pages.refresh()
         self.menu.currentRowChanged.connect(self.pages.setCurrentIndex)
+        self.menu.currentRowChanged.connect(lambda row: self.refresh_dashboard() if row == 0 else None)
         self.menu.setCurrentRow(0)
         self.statusBar().showMessage("Versão de desenvolvimento • Modo de planejamento, sem execução")
 
     def _navigate(self, key):
         self.menu.setCurrentRow(next(i for i, section in enumerate(SECTIONS) if section.key == key))
-
-    def _home(self, layout):
-        split = QSplitter(Qt.Orientation.Horizontal)
-        preview, preview_layout = panel()
-        preview_layout.addWidget(label("Área de visualização"))
-        preview_layout.addStretch()
-        empty = label("Nenhum modelo carregado\n\nVisualização 3D prevista para uma próxima etapa.", "muted")
-        empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        preview_layout.addWidget(empty)
-        preview_layout.addStretch()
-        sidebar, side_layout = panel()
-        side_layout.addWidget(label("Equipe de produção"))
-        side_layout.addWidget(label("26 especialistas · 5 departamentos", "muted"))
-        for agent in (AGENTS[0], AGENTS[1], AGENTS[22]):
-            side_layout.addWidget(label(f"{agent.name} — {agent.role}"))
-        side_layout.addWidget(label("Sentinel local · produção não conectada", "muted"))
-        agents_button = QPushButton("Ver equipe")
-        agents_button.clicked.connect(lambda: self._navigate("agents"))
-        side_layout.addWidget(agents_button)
-        network_button = QPushButton("Central de dispositivos")
-        network_button.clicked.connect(lambda: self._navigate("network"))
-        side_layout.addWidget(network_button)
-        sentinel_button = QPushButton("Revisar segurança")
-        sentinel_button.clicked.connect(lambda: self._navigate("sentinel"))
-        side_layout.addWidget(sentinel_button)
-        side_layout.addStretch()
-        split.addWidget(preview)
-        split.addWidget(sidebar)
-        split.setStretchFactor(0, 3)
-        split.setStretchFactor(1, 2)
-        split.setChildrenCollapsible(False)
-        split.setSizes([600, 300])
-        layout.addWidget(split, 1)
-        footer, footer_layout = panel()
-        footer_layout.addWidget(label("Primeiros passos"))
-        footer_layout.addWidget(label("Crie projetos, registre referências e prepare a fila. Os agentes ainda não executam tarefas.", "muted"))
-        shortcuts = QHBoxLayout()
-        for key, title in (("projects", "Projetos"), ("library", "Biblioteca"), ("tasks", "Fila de produção")):
-            shortcut = QPushButton(title)
-            shortcut.clicked.connect(lambda checked=False, target=key: self._navigate(target))
-            shortcut.setEnabled(self.work_pages is not None)
-            shortcuts.addWidget(shortcut)
-        footer_layout.addLayout(shortcuts)
-        button = QPushButton("Abrir configurações")
-        button.setObjectName("primary")
-        button.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
-        button.clicked.connect(lambda: self.menu.setCurrentRow(len(SECTIONS) - 1))
-        footer_layout.addWidget(button)
-        layout.addWidget(footer)
 
     def _settings_page(self, layout):
         frame, form = panel()

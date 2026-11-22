@@ -51,17 +51,17 @@ public final class MainActivity extends Activity {
         LinearLayout content = column();
         content.setPadding(dp(18), dp(16), dp(18), dp(20));
         scroll.addView(content);
-        scroll.setOnApplyWindowInsetsListener((view, insets) -> {
-            android.graphics.Insets bars = insets.getInsets(WindowInsets.Type.systemBars()
-                    | WindowInsets.Type.displayCutout());
-            view.setPadding(bars.left, bars.top, bars.right, bars.bottom);
-            return insets;
-        });
-        setContentView(scroll);
-        if (Build.VERSION.SDK_INT < 30) {
-            scroll.setOnApplyWindowInsetsListener(null);
+        if (Build.VERSION.SDK_INT >= 35) {
+            scroll.setOnApplyWindowInsetsListener((view, insets) -> {
+                android.graphics.Insets bars = insets.getInsets(WindowInsets.Type.systemBars()
+                        | WindowInsets.Type.displayCutout());
+                view.setPadding(bars.left, bars.top, bars.right, bars.bottom);
+                return insets;
+            });
+        } else {
             scroll.setFitsSystemWindows(true);
         }
+        setContentView(scroll);
         content.addView(line("ARVERTES  /  MOBILE", 13, TEAL, true));
         content.addView(line("Central de processamento", 25, TEXT, true));
         content.addView(line(Build.MANUFACTURER + " " + Build.MODEL + "  •  v0.1 dev", 14, MUTED, false));

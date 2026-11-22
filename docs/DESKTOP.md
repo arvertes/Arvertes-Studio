@@ -1,4 +1,4 @@
-# Arvertes Studio desktop — v0.2.0 em desenvolvimento
+# Arvertes Studio desktop — v0.2.1 em desenvolvimento
 
 Esta etapa acrescenta uma interface desktop independente. O add-on v0.1 continua disponível e não foi modificado. O novo pacote não importa bpy e não precisa estar instalado dentro do Blender.
 
@@ -17,8 +17,8 @@ python -m venv .venv
 ## O que funciona nesta entrega
 
 - Janela principal escura em português; navegação em dezessete áreas.
-- Painel inicial com divisão redimensionável e indicação explícita de que a visualização 3D ainda não está implementada.
-- Vinte e seis especialistas nomeados, em cinco departamentos, pesquisáveis pelo nome, cargo e ID; todos exibidos como não conectados.
+- Painel inicial com indicadores reais do banco local, quatro rascunhos recentes e atalhos. Visualização 3D ainda não implementada.
+- Vinte e seis especialistas nomeados, em cinco departamentos, pesquisáveis pelo nome, cargo e ID; Sentinel local; demais agentes não conectados.
 - Projetos locais com nome, biblioteca de referências (apenas caminhos; não copia nem modifica os originais) e fila persistente de rascunhos com prioridade e cancelamento.
 - Telas de áudio, efeitos, qualidade, AutoPipeline e Central de Dispositivos, além das áreas existentes. As funcionalidades de produção ainda não estão conectadas.
 - Configuração do executável do Blender pelo seletor de arquivos e persistência em JSON v1 no diretório de configuração do usuário.
@@ -33,12 +33,13 @@ O banco SQLite v1 é criado no diretório de configuração local do usuário, s
 | arvertes_desktop/__main__.py | Ponto de entrada Qt |
 | arvertes_desktop/window.py | Janela, navegação, preferências e checagem de versão |
 | arvertes_desktop/theme.py | Estilo visual separado |
+| arvertes_desktop/dashboard.py | Visão geral e indicadores locais |
 | arvertes_desktop/navigation.py | Identificadores estáveis das seções e perfis |
 | arvertes_desktop/settings.py | Persistência local e validação sem dependências gráficas |
 | arvertes_desktop/roster.py | IDs estáveis e nomes visuais dos 26 agentes |
 | arvertes_desktop/workspace.py | Banco SQLite local; projetos, referências e rascunhos |
 | arvertes_desktop/pages.py | Telas de projetos, biblioteca, fila e equipe |
-| arvertes_desktop/network_page.py | Central de dispositivos USB; layout sem transporte ou telemetria |
+| arvertes_desktop/network_page.py | Central de dispositivos USB/Wi-Fi local; layout sem transporte ou telemetria |
 
 Os agentes futuramente serão integrados por contrato local versionado, sem depender das classes da interface. O aplicativo será responsável pela aprovação, armazenamento, execução de operações autorizadas, cópias e versões. O processamento pesado deverá ser sob demanda e sequencial por padrão. A próxima etapa proposta é validar as telas e integrar o motor Blender e o protocolo Agents. Os nomes são uma decisão de design revisável; os IDs dos dez perfis existentes são preservados.
 

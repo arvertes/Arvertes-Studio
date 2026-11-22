@@ -12,6 +12,7 @@ class Section:
 
 SECTIONS = (
     Section("home", "Início", "Visão geral do ambiente de produção.", "0.2"),
+    Section("office", "Escritório", "Mapa visual dos departamentos e agentes.", "0.2"),
     Section("projects", "Projetos", "Criação e gerenciamento de projetos locais.", "0.3"),
     Section("library", "Biblioteca", "Modelos, materiais, texturas e referências.", "0.3"),
     Section("model", "Modelagem", "Ferramentas de edição e visualização 3D.", "0.7"),

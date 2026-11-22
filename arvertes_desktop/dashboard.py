@@ -100,16 +100,10 @@ def build_dashboard(layout, workspace, navigate):
             recent.setText("Workspace indisponível.")
             return
         try:
-            projects = workspace.projects()
-            assets = 0
-            drafts = []
-            for project in projects:
-                assets += len(workspace.assets(project["id"]))
-                drafts.extend((task["id"], project["name"], task["title"]) for task in workspace.tasks(project["id"]) if task["status"] == "draft")
-            for widget, count in zip(metrics, (len(projects), assets, len(drafts))):
+            counts, drafts = workspace.dashboard_summary()
+            for widget, count in zip(metrics, counts):
                 widget.setText(str(count))
-            drafts.sort(reverse=True)
-            recent.setText("\n".join(f"{project[:45]}  /  {title[:70]}" for _, project, title in drafts[:4])
+            recent.setText("\n".join(f"{project[:45]}  /  {title[:70]}" for project, title in drafts)
                            or "Nenhum rascunho registrado. Crie uma tarefa para começar.")
         except sqlite3.Error:
             for widget in metrics:

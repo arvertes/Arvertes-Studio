@@ -8,6 +8,8 @@ Sentinel é o 26º perfil, especializado em validação de evidências de testes
 - Ajuste: runner Ubuntu 24.04, validação dos caminhos SDK já instalados, verificação do manifesto, Android lint, assinatura do APK e ausência de permissões no APK. Run 44985429628 concluído com sucesso e artefato APK de diagnóstico gerado; smoke em emulador ainda pendente.
 - CI anterior 44985429745: falha de contagem de agentes e teste SQLite que não fechava a conexão. Ambas corrigidas. Nova CI testa abertura offscreen das 17 telas e do executável Windows antes de empacotar. Abertura real no notebook e consumo de recursos ainda não validados.
 - Não recomendar instalação enquanto faltarem compilação, assinatura, revisão e smoke test de emulador da mesma revisão. Testes físicos somente depois e com autorização do proprietário. Não induzir calor, bateria baixa ou falta de RAM.
-- Limites futuros: consentimento, USB autenticado exclusivo, revogação, pausa, recuperação de desconexões, integridade de originais e nenhum comando arbitrário de IA.
+- Limites futuros: consentimento, USB ou Wi-Fi local autenticado e criptografado, revogação, pausa, recuperação de desconexões, integridade de originais e nenhum comando arbitrário de IA.
+
+A avaliação agora inclui wifi_processing, exigindo rede local autenticada, criptografia e controles de recursos; não concede autorização.
 
 Os checks automatizados são complementares à revisão humana, não certificação de segurança. Não confundir teste unitário com validação de hardware.

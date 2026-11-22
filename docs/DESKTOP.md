@@ -1,4 +1,4 @@
-# Arvertes Studio desktop — v0.2.1 em desenvolvimento
+# Arvertes Studio desktop — v0.2.2 em desenvolvimento
 
 Esta etapa acrescenta uma interface desktop independente. O add-on v0.1 continua disponível e não foi modificado. O novo pacote não importa bpy e não precisa estar instalado dentro do Blender.
 
@@ -16,7 +16,7 @@ python -m venv .venv
 
 ## O que funciona nesta entrega
 
-- Janela principal escura em português; navegação em dezessete áreas.
+- Janela principal escura em português; navegação em dezoito áreas.
 - Painel inicial com indicadores reais do banco local, quatro rascunhos recentes e atalhos. Visualização 3D ainda não implementada.
 - Vinte e seis especialistas nomeados, em cinco departamentos, pesquisáveis pelo nome, cargo e ID; Sentinel local; demais agentes não conectados.
 - Projetos locais com nome, biblioteca de referências (apenas caminhos; não copia nem modifica os originais) e fila persistente de rascunhos com prioridade e cancelamento.
@@ -34,6 +34,7 @@ O banco SQLite v1 é criado no diretório de configuração local do usuário, s
 | arvertes_desktop/window.py | Janela, navegação, preferências e checagem de versão |
 | arvertes_desktop/theme.py | Estilo visual separado |
 | arvertes_desktop/dashboard.py | Visão geral e indicadores locais |
+| arvertes_desktop/office.py | Escritório interativo original; ver [OFFICE.md](OFFICE.md) |
 | arvertes_desktop/navigation.py | Identificadores estáveis das seções e perfis |
 | arvertes_desktop/settings.py | Persistência local e validação sem dependências gráficas |
 | arvertes_desktop/roster.py | IDs estáveis e nomes visuais dos 26 agentes |
@@ -59,7 +60,7 @@ Checklist manual pendente para Windows:
 6. Reexecutar os testes do add-on conforme TESTES.md.
 7. Criar dois projetos, registrar arquivo sintético, confirmar que o original permanece intacto e que cada projeto mostra apenas suas referências.
 8. Criar três rascunhos, reordenar, cancelar um e reiniciar para conferir persistência.
-9. Buscar Atlas e Aegis, filtrar departamentos; abrir as dezessete áreas.
+9. Buscar Atlas e Aegis, filtrar departamentos; abrir as dezoito áreas.
 10. Acessar Dispositivos e seguir a revisão manual em [NETWORK.md](NETWORK.md).
 
-A dependência GUI não está instalada no ambiente Linux de desenvolvimento utilizado para esta entrega. Nesta ampliação, os 11 testes do núcleo desktop passaram em Python 3.13.5 no Linux, incluindo catálogo, banco local, navegação e configurações. Os sete hashes dos arquivos Python usados nos testes coincidem com os do GitHub. A janela e a verificação de um Blender real seguem pendentes. A ampliação Network/Sentinel leva a navegação a 17 áreas. A CI Windows testa o núcleo e o smoke offscreen; consultar os logs desta revisão. Ver [pacote Windows](WINDOWS.md) e [Sentinel](SENTINEL.md).
+A dependência GUI não está instalada no ambiente Linux de desenvolvimento utilizado para esta entrega. Nesta ampliação, os 11 testes do núcleo desktop passaram em Python 3.13.5 no Linux, incluindo catálogo, banco local, navegação e configurações. Os sete hashes dos arquivos Python usados nos testes coincidem com os do GitHub. A janela e a verificação de um Blender real seguem pendentes. A ampliação Network/Sentinel leva a navegação a 18 áreas. A CI Windows testa o núcleo e o smoke offscreen; consultar os logs desta revisão. Ver [pacote Windows](WINDOWS.md) e [Sentinel](SENTINEL.md).

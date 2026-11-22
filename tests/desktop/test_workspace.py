@@ -70,6 +70,17 @@ class WorkspaceTests(unittest.TestCase):
         finally:
             reopened.close()
 
+    def test_dashboard_summary(self):
+        self.assertEqual(self.store.dashboard_summary(), ((1, 0, 0), []))
+        reference = Path(self.temp.name) / "dashboard.glb"
+        reference.write_bytes(b"synthetic")
+        self.store.add_reference(self.project, str(reference))
+        first = self.store.add_task(self.project, "Primeiro", "Planejar")
+        self.store.add_task(self.project, "Segundo", "Planejar")
+        self.store.cancel_task(first)
+        self.assertEqual(self.store.dashboard_summary(), ((1, 1, 1), [("Personagem", "Segundo")]))
+        self.assertEqual(reference.read_bytes(), b"synthetic")
+
     def test_schema_version(self):
         other = Path(self.temp.name) / "other.sqlite3"
         with closing(sqlite3.connect(other)) as db:

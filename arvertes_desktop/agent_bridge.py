@@ -5,7 +5,6 @@ import sqlite3
 
 from PySide6.QtCore import QObject, QProcess, QProcessEnvironment, QTimer, Signal
 
-from .network import limits_ok
 from .remote_work import KIND, RESERVATION_MIB
 from .roster import AGENTS
 
@@ -17,6 +16,8 @@ ACTIONS = {
     "list_team": (),
     "delegate_inspection": ("coordenador",),
     "inspect_report": ("inspetor",),
+    "unreal_preflight": ("integrador_unreal",),
+    "inspect_audio": ("engenheiro_audio",),
     "inspect_material_coverage": ("texturizador",),
     "review_stage": ("auditor",),
     "catalog_file": ("catalogador",),
@@ -202,6 +203,7 @@ class AgentBridge(QObject):
         self.recommend_target(hub, KIND)
 
     def recommend_target(self, hub, capability):
+        from .network import limits_ok
         work = capability == KIND
         nodes = []
         candidates = set()

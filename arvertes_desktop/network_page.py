@@ -230,6 +230,6 @@ def build_network(layout, hub, hub_error, bridge):
     bridge.changed.connect(update_buttons)
     bridge.notice.connect(feedback.setText)
     timer = QTimer(devices)
-    timer.timeout.connect(refresh)
+    timer.timeout.connect(lambda: refresh() if devices.isVisible() else None)
     timer.start(2000)
     refresh()

@@ -55,3 +55,11 @@ Os checks e o download dos artefatos da revisão atual ficam na [PR do Studio](h
 ### Falhas de infraestrutura observadas na CI
 
 A execução 45061809311 recebeu HTTP 403 ao obter a distribuição do Blender. A obtenção passou a usar SHA-256 fixado e espelhos públicos do mesmo arquivo. Na primeira tentativa 45061809307, o emulador iniciou, mas a conexão com o alias do host ainda estava indisponível. A tentativa de aguardar a rota também falhou na execução 45062271468. Para estabilizar a CI, somente o APK de instrumentação usa o encaminhamento ADB local do emulador. A condição de identidade falsa, o pareamento e a troca TLS continuam obrigatórios. O APK entregue mantém suas regras de endereços e não precisa de ADB para se conectar.
+
+## Terceira etapa
+
+- Automatizados no Studio: teto de CPU/RAM, limpeza dos descendentes, verificação de versão e integridade do ZIP, escopo da projeção remota e preservação de dados.
+- Blender 5.3.0 real: fluxo de trabalho com cópias sintéticas, pré-verificação, autorização de exportação e formato FBX. A validação de importação no Unreal físico permanece pendente.
+- Cloud: testes de MCP Streamable HTTP e OAuth com chaves de fixture, credenciais de sincronização separadas, expiração, autorização, auditoria e rejeição de dados livres.
+- Android: sessão instrumentada com tarefas SHA-256, checkpoint, progresso e histórico. As condições de recursos seguem simuladas.
+- Resultados comparativos e método em [Desempenho](DESEMPENHO.md).

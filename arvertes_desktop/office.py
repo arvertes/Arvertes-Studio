@@ -8,7 +8,8 @@ from PySide6.QtWidgets import (
     QLabel, QPushButton, QVBoxLayout, QWidget,
 )
 from .roster import AGENTS, DEPARTMENTS
-from .production_page import event_label
+from .production_page import event_label, LABELS, NAMES
+from .project_runs import FLOW, STEPS
 from .office_preview import OfficePreview
 
 PALETTE = {
@@ -147,6 +148,9 @@ def build_office(layout, navigate, bridge, production=None, auto=False):
     detail.setObjectName("officeDetail")
     detail.setWordWrap(True)
     fallback_layout.addWidget(detail)
+    progress = QLabel("Nenhuma inspeção ativa")
+    progress.setWordWrap(True)
+    fallback_layout.addWidget(progress)
 
     statuses, history = {}, {}
 
@@ -184,7 +188,19 @@ def build_office(layout, navigate, bridge, production=None, auto=False):
         for key, status in statuses.items():
             indicators[key].setBrush(QBrush(QColor(colors.get(status, "#8a98a6"))))
             seats[key].setToolTip(by_id[key].name + " · " + status)
-        preview.update_states(statuses, history)
+        flow = ""
+        if production and production.active:
+            started = production.active[0]
+            done = len(production.runs.checkpoints(started))
+            step = production.step
+            partner = {"budget": "Argus", "materials": "Argus", "audit": "Argus", "gate": "Aegis"}.get(step)
+            team = NAMES[STEPS[step][0]] if step in STEPS else "Atlas"
+            meeting = f" · colaboração {partner} ↔ {team}" if partner else f" · {team}"
+            flow = f"{done}/{len(FLOW)} etapas · {LABELS.get(step, 'Preparando')}{meeting}"
+        elif production and production.delivery_job:
+            flow = "Bridge · gerando FBX aprovado"
+        progress.setText(flow or "Nenhuma inspeção ativa")
+        preview.update_states(statuses, history, flow)
         show_agent()
 
     bridge.changed.connect(update_status)

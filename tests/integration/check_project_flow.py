@@ -56,7 +56,7 @@ def main(blender, agents, python):
             wait_for(lambda: production.active is None, 90000)
             assert production.runs.get(run)["status"] == "blocked"
             assert set(production.runs.checkpoints(run)) == {
-                "catalog", "blender", "budget", "materials", "inspect", "audit", "gate"}
+                "catalog", "blender", "budget", "materials", "unreal", "inspect", "audit", "gate"}
             assert (production.directory(run) / "report.json").is_file()
             assert (production.directory(run) / "working.blend").is_file()
             assert fingerprint(read_source(original)) == source_hash

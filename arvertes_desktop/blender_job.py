@@ -11,8 +11,6 @@ from arvertes_studio.core.imports import validate_import_path
 MAX_INPUT = 16 * 1024 * 1024
 MAX_REPORT = 8 * 1024 * 1024
 MAX_COPY = 128 * 1024 * 1024
-MIN_FREE_MIB = 1536
-MAX_PROCESS_MIB = 1536
 HEADER = Struct("<4sIII4s")
 
 
@@ -101,7 +99,57 @@ def validated_summary(report):
         if type(value) is not int or not 0 <= value <= 50_000_000:
             raise ValueError("Total de triângulos inválido.")
         result[key] = {"triangles": value}
+    technical = summary.get("technical")
+    if technical is not None:
+        counts = {"loose_vertices", "loose_edges", "overlapping_edges", "degenerate_faces",
+                  "materials", "principled", "armatures", "bones", "actions"}
+        if (not isinstance(technical, dict) or set(technical) != counts | {"topology_measured"}
+                or type(technical["topology_measured"]) is not bool
+                or any(type(technical[key]) is not int or not 0 <= technical[key] <= 10_000_000 for key in counts)
+                or technical["materials"] != result["material_count"]
+                or technical["principled"] > technical["materials"]):
+            raise ValueError("Medição técnica Blender incompatível.")
+        result["technical"] = technical
     return {"schema_version": 1, "summary": result}
+
+
+def checked_digest(path, limit=MAX_COPY):
+    if path.is_symlink() or not path.is_file() or not 0 < path.stat().st_size <= limit:
+        raise ValueError("Cópia inexistente ou acima do limite.")
+    checksum = sha256()
+    remaining = limit
+    with path.open("rb") as stream:
+        while chunk := stream.read(1024 * 1024):
+            remaining -= len(chunk)
+            if remaining < 0:
+                raise ValueError("Cópia acima do limite.")
+            checksum.update(chunk)
+    return checksum.hexdigest()
+
+
+def stage_export(origin, expected, folder):
+    if checked_digest(origin) != expected:
+        raise ValueError("Sentinel bloqueou: a cópia foi alterada após a inspeção.")
+    folder.mkdir(mode=0o700, exist_ok=False)
+    target = folder / "working.blend"
+    with origin.open("rb") as stream, target.open("xb") as copy:
+        remaining = MAX_COPY
+        while chunk := stream.read(1024 * 1024):
+            remaining -= len(chunk)
+            if remaining < 0:
+                raise ValueError("Cópia acima do limite.")
+            copy.write(chunk)
+    if checked_digest(target) != expected:
+        raise ValueError("Sentinel bloqueou: a cópia foi alterada durante a leitura.")
+
+
+def checked_fbx(folder):
+    artifact = folder / "asset.fbx"
+    digest = checked_digest(artifact)
+    with artifact.open("rb") as stream:
+        if not stream.read(24).startswith(b"Kaydara FBX Binary"):
+            raise ValueError("O Blender retornou um arquivo FBX incompatível.")
+    return digest
 
 
 def read_result(folder, organize):

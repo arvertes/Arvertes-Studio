@@ -26,3 +26,5 @@ __pycache__/
 *.sqlite3-wal
 *.sqlite3-shm
 /.vs/
+
+/arvertes_desktop/portable-version.json

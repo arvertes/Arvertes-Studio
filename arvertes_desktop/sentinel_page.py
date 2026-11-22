@@ -38,15 +38,23 @@ def build_sentinel(layout, hub=None, bridge=None):
     label("Revisão do pacote: " + (current_revision() or "não identificada (código-fonte)"))
     label("Nenhuma instalação ou execução é autorizada por este painel. Evidências coladas são declarações não autenticadas.")
     runtime = label("Monitoramento de sessões locais em espera.")
-    if hub is not None:
-        timer = QTimer(panel)
-        timer.timeout.connect(lambda: runtime.setText(hub.notice) if hub.notice else None)
-        timer.start(2000)
+    def current_hub():
+        return hub() if callable(hub) else hub
+
+    def refresh_runtime():
+        active = current_hub() if panel.isVisible() else None
+        if active and active.notice:
+            runtime.setText(active.notice)
+
+    timer = QTimer(panel)
+    timer.timeout.connect(refresh_runtime)
+    timer.start(2000)
     if bridge is not None:
         def agent_notice(message):
             if message.startswith("Sentinel bloqueou:"):
-                if hub is not None:
-                    hub.alert(message)
+                active = current_hub()
+                if active is not None:
+                    active.alert(message)
                 runtime.setText(message)
         bridge.notice.connect(agent_notice)
     scope = QComboBox()

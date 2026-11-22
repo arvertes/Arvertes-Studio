@@ -360,7 +360,8 @@ class DeviceHub:
                 probe.update(state="confirmed", detail="Resposta autenticada recebida.")
             if probe and probe["state"] in ("queued", "sent"):
                 probe["state"] = "sent"
-                return {"probe": probe["id"], "work_version": 1, "work": None}
+                return {"probe": probe["id"], "work_version": 1, "work": None,
+                        "work_status": self.work.progress(device) if supports_work else None}
             try:
                 offer = self.work.exchange(device, supports_work and work_enabled and self.work_limits(metrics),
                                            data.get("work_result"))
@@ -369,7 +370,8 @@ class DeviceHub:
             if offer == "rejected":
                 self.alert(SENTINEL + "resultado do trabalho móvel divergiu do cálculo local.")
                 offer = None
-            return {"probe": None, "work_version": 1, "work": offer}
+            return {"probe": None, "work_version": 1, "work": offer,
+                    "work_status": self.work.progress(device) if supports_work else None}
 
     def alert(self, message):
         with self.lock:

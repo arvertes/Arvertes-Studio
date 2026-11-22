@@ -30,12 +30,19 @@ const canvas = document.querySelector<HTMLCanvasElement>('#world')!;
 const view = createWorld(canvas,store);
 view.setOptions({showNames:true,bubbles:'none',liveliness:'calm',theme:'none',dayNight:false});
 // Use real status snapshots from Studio without starting the upstream simulator.
-view.setPlayback?.({clock:()=>Date.now(),scale:()=>Number(!document.hidden)});
+const economy = document.querySelector<HTMLInputElement>('#economy')!;
+function applyEconomy() {
+  canvas.dataset.frameInterval = economy.checked ? String(1000 / 15) : '0';
+}
+economy.addEventListener('change', applyEconomy);
+applyEconomy();
+view.setPlayback?.({clock:()=>Date.now(),scale:()=>document.hidden ? 0 : economy.checked ? 0.25 : 1});
 store.pushReplay(snapshot); // Never call connect(), which would start a demo simulator or SSE.
 const selector = document.querySelector<HTMLSelectElement>('#agents')!;
 const details = document.querySelector<HTMLDivElement>('#details')!;
 const log = document.querySelector<HTMLOListElement>('#history')!;
 let history: Record<string, string[]> = {};
+const workflow = document.querySelector<HTMLDivElement>('#workflow')!;
 for(const a of agents) selector.add(new Option(a.name+' · '+a.roomId,a.id));
 function detail(id:string) {
   const a = agents.find(a=>a.id===id);
@@ -61,10 +68,11 @@ const updates = window.setInterval(async () => {
     const response = await fetch('/office-state.json', {cache: 'no-store'});
     if (!response.ok) return;
     if (document.hidden) return;
-    const data = await response.json() as {states: Record<string, string>, history: Record<string, string[]>};
+    const data = await response.json() as {states: Record<string, string>, history: Record<string, string[]>, flow?: string};
     const states = data.states;
     if (!states || typeof states !== 'object') return;
     history = data.history || {};
+    workflow.textContent = data.flow || 'Nenhuma inspeção ativa';
     if (JSON.stringify(data) === last) return;
     last = JSON.stringify(data);
     const time = Date.now();

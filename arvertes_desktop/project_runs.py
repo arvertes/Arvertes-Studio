@@ -10,12 +10,15 @@ FLOW = (
     ("blender", "modelador", ("catalog",)),
     ("budget", "otimizador", ("blender",)),
     ("materials", "texturizador", ("blender",)),
-    ("inspect", "inspetor", ("blender", "budget", "materials")),
+    ("unreal", "integrador_unreal", ("blender", "materials")),
+    ("inspect", "inspetor", ("blender", "budget", "materials", "unreal")),
     ("audit", "auditor", ("inspect",)),
     ("gate", "seguranca", ("audit",)),
 )
 STEPS = {step: (agent, dependencies) for step, agent, dependencies in FLOW}
 LEASE_SECONDS = 150
+MEMORY = {"error": "Erros", "correction": "Correções aprovadas", "preference": "Preferências",
+          "technique": "Técnicas validadas", "art": "Decisões artísticas", "assessment": "Avaliações"}
 
 
 def check_delegation(plan):
@@ -49,6 +52,17 @@ class ProjectRuns:
                 step TEXT, detail TEXT NOT NULL, created TEXT NOT NULL
             );
             CREATE INDEX IF NOT EXISTS inspection_events ON inspection_event(run_id, id);
+            CREATE TABLE IF NOT EXISTS inspection_delivery (
+                run_id INTEGER PRIMARY KEY REFERENCES inspection(id), state TEXT NOT NULL,
+                lease TEXT, expires REAL, directory TEXT, digest TEXT
+            );
+            CREATE TABLE IF NOT EXISTS project_memory (
+                id INTEGER PRIMARY KEY, project_id INTEGER NOT NULL REFERENCES project(id),
+                kind TEXT NOT NULL, note TEXT NOT NULL, created TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS project_budget (
+                project_id INTEGER PRIMARY KEY REFERENCES project(id), triangles INTEGER NOT NULL
+            );
             COMMIT;
         """)
 
@@ -57,6 +71,32 @@ class ProjectRuns:
         with self.db:
             self.db.execute("BEGIN IMMEDIATE")
             yield
+
+    def memory(self, project):
+        return self.db.execute("""SELECT kind,note,created FROM project_memory WHERE project_id=?
+                                ORDER BY id DESC LIMIT 50""", (project,)).fetchall()
+
+    def record_memory(self, project, kind, note):
+        note = note.strip()
+        if kind not in MEMORY or not 1 <= len(note) <= 2000:
+            raise ValueError("Informe uma nota local de 1 a 2.000 caracteres.")
+        self.db.execute("INSERT INTO project_memory(project_id,kind,note,created) VALUES(?,?,?,?)",
+                        (project, kind, note, datetime.now(timezone.utc).isoformat()))
+
+    def note(self, project, kind, note):
+        with self.transaction():
+            self.record_memory(project, kind, note)
+
+    def project_budget(self, project):
+        row = self.db.execute("SELECT triangles FROM project_budget WHERE project_id=?", (project,)).fetchone()
+        return row[0] if row else None
+
+    def save_budget(self, project, value):
+        if type(value) is not int or not 1 <= value <= 1_000_000_000:
+            raise ValueError("Orçamento do projeto inválido.")
+        with self.transaction():
+            self.db.execute("INSERT OR REPLACE INTO project_budget VALUES (?,?)", (project, value))
+            self.record_memory(project, "preference", f"Orçamento máximo aprovado: {value} triângulos.")
 
     def event(self, run, sender, recipient, kind, step, detail=""):
         self.db.execute("""INSERT INTO inspection_event(run_id,sender,recipient,kind,step,detail,created)
@@ -70,9 +110,16 @@ class ProjectRuns:
         with self.transaction():
             if not self.db.execute("SELECT 1 FROM asset WHERE project_id=? AND id=?", (project, asset)).fetchone():
                 raise ValueError("A referência deve pertencer ao projeto selecionado.")
+            limit = self.project_budget(project)
+            previous_errors = self.db.execute(
+                "SELECT count(*) FROM project_memory WHERE project_id=? AND kind='error'", (project,)).fetchone()[0]
+            chosen = min(budget, limit) if limit else budget
             run = self.db.execute("""INSERT INTO inspection(project_id,asset_id,title,source_hash,organize,budget,status)
                                     VALUES (?,?,?,?,?,?,'queued')""",
-                                  (project, asset, title[:120], source_hash, organize, budget)).lastrowid
+                                  (project, asset, title[:120], source_hash, organize, chosen)).lastrowid
+            if limit or previous_errors:
+                self.event(run, "coordenador", "inspetor", "delegated", None,
+                           f"Memória consultada. Orçamento de {chosen} triângulos e {previous_errors} erros anteriores registrados.")
             for step, agent, _ in FLOW:
                 self.event(run, "coordenador", agent, "delegated", step)
         return run
@@ -102,21 +149,70 @@ class ProjectRuns:
 
     def recover_expired(self, now):
         expired = self.db.execute("SELECT id FROM inspection WHERE status='running' AND expires<=?", (now,))
-        for row in expired.fetchall():
+        expired = expired.fetchall()
+        for row in expired:
             self.db.execute("UPDATE inspection SET status='interrupted',lease=NULL,expires=NULL WHERE id=?", (row["id"],))
             self.event(row["id"], "seguranca", "coordenador", "interrupted", None, "Reserva de execução expirada.")
 
-    def recover(self):
+        deliveries = self.db.execute(
+            "SELECT run_id FROM inspection_delivery WHERE state='running' AND expires<=?", (now,)).fetchall()
+        for row in deliveries:
+            self.db.execute("UPDATE inspection_delivery SET state='interrupted',lease=NULL WHERE run_id=?", (row[0],))
+            self.event(row[0], "seguranca", "integrador_unreal", "interrupted", "export", "Reserva de exportação expirada.")
+        return len(expired) + len(deliveries)
+
+    def ensure_available(self):
+        if (self.db.execute("SELECT 1 FROM inspection WHERE status='running'").fetchone()
+                or self.db.execute("SELECT 1 FROM inspection_delivery WHERE state='running'").fetchone()):
+            raise ValueError("Já existe uma inspeção ou exportação reservada neste workspace.")
+
+    def delivery(self, run):
+        return self.db.execute("SELECT * FROM inspection_delivery WHERE run_id=?", (run,)).fetchone()
+
+    def reserve_delivery(self, run):
+        token = uuid4().hex
         with self.transaction():
             self.recover_expired(time())
+            self.ensure_available()
+            record = self.get(run)
+            gate = self.checkpoints(run).get("gate", {})
+            if (not record or record["status"] != "review" or gate.get("reason")
+                    or gate.get("requires_human_approval") is not True or not record["organize"]):
+                raise ValueError("Sentinel bloqueou: a cópia não foi liberada para aprovação de exportação.")
+            current = self.delivery(run)
+            if current and current["state"] == "exported":
+                raise ValueError("A entrega já foi gerada.")
+            self.db.execute("INSERT OR REPLACE INTO inspection_delivery VALUES (?,'running',?,?,NULL,NULL)",
+                            (run, token, time() + LEASE_SECONDS))
+            self.event(run, "seguranca", "integrador_unreal", "approved", "export", "Aprovação humana explícita.")
+        return token
+
+    def complete_delivery(self, run, token, directory, digest):
+        with self.transaction():
+            if self.db.execute("""UPDATE inspection_delivery SET state='exported',lease=NULL,directory=?,digest=?
+                                  WHERE run_id=? AND lease=? AND state='running' AND expires>?""",
+                               (directory, digest, run, token, time())).rowcount != 1:
+                raise ValueError("Sentinel bloqueou: reserva de exportação inválida.")
+            self.event(run, "integrador_unreal", "coordenador", "exported", "export")
+
+    def stop_delivery(self, run, token, message):
+        with self.transaction():
+            changed = self.db.execute("""UPDATE inspection_delivery SET state='interrupted',lease=NULL
+                                         WHERE run_id=? AND lease=? AND state='running'""",
+                                      (run, token)).rowcount
+            if changed:
+                self.event(run, "seguranca", "integrador_unreal", "interrupted", "export", message[:200])
+
+    def recover(self):
+        with self.transaction():
+            return self.recover_expired(time())
 
     def reserve(self, run, *, now=None):
         now = time() if now is None else now
         token = uuid4().hex
         with self.transaction():
             self.recover_expired(now)
-            if self.db.execute("SELECT 1 FROM inspection WHERE status='running'").fetchone():
-                raise ValueError("Já existe uma inspeção reservada neste workspace.")
+            self.ensure_available()
             if self.db.execute("""UPDATE inspection SET status='running',lease=?,expires=? WHERE id=?
                                   AND status IN ('queued','interrupted')""", (token, now + LEASE_SECONDS, run)).rowcount != 1:
                 raise ValueError("Inspeção indisponível para execução.")
@@ -165,6 +261,8 @@ class ProjectRuns:
                 status = "blocked" if output.get("reason") else "review"
                 self.db.execute("UPDATE inspection SET status=?,lease=NULL,expires=NULL WHERE id=?", (status, run))
                 self.event(run, "seguranca", "coordenador", status, step, output.get("reason", ""))
+                self.record_memory(self.get(run)["project_id"], "assessment",
+                                   output.get("reason") or "Validação concluída. Revisão humana necessária.")
 
     def stop(self, run, token, *, cancelled=False, reason=""):
         status = "cancelled" if cancelled else "interrupted"
@@ -173,4 +271,6 @@ class ProjectRuns:
                                        AND status='running' AND lease=?""", (status, run, token)).rowcount
             if changed:
                 self.event(run, "seguranca", "coordenador", status, None, reason[:200])
+                if not cancelled and reason:
+                    self.record_memory(self.get(run)["project_id"], "error", reason[:500])
         return bool(changed)

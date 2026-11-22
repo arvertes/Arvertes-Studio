@@ -70,6 +70,7 @@ public final class LocalSessionTest extends Instrumentation {
             String reply = null;
             JSONObject checkpoint = null;
             boolean disconnected = false;
+            boolean confirmedProgress = false;
             String beforeReconnect = null;
             for (int attempt = 0; attempt < 45; attempt++) {
                 try {
@@ -80,6 +81,16 @@ public final class LocalSessionTest extends Instrumentation {
                     JSONObject response = restored.request("poll", fields);
                     if (!response.isNull("probe")) reply = response.getString("probe");
                     JSONObject work = response.optJSONObject("work");
+                    JSONObject progress = response.optJSONObject("work_status");
+                    if (progress != null) {
+                        if (WorkHistory.label(progress) == null)
+                            throw new AssertionError("Progresso autenticado fora do contrato.");
+                        WorkHistory history = new WorkHistory(getTargetContext());
+                        history.record(progress);
+                        if (progress.getInt("confirmed") > 0 &&
+                                new WorkHistory(getTargetContext()).view().contains("confirmados"))
+                            confirmedProgress = true;
+                    }
                     if (work != null && work.getInt("index") == 1 && !disconnected) {
                         beforeReconnect = work.getString("lease");
                         disconnected = true;
@@ -94,7 +105,7 @@ public final class LocalSessionTest extends Instrumentation {
                     }
                     checkpoint = FixtureWork.perform(work, () -> true);
                 } catch (StudioSession.Rejected error) {
-                    if (reply != null && disconnected && beforeReconnect == null && error.status == 401) {
+                    if (reply != null && disconnected && confirmedProgress && beforeReconnect == null && error.status == 401) {
                         store.forget();
                         return;
                     }

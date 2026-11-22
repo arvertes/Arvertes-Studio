@@ -15,3 +15,9 @@
 ## Agents
 
 Atualize o checkout privado pela branch de trabalho existente e reconecte-o em **Agentes IA**. O pacote Windows funciona desconectado e não inclui o código ou as dependências do checkout privado.
+
+## Verificação manual na terceira etapa
+
+Descarregue o ZIP e o `UpdateManifest.json` do mesmo workflow **Desktop checks**. Em **Configurações → Atualização manual**, selecione os dois arquivos. O Studio compara SHA-256, versão, revisão e metadados embutidos. A verificação lê o ZIP sem extrair nem executar arquivos. O manifesto é uma evidência de integridade vinculada à origem confiável da CI, sem assinatura de distribuição própria.
+
+Após conferir, faça backup do perfil local e extraia em outra pasta. Preserve a edição anterior para retornar com o mesmo perfil depois de fechar a nova. As tabelas da etapa 3 são aditivas. O Android continua sujeito à verificação de assinatura do sistema e dispõe da instalação paralela para preservar a edição antiga.

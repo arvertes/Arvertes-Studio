@@ -8,6 +8,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.text.InputType;
 import android.view.WindowInsets;
 import android.widget.Button;
@@ -44,7 +45,10 @@ public final class MainActivity extends Activity {
     private boolean active, busy;
     private int generation, failures, pairAttempt;
     private Switch consent, workConsent;
-    private TextView workStatus;
+    private TextView workStatus, historyStatus;
+    private WorkHistory history;
+    private JSONObject workProgress;
+    private boolean conservative;
     private volatile boolean allowWork;
     private volatile int workEpoch;
     private boolean supportsWork;
@@ -125,11 +129,30 @@ public final class MainActivity extends Activity {
         workConsent.setSaveEnabled(false);
         jobs.addView(workConsent);
         workStatus = metric(jobs);
+        action(jobs, "Pausar cálculo agora", () -> workConsent.setChecked(false));
+        Switch limits = new Switch(this);
+        limits.setText("Limites conservadores");
+        limits.setTextColor(TEXT);
+        jobs.addView(limits);
+        limits.setOnCheckedChangeListener((button, checked) -> {
+            conservative = checked;
+            workEpoch++;
+            workReply = null;
+            refresh();
+        });
+        LinearLayout timeline = card(content, "Histórico de cálculo");
+        history = new WorkHistory(this);
+        historyStatus = metric(timeline);
+        historyStatus.setText(history.view());
         workConsent.setOnCheckedChangeListener((button, checked) -> {
             allowWork = checked;
             workEpoch++;
             workReply = null;
             refresh();
+            if (active && !busy) {
+                handler.removeCallbacks(tick);
+                handler.post(tick);
+            }
         });
 
         reconnect.setEnabled(false);
@@ -244,6 +267,7 @@ public final class MainActivity extends Activity {
         reply = null;
         workReply = null;
         supportsWork = false;
+        workProgress = null;
         workConsent.setChecked(false);
         consent.setChecked(false);
         connectionStatus.setText(reason);
@@ -262,7 +286,7 @@ public final class MainActivity extends Activity {
         boolean allowed = sample.pauseReason(consent.isChecked()) == null;
         boolean canWork = supportsWork;
         JSONObject checkpoint = workReply;
-        boolean allowedWork = canWork && sample.available() >= 520 && sample.pauseReason(allowWork) == null;
+        boolean allowedWork = canWork && workPause(sample) == null;
         int workRequest = workEpoch;
         int request = generation;
         busy = true;
@@ -275,7 +299,10 @@ public final class MainActivity extends Activity {
                     fields.put("work_enabled", enabled).put("work_result",
                             checkpoint != null && enabled ? checkpoint : JSONObject.NULL);
                 }
+                long sentAt = SystemClock.elapsedRealtime();
                 JSONObject result = session.request("poll", fields);
+                long latency = SystemClock.elapsedRealtime() - sentAt;
+                JSONObject progress = result.optJSONObject("work_status");
                 boolean version = result.optInt("work_version", 0) == 1;
                 JSONObject next = FixtureWork.perform(result.optJSONObject("work"),
                         () -> allowedWork && allowWork && workEpoch == workRequest);
@@ -286,6 +313,9 @@ public final class MainActivity extends Activity {
                     if (generation != request) return;
                     connected = session;
                     supportsWork = version;
+                    workProgress = progress;
+                    history.record(progress);
+                    historyStatus.setText(history.view());
                     workReply = allowWork && workEpoch == workRequest ? next : null;
                     if (savedPairing != session) {
                         savedPairing = session;
@@ -304,7 +334,7 @@ public final class MainActivity extends Activity {
                     }
                     failures = 0;
                     connectionStatus.setText("Sessão autenticada · "
-                            + (session.transport.equals("usb") ? "rede USB" : "Wi-Fi local"));
+                            + (session.transport.equals("usb") ? "rede USB" : "Wi-Fi local") + " · " + latency + " ms");
                     if (nonce != null && allowed && consent.isChecked()) {
                         reply = nonce;
                         status.setText("Mensagem autenticada recebida. Respondendo…");
@@ -326,7 +356,7 @@ public final class MainActivity extends Activity {
                     }
                     supportsWork = false;
                     failures++;
-                    connectionStatus.setText(describe(error) + " Tentando reconectar.");
+                    connectionStatus.setText(describe(error) + " Reconectando · tentativa " + failures + ".");
                     discovery.resolve(session, next -> handler.post(() -> {
                         if (generation == request && failures > 0) paired = next;
                     }));
@@ -356,13 +386,23 @@ public final class MainActivity extends Activity {
         String blocked = sample.pauseReason(consent.isChecked());
         status.setText(blocked != null ? blocked : reply == null
                 ? "Disponível para mensagens de diagnóstico." : "Mensagem autenticada pronta para responder.");
-        String workPause = sample.pauseReason(allowWork);
+        String workPause = workPause(sample);
+        String progressLabel = WorkHistory.label(workProgress);
         workStatus.setText(!supportsWork ? "Cálculo leve disponível com um Studio atualizado."
                 : workPause != null ? workPause
-                : sample.available() < 520 ? "Pausado: reserva de memória indisponível."
+                : progressLabel != null ? progressLabel
                 : workReply == null ? "Aguardando etapa sintética do Studio."
                 : "Etapa calculada. Aguardando confirmação do Studio.");
         return sample;
+    }
+
+    private String workPause(MobileMetrics.Sample sample) {
+        String normal = sample.pauseReason(allowWork);
+        if (normal != null) return normal;
+        if (conservative && (sample.battery() < 60 || sample.thermal() != 0 || sample.available() < 768))
+            return "Pausado: modo conservador requer bateria ≥ 60%, térmica normal e 768 MiB livres.";
+        if (sample.available() < 520) return "Pausado: reserva de memória indisponível.";
+        return null;
     }
 
     private EditText field(LinearLayout parent, String hint, boolean secret) {

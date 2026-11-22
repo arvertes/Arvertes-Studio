@@ -13,17 +13,10 @@ from PySide6.QtWidgets import (
 from .agent_bridge import AgentBridge
 from .agent_panel import build_agent_tools
 from .navigation import SECTIONS
-from .network import DeviceHub
-from .network_page import build_network
 from .dashboard import build_dashboard
-from .office import build_office
-from .sentinel_page import build_sentinel
 from .roster import AGENTS
 from .pages import WorkspacePages, build_agents
-from .production import Production
-from .production_page import build_production
 from .status_snapshot import snapshot, export
-from .office_preview import BUILD
 from .workspace import Workspace
 from .settings import Settings, load_settings, save_settings, validate_blender_path
 from .theme import DARK_THEME
@@ -62,8 +55,7 @@ def panel() -> tuple[QFrame, QVBoxLayout]:
 class StudioWindow(QMainWindow):
     def __init__(self, *, config_dir=None):
         super().__init__()
-        self.setWindowTitle("Arvertes Studio — 0.2.3 dev")
-        self.auto_office = config_dir is None and (BUILD / "index.html").is_file()
+        self.setWindowTitle("Arvertes Studio — 0.2.4 dev")
         self.setMinimumSize(860, 540)
         self.resize(1200, 760)
         self.setStyleSheet(DARK_THEME)
@@ -83,16 +75,12 @@ class StudioWindow(QMainWindow):
             self.workspace = Workspace(self.config_path.parent / "workspace.sqlite3")
         except (OSError, ValueError, sqlite3.Error) as error:
             self.workspace_error = str(error)
-        self.network = None
+        self._network = None
         self.network_error = ""
-        try:
-            self.network = DeviceHub(self.config_path.parent / "devices.sqlite3")
-        except (OSError, ValueError, sqlite3.Error) as error:
-            self.network_error = str(error)
+        self._production = None
         self.agent_bridge = AgentBridge(self)
         self.work_pages = WorkspacePages(self, self.workspace) if self.workspace else None
-        self.production = Production(self, self.workspace, self.agent_bridge, self.config_path.parent / "inspections",
-                                     lambda: self.settings.blender_path) if self.workspace else None
+        self.section_layouts = {}
 
         self.process = QProcess(self)
         self.process.setProcessChannelMode(QProcess.ProcessChannelMode.MergedChannels)
@@ -153,65 +141,138 @@ class StudioWindow(QMainWindow):
             layout.setSpacing(12)
             layout.addWidget(label(section.title, "heading"))
             layout.addWidget(label(section.description, "muted"))
-            if section.key == "home":
-                self.refresh_dashboard = build_dashboard(layout, self.workspace, self._navigate)
-            elif section.key == "settings":
-                self._settings_page(layout)
-            elif section.key == "agents":
-                build_agents(layout, self.agent_bridge)
-                build_agent_tools(layout, self.agent_bridge, self.settings, self._save_agents)
-            elif section.key == "office":
-                self.office_preview = build_office(layout, self._navigate, self.agent_bridge,
-                                                  self.production, self.auto_office)
-            elif section.key == "sentinel":
-                build_sentinel(layout, self.network, self.agent_bridge)
-            elif section.key == "network":
-                build_network(layout, self.network, self.network_error, self.agent_bridge)
-            elif section.key in ("projects", "library", "tasks"):
-                if self.work_pages is None:
-                    layout.addWidget(label("Banco local indisponível: " + self.workspace_error, "muted"))
-                    layout.addStretch()
-                elif section.key == "tasks":
-                    tabs = QTabWidget()
-                    for title in ("Rascunhos", "Inspeções GLB"):
-                        tab = QWidget()
-                        tabs.addTab(tab, title)
-                        tab_layout = QVBoxLayout(tab)
-                        if title == "Rascunhos":
-                            self.work_pages.tasks_page(tab_layout)
-                        else:
-                            refresh = build_production(tab_layout, self.production, self.work_pages.protect)
-                            tabs.currentChanged.connect(lambda index: refresh() if index == 1 else None)
-                    layout.addWidget(tabs, 1)
-                else:
-                    getattr(self.work_pages, section.key + "_page")(layout)
-            else:
-                box, box_layout = panel()
-                box_layout.addWidget(label("Funcionalidade planejada"))
-                milestone = section.milestone
-                if not milestone.startswith("Etapa"):
-                    milestone = "v" + milestone
-                box_layout.addWidget(label("Etapa prevista: " + milestone + ". Ferramentas ainda não conectadas.", "muted"))
-                for capability in CAPABILITIES.get(section.key, ()):
-                    box_layout.addWidget(label("• " + capability))
-                navigate = QPushButton("Planejar tarefa")
-                navigate.clicked.connect(lambda: self._navigate("tasks"))
-                navigate.setEnabled(self.work_pages is not None)
-                box_layout.addWidget(navigate)
-                layout.addWidget(box)
-                layout.addStretch()
+            self.section_layouts[section.key] = (section, layout)
 
             scroll = QScrollArea()
             scroll.setWidgetResizable(True)
             scroll.setWidget(page)
             self.pages.addWidget(scroll)
 
-        if self.work_pages:
-            self.work_pages.refresh()
-        self.menu.currentRowChanged.connect(self.pages.setCurrentIndex)
-        self.menu.currentRowChanged.connect(lambda row: self.refresh_dashboard() if row == 0 else None)
-        self._navigate("office" if self.auto_office else "home")
-        self.statusBar().showMessage("Versão de desenvolvimento • Conexões locais de diagnóstico")
+        self.menu.currentRowChanged.connect(self._open_section)
+        self._navigate("home")
+        self.statusBar().showMessage("Versão de desenvolvimento • Conexões locais")
+        self.resource_display = label("", "muted")
+        self.statusBar().addPermanentWidget(self.resource_display)
+        self.resource_timer = QTimer(self)
+        self.resource_timer.timeout.connect(self._show_resources)
+        self.resource_timer.start(2500)
+        QTimer.singleShot(300, self._show_resources)
+
+    @property
+    def production(self):
+        if self._production is None and self.workspace is not None:
+            from .production import Production
+            self._production = Production(self, self.workspace, self.agent_bridge,
+                                          self.config_path.parent / "inspections",
+                                          lambda: self.settings.blender_path)
+        return self._production
+
+    @property
+    def network(self):
+        if self._network is None and not self.network_error:
+            try:
+                from .network import DeviceHub
+                self._network = DeviceHub(self.config_path.parent / "devices.sqlite3")
+            except (OSError, ValueError, sqlite3.Error) as error:
+                self.network_error = str(error)
+        return self._network
+
+    def _show_resources(self):
+        if self.isMinimized():
+            return
+        from .resources import reading
+        sample = reading()
+        self.resource_display.setText(
+            f"RAM livre {sample.available} / {sample.total} MiB   •   CPU {sample.cpu:.0f}%")
+
+    def _open_section(self, row):
+        if row < 0:
+            return
+        key = SECTIONS[row].key
+        work = ("projects", "library", "tasks")
+        if key in work and key in self.section_layouts:
+            for section in work:
+                self._fill_section(section)
+            if self.work_pages:
+                self.work_pages.refresh()
+        else:
+            self._fill_section(key)
+        self.pages.setCurrentIndex(row)
+        if key == "home":
+            self.refresh_dashboard()
+        elif key == "settings" and hasattr(self, "refresh_cloud"):
+            self.refresh_cloud()
+
+    def _fill_section(self, key):
+        if key not in self.section_layouts:
+            return
+        section, layout = self.section_layouts.pop(key)
+        if section.key == "home":
+            self.refresh_dashboard = build_dashboard(layout, self.workspace, self._navigate)
+        elif section.key == "settings":
+            self._settings_page(layout)
+        elif section.key == "agents":
+            build_agents(layout, self.agent_bridge)
+            build_agent_tools(layout, self.agent_bridge, self.settings, self._save_agents)
+        elif section.key == "office":
+            from .office import build_office
+            self.office_preview = build_office(layout, self._navigate, self.agent_bridge, self.production)
+        elif section.key == "sentinel":
+            from .sentinel_page import build_sentinel
+            build_sentinel(layout, lambda: self._network, self.agent_bridge)
+        elif section.key == "network":
+            from .network_page import build_network
+            build_network(layout, self.network, self.network_error, self.agent_bridge)
+        elif section.key == "audio":
+            from .audio_page import build_audio
+            build_audio(layout, self.agent_bridge)
+        elif section.key in ("pipeline", "export"):
+            entry = QPushButton("Abrir fila e entregas FBX")
+            entry.setEnabled(self.work_pages is not None)
+            entry.clicked.connect(self._open_pipeline)
+            layout.addWidget(entry)
+            layout.addStretch()
+        elif section.key in ("projects", "library", "tasks"):
+            if self.work_pages is None:
+                layout.addWidget(label("Banco local indisponível: " + self.workspace_error, "muted"))
+                layout.addStretch()
+            elif section.key == "tasks":
+                from .production_page import build_production
+                tabs = QTabWidget()
+                for title in ("Rascunhos", "Inspeções GLB"):
+                    tab = QWidget()
+                    tabs.addTab(tab, title)
+                    tab_layout = QVBoxLayout(tab)
+                    if title == "Rascunhos":
+                        self.work_pages.tasks_page(tab_layout)
+                    else:
+                        refresh = build_production(tab_layout, self.production, self.work_pages.protect)
+                        tabs.currentChanged.connect(lambda index: refresh() if index == 1 else None)
+                layout.addWidget(tabs, 1)
+            else:
+                getattr(self.work_pages, section.key + "_page")(layout)
+        else:
+            box, box_layout = panel()
+            box_layout.addWidget(label("Funcionalidade planejada"))
+            milestone = section.milestone
+            if not milestone.startswith("Etapa"):
+                milestone = "v" + milestone
+            box_layout.addWidget(label("Etapa prevista: " + milestone + ". Ferramentas ainda não conectadas.", "muted"))
+            for capability in CAPABILITIES.get(section.key, ()):
+                box_layout.addWidget(label("• " + capability))
+            navigate = QPushButton("Planejar tarefa")
+            navigate.clicked.connect(lambda: self._navigate("tasks"))
+            navigate.setEnabled(self.work_pages is not None)
+            box_layout.addWidget(navigate)
+            layout.addWidget(box)
+            layout.addStretch()
+
+
+    def _open_pipeline(self):
+        self._navigate("tasks")
+        tabs = self.pages.currentWidget().findChild(QTabWidget)
+        if tabs:
+            tabs.setCurrentIndex(1)
 
     def _navigate(self, key):
         self.menu.setCurrentRow(next(i for i, section in enumerate(SECTIONS) if section.key == key))
@@ -249,6 +310,10 @@ class StudioWindow(QMainWindow):
         sharing.setToolTip("Exporta nomes e estados locais. Revise o JSON antes de compartilhá-lo.")
         sharing.clicked.connect(self._export_snapshot)
         layout.addWidget(sharing)
+        from .cloud_page import build_cloud_controls
+        self.refresh_cloud = build_cloud_controls(layout, self)
+        from .update_panel import build_update_panel
+        build_update_panel(layout, self)
         layout.addStretch()
 
     def _export_snapshot(self):
@@ -260,7 +325,7 @@ class StudioWindow(QMainWindow):
                         self, "Atualizar exportação", "Substituir o arquivo de estado desta pasta?"
                 ) != QMessageBox.StandardButton.Yes:
                     return
-                export(target, snapshot(self.workspace, self.network, self.agent_bridge))
+                export(target, snapshot(self.workspace, self._network, self.agent_bridge))
                 self.statusBar().showMessage("Estado exportado. Revise o arquivo antes de compartilhá-lo.", 6000)
             except (OSError, ValueError, sqlite3.Error) as error:
                 QMessageBox.warning(self, "Exportação indisponível", str(error))
@@ -346,11 +411,16 @@ class StudioWindow(QMainWindow):
             self.office_preview.set_suspended(self.isMinimized())
 
     def closeEvent(self, event):
-        if self.production:
-            self.production.close()
+        self.resource_timer.stop()
+        if hasattr(self, "update_check"):
+            self.update_check.cancelled.set()
+        if hasattr(self, "cloud_sync"):
+            self.cloud_sync.stop()
+        if self._production:
+            self._production.close()
         self.agent_bridge.close()
-        if self.network is not None:
-            self.network.close()
+        if self._network is not None:
+            self._network.close()
         self.timeout.stop()
         if self.process.state() != QProcess.ProcessState.NotRunning:
             self.process.kill()

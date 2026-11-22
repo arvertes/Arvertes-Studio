@@ -12,8 +12,8 @@ button,select{background:#303b49;color:#edf2f8;border:1px solid #516172;border-r
 #details{flex:1}#history{flex-basis:100%;margin:0;max-height:86px;overflow:auto;color:#b5c5d6}#hint{font-size:12px;color:#b5c5d6}
 </style></head>
 <body>
-<header><strong>ARVERTES HQ</strong><span>26 agentes · 5 departamentos</span><select id="agents" aria-label="Selecionar agente"></select><button id="overview">Visão geral</button><button id="minus">−</button><button id="plus">+</button></header>
+<header><strong>ARVERTES HQ</strong><span>26 agentes · 5 departamentos</span><select id="agents" aria-label="Selecionar agente"></select><label><input type="checkbox" id="economy" checked> Econômico</label><button id="overview">Visão geral</button><button id="minus">−</button><button id="plus">+</button></header>
 <canvas id="world"></canvas>
-<footer><div id="details" role="status">Selecione um personagem.</div><div id="hint">Movimento ambiente decorativo · Habblaud / Márcio Junior (MIT)</div><ol id="history" aria-label="Histórico do agente"></ol></footer>
+<footer><div id="details" role="status">Selecione um personagem.</div><div id="hint">Movimento ambiente decorativo · Habblaud / Márcio Junior (MIT)</div><div id="workflow" role="status"></div><ol id="history" aria-label="Histórico do agente"></ol></footer>
 <script type="module" src="/src/arvertes-preview.ts"></script>
 </body></html>

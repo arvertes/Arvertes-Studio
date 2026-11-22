@@ -45,6 +45,12 @@ class RemoteWork:
             return db.execute("SELECT state,step FROM mobile_work WHERE device=? ORDER BY created DESC LIMIT 1",
                               (device,)).fetchone() or ("", 0)
 
+    def progress(self, device):
+        with closing(self.registry.connect()) as db:
+            record = db.execute("SELECT id,state,step FROM mobile_work WHERE device=? ORDER BY created DESC LIMIT 1",
+                                (device,)).fetchone()
+        return {"job": record[0], "state": record[1], "confirmed": record[2], "total": STEPS} if record else None
+
     def create(self, device, kind):
         if kind != KIND:
             raise ValueError("Sentinel bloqueou: trabalho móvel fora do contrato leve.")

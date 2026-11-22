@@ -87,6 +87,21 @@ class ProjectRunTests(unittest.TestCase):
         self.assertEqual({item["kind"] for item in data["tasks"]}, {"draft", "inspection"})
         self.assertNotIn(str(self.path.parent), str(data))
 
+    def test_saved_budget_and_memory_are_project_scoped(self):
+        self.runs.save_budget(self.project, 100)
+        self.runs.note(self.project, "correction", "Correção revisada")
+        run = self.queue()
+        self.assertEqual(self.runs.get(run)["budget"], 100)
+        self.assertTrue(any("Memória consultada" in item["detail"] for item in self.runs.history(run)))
+        self.assertEqual(self.runs.memory(self.project)[0]["kind"], "correction")
+        other = self.workspace.create_project("Isolado")
+        self.assertIsNone(self.runs.project_budget(other))
+        self.assertFalse(self.runs.memory(other))
+
+    def test_export_requires_successful_sentinel_and_organized_copy(self):
+        with self.assertRaisesRegex(ValueError, "Sentinel"):
+            self.runs.reserve_delivery(self.queue())
+
     def test_independent_gate_uses_report_even_when_agents_omit_an_issue(self):
         report = {"summary": {"geometry_evaluated": {"triangles": 1001},
                   "geometry_original": {"triangles": 200}, "mesh_count": 1, "meshes_without_uv": 0}}

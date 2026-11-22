@@ -82,3 +82,13 @@ O GLB local tem limite de 16 MiB, metadados e geometria limitados e recursos int
 ## Exportação de estado para MCP
 
 Em **Configurações → Exportar estado para MCP**, selecione uma pasta local. Confira `arvertes-status.json` antes de apontar o servidor stdio do Agents para ele. O resumo inclui nomes de projetos e aparelhos, estados e verificações do Studio. Caminhos dos assets, instruções dos rascunhos, resultados técnicos completos e credenciais ficam na máquina. Atualize a exportação manualmente para consultar uma nova revisão do estado.
+
+## Terceira etapa
+
+O Studio inicia no painel leve e constrói as seções quando usadas. O escritório Qt preserva os 26 personagens. Habblaud com WebEngine continua disponível por botão e usa a opção econômica de 15 FPS e animações reduzidas. Minimizar ou sair do Escritório fecha a página local. A barra de estado mostra RAM e CPU do sistema. O Sentinel calcula folga de RAM e barra a admissão com CPU em 90% ou mais. Durante o Blender, amostra o processo e os filhos. Em cancelamento, encerra os descendentes conhecidos. Esses limites amostrados não equivalem a cotas do sistema operacional.
+
+Em **AutoPipeline**, escolha uma referência GLB do projeto e autorize a inspeção. O orçamento salvo na memória local é aplicado como teto. O histórico guarda erros, avaliações, correções aprovadas, preferências, técnicas e decisões artísticas. O Studio registra a consulta à memória e usa a preferência numérica. As notas livres permanecem para revisão humana.
+
+A cópia é analisada quanto a anomalias de topologia, presença de nós PBR, ossos, ações e orçamento. Bridge gera uma pré-verificação e metas de LOD para revisão. Com cópia organizada, resultados válidos e autorização explícita, o Studio confere o hash do .blend antes de gerar um FBX em uma pasta nova. O original não é aberto para escrita. O resultado ainda deve passar por importação e inspeção na versão de Unreal do projeto. A criação de materiais, a geração de LODs e as correções de rig ainda são etapas futuras. Pulse mede metadados PCM na seção **Áudio**.
+
+A exportação local stdio continua disponível. A sincronização do Arvertes Cloud é opcional e exige escolha de origem HTTPS, credencial, projeto e seções a cada sessão. Compartilha dados técnicos enumerados. Ela não transmite nomes, caminhos, notas ou assets. Ao interromper a sessão, a projeção anterior fica disponível até a expiração ou a remoção manual.

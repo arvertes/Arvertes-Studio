@@ -83,7 +83,7 @@ class OfficePreview(QWidget):
         self.desired, self.suspended = auto, False
         self.server = None
         self.view = None
-        self.states = {"states": {}, "history": {}}
+        self.states = {"states": {}, "history": {}, "flow": ""}
         self.box = QVBoxLayout(self)
         self.box.setContentsMargins(0, 0, 0, 0)
         self.button = QPushButton("Abrir escritório Habblaud")
@@ -93,8 +93,8 @@ class OfficePreview(QWidget):
         self.box.addWidget(self.message)
         self.button.clicked.connect(self.toggle)
 
-    def update_states(self, states, history):
-        self.states = {"states": states, "history": history}
+    def update_states(self, states, history, flow=""):
+        self.states = {"states": states, "history": history, "flow": flow}
         if self.server:
             self.server.server.states = json.dumps(self.states).encode("ascii")
 

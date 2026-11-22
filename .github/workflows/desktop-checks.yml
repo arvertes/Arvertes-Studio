@@ -49,8 +49,11 @@ jobs:
       - name: Build diagnostic portable
         shell: pwsh
         run: |
-          git rev-parse HEAD | Set-Content -Encoding ascii arvertes_desktop/build_revision.txt
-          python -m PyInstaller --noconfirm --clean --onedir --windowed --name ArvertesStudio --add-data "arvertes_desktop/build_revision.txt:arvertes_desktop" --add-data "arvertes_desktop/blender_worker.py:arvertes_desktop" --add-data "arvertes_studio:arvertes_studio" --add-data "upstream/dist/client:arvertes_desktop/habblaud_client" desktop_launcher.py
+          $revision = (git rev-parse HEAD).Trim()
+          $revision | Set-Content -Encoding ascii arvertes_desktop/build_revision.txt
+          $version = python -c "from arvertes_desktop.update_check import VERSION; print(VERSION)"
+          @{platform='windows-x64'; version=$version; revision=$revision} | ConvertTo-Json -Compress | Set-Content -Encoding ascii arvertes_desktop/portable-version.json
+          python -m PyInstaller --noconfirm --clean --onedir --windowed --name ArvertesStudio --add-data "arvertes_desktop/build_revision.txt:arvertes_desktop" --add-data "arvertes_desktop/portable-version.json:arvertes_desktop" --add-data "arvertes_desktop/blender_worker.py:arvertes_desktop" --add-data "arvertes_studio:arvertes_studio" --add-data "upstream/dist/client:arvertes_desktop/habblaud_client" desktop_launcher.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Smoke test executable
         shell: pwsh
@@ -69,14 +72,22 @@ jobs:
         shell: pwsh
         run: |
           Copy-Item docs/WINDOWS.md dist/ArvertesStudio/LEIA-ME.md
+          Copy-Item docs/ATUALIZACAO.md dist/ArvertesStudio/ATUALIZACAO.md
           Compress-Archive -Path dist/ArvertesStudio -DestinationPath dist/ArvertesStudio-Windows-x64-diagnostico.zip
-          Get-FileHash dist/ArvertesStudio-Windows-x64-diagnostico.zip -Algorithm SHA256 | Format-List | Out-File dist/SHA256.txt
+          $hash = Get-FileHash dist/ArvertesStudio-Windows-x64-diagnostico.zip -Algorithm SHA256
+          $hash | Format-List | Out-File dist/SHA256.txt
+          $manifest = Get-Content arvertes_desktop/portable-version.json -Raw | ConvertFrom-Json -AsHashtable
+          $manifest.sha256 = $hash.Hash.ToLowerInvariant()
+          $manifest | ConvertTo-Json -Compress | Set-Content -Encoding ascii dist/UpdateManifest.json
+          python -c "from arvertes_desktop.update_check import verify; print(verify('dist/ArvertesStudio-Windows-x64-diagnostico.zip','dist/UpdateManifest.json'))"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - uses: actions/upload-artifact@v4
         with:
           name: ArvertesStudio-Windows-x64-diagnostico
           path: |
             dist/ArvertesStudio-Windows-x64-diagnostico.zip
             dist/SHA256.txt
+            dist/UpdateManifest.json
           if-no-files-found: error
           retention-days: 14
   blender:

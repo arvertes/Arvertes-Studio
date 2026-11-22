@@ -3,7 +3,7 @@
 Versão de desenvolvimento portátil, não instalador de produção. Não exige privilégios administrativos, Python instalado ou Blender para abrir a UI. Extraia todo o ZIP em uma pasta pessoal, mantenha a pasta _internal junto do ArvertesStudio.exe. Não execute somente o EXE isolado. O executável de teste não possui assinatura comercial; não contorne bloqueios de segurança do Windows. Verifique o arquivo e o SHA-256 com o artefato do workflow Desktop checks, da revisão correta. Não use arquivos de terceiros.
 
 ## Antes de abrir
-No Pull Request #2, conferir que a execução Desktop checks da revisão escolhida passou (testes unitários, smoke do código e do executável). A revisão deve ser revisada por uma pessoa; CI não certifica risco zero. Baixar somente o artefato desse workflow, após sucesso. O ZIP inclui o executável e dependências Qt. Não há IA generativa, modelo de linguagem, comunicação USB ou processamento de assets no pacote.
+No Pull Request #2, conferir que a execução Desktop checks da revisão escolhida passou (testes unitários, smoke do código e do executável). A revisão deve ser revisada por uma pessoa; CI não certifica risco zero. Baixar somente o artefato desse workflow, após sucesso. O ZIP inclui o executável e dependências Qt. Não há IA generativa, modelo de linguagem, comunicação USB/Wi-Fi ou processamento de assets no pacote.
 
 ## Primeiro teste
 1. Abrir a versão de diagnóstico; conferir Sentinel e o SHA da revisão exibido.

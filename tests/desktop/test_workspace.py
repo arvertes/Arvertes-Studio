@@ -1,5 +1,6 @@
 from pathlib import Path
 import sqlite3
+from contextlib import closing
 import tempfile
 import unittest
 
@@ -17,10 +18,10 @@ class WorkspaceTests(unittest.TestCase):
         self.project = self.store.create_project("Personagem")
 
     def test_roster(self):
-        self.assertEqual(len(AGENTS), 25)
-        self.assertEqual(len({a.id for a in AGENTS}), 25)
-        self.assertEqual(len({a.name for a in AGENTS}), 25)
-        self.assertEqual([len(filter_agents(d)) for d in DEPARTMENTS], [4, 6, 6, 5, 4])
+        self.assertEqual(len(AGENTS), 26)
+        self.assertEqual(len({a.id for a in AGENTS}), 26)
+        self.assertEqual(len({a.name for a in AGENTS}), 26)
+        self.assertEqual([len(filter_agents(d)) for d in DEPARTMENTS], [4, 6, 6, 5, 5])
         self.assertEqual(filter_agents(query="atlas")[0].id, "coordenador")
         self.assertEqual(filter_agents("Qualidade", "aegis")[0].id, "auditor")
         self.assertEqual(filter_agents("Áudio", "atlas"), ())
@@ -71,8 +72,9 @@ class WorkspaceTests(unittest.TestCase):
 
     def test_schema_version(self):
         other = Path(self.temp.name) / "other.sqlite3"
-        with sqlite3.connect(other) as db:
+        with closing(sqlite3.connect(other)) as db:
             db.execute("PRAGMA user_version=9")
+            db.commit()
         with self.assertRaises(ValueError):
             Workspace(other)
 

@@ -23,7 +23,7 @@ def main() -> int:
 def smoke_test(app, window_type):
     """Executa diagnóstico em pasta temporária, sem os dados reais do usuário."""
     from tempfile import TemporaryDirectory
-    from PySide6.QtWidgets import QLabel, QPushButton
+    from PySide6.QtWidgets import QLabel, QPushButton, QComboBox, QGraphicsView
     from .navigation import SECTIONS
     with TemporaryDirectory(prefix="arvertes-smoke-") as directory:
         window = window_type(config_dir=directory)
@@ -41,6 +41,24 @@ def smoke_test(app, window_type):
                 window.menu.setCurrentRow(index)
                 app.processEvents()
                 assert window.pages.currentIndex() == index
+            window._navigate("office")
+            page = window.pages.currentWidget()
+            view = page.findChild(QGraphicsView, "officeMap")
+            selector = page.findChild(QComboBox, "officeAgent")
+            detail = page.findChild(QLabel, "officeDetail")
+            assert view is not None and selector.count() == 26
+            selector.setCurrentIndex(selector.findData("seguranca"))
+            app.processEvents()
+            assert "Sentinel" in detail.text()
+            assert "nenhuma autorização automática" in detail.text()
+            assert len(view.scene().selectedItems()) == 1
+            assert view.scene().selectedItems()[0].data(0) == "seguranca"
+            view.scene().clearSelection()
+            atlas = next(i for i in view.scene().items() if i.data(0) == "coordenador")
+            atlas.setSelected(True)
+            app.processEvents()
+            assert selector.currentData() == "coordenador"
+            assert "não conectado" in detail.text()
             window._navigate("sentinel")
             page = window.pages.currentWidget()
             feedback = page.findChild(QLabel, "sentinelFeedback")

@@ -1,11 +1,11 @@
 """Optional offline renderer. Serve only reviewed static build files on loopback."""
-from functools import partial
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from threading import Thread
 from urllib.parse import unquote, urlsplit
 import mimetypes
 
+from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QLabel, QPushButton, QVBoxLayout, QWidget
 
 BUILD = Path(__file__).resolve().parent / "habblaud_client"
@@ -69,6 +69,7 @@ class PreviewServer:
 
 class OfficePreview(QWidget):
     """Explicit, optional WebEngine preview; no process runs until requested."""
+    active_changed = Signal(bool)
     def __init__(self):
         super().__init__()
         self.server = None
@@ -116,6 +117,7 @@ class OfficePreview(QWidget):
             self.view.load(origin)
             self.button.setText("Fechar escritório original")
             self.message.setText("Prévia original · sem execução de tarefas. Menu lateral do Studio permanece funcional.")
+            self.active_changed.emit(True)
         except (OSError, RuntimeError, ValueError) as error:
             self.stop()
             self.message.setText("Não foi possível abrir a prévia: " + str(error))
@@ -132,6 +134,7 @@ class OfficePreview(QWidget):
             self.server = None
         self.button.setText("Abrir escritório original (experimental)")
         self.message.setText("Prévia fechada. Mapa leve disponível.")
+        self.active_changed.emit(False)
 
     def hideEvent(self, event):
         if self.server is not None or self.view is not None:

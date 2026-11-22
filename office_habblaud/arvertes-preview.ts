@@ -2,15 +2,20 @@
 import { OfficeStore } from './net/store';
 import { createWorld } from './world';
 import type { OfficeSnapshot, AgentInfo } from '../../shared/types';
+import { HAIR_STYLES, TOP_STYLES, ACCESSORIES } from '../../shared/appearance';
 import roster from './arvertes-roster.json';
 
 const now = Date.now();
 const departments = [...new Set(roster.map(a => a.department))];
 const hash = (s: string) => Array.from(s).reduce((h,c) => (Math.imul(h,31)+c.charCodeAt(0)) >>> 0, 2166136261);
-let agents: AgentInfo[] = roster.map(a => ({
+const colors = ['#458ab3', '#a75ca1', '#528d83', '#a7664c', '#7e83c2', '#77884e'];
+let agents: AgentInfo[] = roster.map((a, index) => ({
   id:a.id, name:a.name, role:a.role, roomId:a.department, kind:'main',
   look:hash(a.id)%2?'f':'m', sessionId:'preview:'+a.id, account:'arvertes',
-  status:'idle', title:'Perfil cadastrado · sem execução', recent:[], tasks:[],
+  status:'idle', title:'Aguardando estado do Studio', recent:[], tasks:[],
+  parts:{hairStyle:HAIR_STYLES[index % HAIR_STYLES.length], top:colors[index % colors.length],
+    topStyle:TOP_STYLES[index % TOP_STYLES.length],
+    accessory:ACCESSORIES[(index + departments.indexOf(a.department)) % ACCESSORIES.length]},
   startedAt:now, lastEventAt:now, statusSince:now, seed:hash(a.id),
   stats:{toolCalls:0,tokensIn:0,tokensOut:0,subagents:0}, canMessage:false,
 }));
@@ -25,16 +30,23 @@ const canvas = document.querySelector<HTMLCanvasElement>('#world')!;
 const view = createWorld(canvas,store);
 view.setOptions({showNames:true,bubbles:'none',liveliness:'calm',theme:'none',dayNight:false});
 // Use real status snapshots from Studio without starting the upstream simulator.
-view.setPlayback?.({clock:()=>now,scale:()=>0});
+view.setPlayback?.({clock:()=>Date.now(),scale:()=>Number(!document.hidden)});
 store.pushReplay(snapshot); // Never call connect(), which would start a demo simulator or SSE.
 const selector = document.querySelector<HTMLSelectElement>('#agents')!;
 const details = document.querySelector<HTMLDivElement>('#details')!;
+const log = document.querySelector<HTMLOListElement>('#history')!;
+let history: Record<string, string[]> = {};
 for(const a of agents) selector.add(new Option(a.name+' · '+a.roomId,a.id));
 function detail(id:string) {
   const a = agents.find(a=>a.id===id);
   if (!a) return;
   selector.value=id;
-  details.textContent=a.name+' — '+a.role+' · '+a.title;
+  details.textContent=a.name+' — '+a.role+' · '+a.roomId+' · '+a.title;
+  log.replaceChildren(...(history[id] || []).map(message => {
+    const item = document.createElement('li');
+    item.textContent = message;
+    return item;
+  }));
 }
 selector.addEventListener('change',()=>{view.select({type:'agent',id:selector.value},{focus:true});detail(selector.value)});
 view.onSelect(sel=>{if(sel?.type==='agent')detail(sel.id)});
@@ -48,16 +60,19 @@ const updates = window.setInterval(async () => {
   try {
     const response = await fetch('/office-state.json', {cache: 'no-store'});
     if (!response.ok) return;
-    const states = await response.json() as Record<string, string>;
-    if (JSON.stringify(states) === last) return;
-    last = JSON.stringify(states);
+    if (document.hidden) return;
+    const data = await response.json() as {states: Record<string, string>, history: Record<string, string[]>};
+    const states = data.states;
+    if (!states || typeof states !== 'object') return;
+    history = data.history || {};
+    if (JSON.stringify(data) === last) return;
+    last = JSON.stringify(data);
     const time = Date.now();
     agents = agents.map(agent => {
       const title = states[agent.id] || 'Não conectado';
       return {...agent, title, status: title === 'Trabalhando' ? 'working' : 'idle',
         lastEventAt: time, statusSince: title === agent.title ? agent.statusSince : time};
     });
-    view.setPlayback?.({clock: () => Date.now(), scale: () => Number(agents.some(a => a.status === 'working'))});
     store.pushReplay({...snapshot, rev: ++revision, serverTime: time, agents});
     detail(selector.value);
   } catch {

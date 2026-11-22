@@ -13,6 +13,9 @@ BOOTSTRAP = ("import sys; sys.path.insert(0, sys.argv[1]); "
              "from arvertes_agents.__main__ import main; sys.exit(main())")
 ACTIONS = {
     "list_team": (),
+    "delegate_inspection": ("coordenador",),
+    "inspect_report": ("inspetor",),
+    "review_stage": ("auditor",),
     "catalog_file": ("catalogador",),
     "plan_production": ("coordenador",),
     "interpret_instruction": ("coordenador",),
@@ -52,7 +55,8 @@ class AgentBridge(QObject):
         self.error_size = 0
         self.failure = ""
         self.request_bytes = b""
-        self.callback = None
+        self.callback = self.failure_callback = None
+        self.quiet = False
 
     @property
     def busy(self):
@@ -86,18 +90,19 @@ class AgentBridge(QObject):
         self.latest.clear()
         self.call("list_team", {}, self.load_team)
 
-    def call(self, action, fields, callback=None):
+    def call(self, action, fields, callback=None, *, failed=None, quiet=False):
         if action not in ACTIONS or (action != "list_team" and not self.connected):
             self.notice.emit("Sentinel bloqueou: ferramenta sem conexão ou fora do contrato.")
-            return
+            return False
         if self.busy:
             self.notice.emit("Aguarde o fim da operação atual.")
-            return
+            return False
         request = (json.dumps({"version": 1, **fields, "action": action}, allow_nan=False) + "\n").encode()
         if len(request) > MAX_REQUEST:
             self.notice.emit("A entrada excede o limite de 64 KiB.")
-            return
+            return False
         self.request_bytes = request
+        self.failure_callback, self.quiet = failed, quiet
         self.operation, self.callback = action, callback
         self.output.clear()
         self.error_size = 0
@@ -106,6 +111,7 @@ class AgentBridge(QObject):
         self.process.start(self.python, ["-I", "-B", "-c", BOOTSTRAP, self.checkout])
         self.timer.start(95000 if action == "interpret_instruction" else 12000)
         self.changed.emit()
+        return True
 
     def send(self):
         self.process.write(self.request_bytes)
@@ -135,10 +141,10 @@ class AgentBridge(QObject):
         self.timer.stop()
         self.read_output()
         self.read_error()
-        action, callback = self.operation, self.callback
+        action, callback, failed, quiet = self.operation, self.callback, self.failure_callback, self.quiet
         if action is None:
             return
-        self.operation = self.callback = None
+        self.operation = self.callback = self.failure_callback = None
         self.request_bytes = b""
         completed = False
         try:
@@ -151,13 +157,18 @@ class AgentBridge(QObject):
                 raise ValueError("Agents recusou a operação. Confira a entrada e a revisão do checkout.")
             if callback:
                 callback(response["result"])
-            if action not in ("list_team", "recommend_device"):
+            if not quiet and action not in ("list_team", "recommend_device"):
                 self.result.emit(action, response["result"])
             completed = True
         except (UnicodeError, json.JSONDecodeError, RecursionError):
-            self.notice.emit("Agents retornou uma resposta fora do protocolo.")
+            message = "Agents retornou uma resposta fora do protocolo."
+            self.notice.emit(message)
+            if failed:
+                failed(message)
         except (ValueError, OSError) as error:
             self.notice.emit(str(error))
+            if failed:
+                failed(str(error))
         finally:
             for identifier in ACTIONS.get(action, ()):
                 self.latest[identifier] = "Consulta concluída" if completed else "Consulta interrompida"
@@ -213,6 +224,6 @@ class AgentBridge(QObject):
 
     def close(self):
         if self.busy:
-            self.callback = None
+            self.callback = self.failure_callback = None
             self.abort("Operação encerrada pelo Studio.")
             self.process.waitForFinished(1000)

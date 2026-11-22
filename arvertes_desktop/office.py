@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (
     QLabel, QPushButton, QVBoxLayout, QWidget,
 )
 from .roster import AGENTS, DEPARTMENTS
+from .production_page import event_label
 from .office_preview import OfficePreview
 
 PALETTE = {
@@ -36,14 +37,14 @@ class OfficeView(QGraphicsView):
         self.fitInView(self.sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
 
 
-def build_office(layout, navigate, bridge):
+def build_office(layout, navigate, bridge, production=None, auto=False):
     intro = QLabel("ARVERTES HQ  •  26 especialistas em cinco departamentos")
     intro.setObjectName("networkTag")
     layout.addWidget(intro)
     notice = QLabel("Selecione um personagem para acompanhar as consultas do Studio e a disponibilidade de suas ferramentas.")
     notice.setWordWrap(True)
     layout.addWidget(notice)
-    preview = OfficePreview()
+    preview = OfficePreview(auto)
     layout.addWidget(preview)
     fallback = QWidget()
     fallback_layout = QVBoxLayout(fallback)
@@ -147,10 +148,14 @@ def build_office(layout, navigate, bridge):
     detail.setWordWrap(True)
     fallback_layout.addWidget(detail)
 
+    statuses, history = {}, {}
+
     def show_agent():
         agent = by_id[select.currentData()]
-        status = bridge.status(agent.id)
-        detail.setText(f"{agent.name}  •  {agent.role}  •  {agent.department}\n{status}")
+        status = statuses.get(agent.id, bridge.status(agent.id))
+        recent = "\n".join(history.get(agent.id, [])[:3])
+        detail.setText(f"{agent.name}  •  {agent.role}  •  {agent.department}\n{status}" +
+                       (f"\n{recent}" if recent else ""))
         if not seats[agent.id].isSelected():
             scene.clearSelection()
             seats[agent.id].setSelected(True)
@@ -168,14 +173,24 @@ def build_office(layout, navigate, bridge):
     def update_status():
         colors = {"Trabalhando": "#f5ce66", "Disponível": "#67d8af", "Consulta concluída": "#67d8af",
                   "Consulta interrompida": "#f08a82", "Regras locais · monitoramento": "#67d8af"}
-        statuses = {key: bridge.status(key) for key in by_id}
+        statuses.update({key: (production.status(key) if production else None) or bridge.status(key)
+                         for key in by_id})
+        history.clear()
+        if production:
+            for event in production.runs.office_history():
+                for key in dict.fromkeys((event["sender"], event["recipient"])):
+                    if key in by_id and len(history.setdefault(key, [])) < 5:
+                        history[key].append(event_label(event))
         for key, status in statuses.items():
             indicators[key].setBrush(QBrush(QColor(colors.get(status, "#8a98a6"))))
             seats[key].setToolTip(by_id[key].name + " · " + status)
-        preview.update_states(statuses)
+        preview.update_states(statuses, history)
         show_agent()
 
     bridge.changed.connect(update_status)
+    if production:
+        production.changed.connect(update_status)
     select.currentIndexChanged.connect(show_agent)
     scene.selectionChanged.connect(choose_from_scene)
     update_status()
+    return preview

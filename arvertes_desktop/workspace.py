@@ -2,6 +2,8 @@
 from pathlib import Path
 import sqlite3
 
+from .project_runs import ProjectRuns
+
 
 def required(value: str, limit: int) -> str:
     value = value.strip()
@@ -39,6 +41,8 @@ class Workspace:
                     PRAGMA user_version = 1;
                     COMMIT;
                 """)
+            self.inspections = ProjectRuns(self.db)
+            self.inspections.recover()
         except Exception:
             self.db.close()
             raise

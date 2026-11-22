@@ -63,13 +63,33 @@ public final class LocalSessionTest extends Instrumentation {
             JSONObject metrics = new JSONObject().put("ram_total", 4096).put("ram_available", 1024)
                     .put("battery", 90).put("thermal", 0).put("cpu_pct", 1);
             String reply = null;
-            for (int attempt = 0; attempt < 30; attempt++) {
+            JSONObject checkpoint = null;
+            boolean disconnected = false;
+            String beforeReconnect = null;
+            for (int attempt = 0; attempt < 45; attempt++) {
                 try {
-                    JSONObject response = restored.request("poll", new JSONObject().put("metrics", metrics)
-                            .put("consent", true).put("reply", reply == null ? JSONObject.NULL : reply));
+                    JSONObject fields = new JSONObject().put("metrics", metrics).put("consent", true)
+                            .put("reply", reply == null ? JSONObject.NULL : reply)
+                            .put("work_enabled", true).put("work_result",
+                                    checkpoint == null ? JSONObject.NULL : checkpoint);
+                    JSONObject response = restored.request("poll", fields);
                     if (!response.isNull("probe")) reply = response.getString("probe");
+                    JSONObject work = response.optJSONObject("work");
+                    if (work != null && work.getInt("index") == 1 && !disconnected) {
+                        beforeReconnect = work.getString("lease");
+                        disconnected = true;
+                        restored.request("disconnect", new JSONObject());
+                        checkpoint = null;
+                        continue;
+                    }
+                    if (beforeReconnect != null && work != null) {
+                        if (work.getInt("index") != 1 || work.getString("lease").equals(beforeReconnect))
+                            throw new AssertionError("Checkpoint não retomou com nova reserva.");
+                        beforeReconnect = null;
+                    }
+                    checkpoint = FixtureWork.perform(work, () -> true);
                 } catch (StudioSession.Rejected error) {
-                    if (reply != null && error.status == 401) {
+                    if (reply != null && disconnected && beforeReconnect == null && error.status == 401) {
                         store.forget();
                         return;
                     }

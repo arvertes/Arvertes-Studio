@@ -68,3 +68,17 @@ Checklist manual pendente para Windows:
 10. Acessar Dispositivos e seguir a revisão manual em [NETWORK.md](NETWORK.md).
 
 A dependência GUI não está instalada no ambiente Linux de desenvolvimento utilizado para esta entrega. Nesta ampliação, os 11 testes do núcleo desktop passaram em Python 3.13.5 no Linux, incluindo catálogo, banco local, navegação e configurações. Os sete hashes dos arquivos Python usados nos testes coincidem com os do GitHub. A janela e a verificação de um Blender real seguem pendentes. A ampliação Network/Sentinel leva a navegação a 18 áreas. A CI Windows testa o núcleo e o smoke offscreen; consultar os logs desta revisão. Ver [pacote Windows](WINDOWS.md) e [Sentinel](SENTINEL.md).
+
+## Inspeção GLB e memória por projeto
+
+Em **Agentes IA**, conecte o checkout atualizado do Agents. Em **Configurações**, selecione um Blender 5.3.0 confiável. Registre um GLB na **Biblioteca** e abra **Tarefas → Inspeções GLB**. Escolha o orçamento de triângulos e, opcionalmente, solicite a cópia organizada em .blend. Delegar cria as mensagens e a fila. Iniciar autoriza uma inspeção sequencial.
+
+Nexus classifica o nome. O executor fixo do Blender importa uma cópia com materiais embutidos, analisa a geometria e gera o relatório técnico. A opção de organização aplica as coleções existentes em um .blend separado. Argus solicita o orçamento a Vector, envia achados a Aegis e o Sentinel verifica a geometria e a auditoria antes de encaminhar para revisão humana. O fluxo não publica nem aplica as correções ao original.
+
+A fila usa tabelas aditivas no SQLite existente. A memória por projeto guarda delegações, pedidos de ajuda, eventos e resultados por etapa. **Pausar** preserva checkpoints para retomada manual. **Cancelar** encerra a inspeção. Após encerramento inesperado, uma reserva sem renovação expira em até 150 segundos. A fila volta a oferecer a inspeção interrompida. Uma referência modificada entre autorização e cópia exige nova inspeção.
+
+O GLB local tem limite de 16 MiB, metadados e geometria limitados e recursos internos. O Blender é iniciado em modo offline, com scripts automáticos desativados, tempo máximo de 90 s e monitoramento de memória. O monitor encerra o processo ao detectar RSS acima de 1.536 MiB ou menos de 512 MiB livres. A amostragem não constitui limite de memória do sistema operacional. O relatório e .blend são gravados na pasta de inspeções da configuração local, somente para o operador.
+
+## Exportação de estado para MCP
+
+Em **Configurações → Exportar estado para MCP**, selecione uma pasta local. Confira `arvertes-status.json` antes de apontar o servidor stdio do Agents para ele. O resumo inclui nomes de projetos e aparelhos, estados e verificações do Studio. Caminhos dos assets, instruções dos rascunhos, resultados técnicos completos e credenciais ficam na máquina. Atualize a exportação manualmente para consultar uma nova revisão do estado.

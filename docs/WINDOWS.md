@@ -14,6 +14,10 @@ No Pull Request #2, conferir que a execução Desktop checks da revisão escolhi
 
 O Sentinel avalia evidências JSON declaradas e não autenticadas; nunca autoriza instalação, mesmo com todos os checks declarados. O Sentinel aplica os bloqueios de identidade, consentimento e protocolo na central de dispositivos. A ponte de agentes é opcional e usa um checkout privado separado. Não executar Blender/Unreal/modelos de IA junto do primeiro teste.
 
+## Atualização e dados
+
+Para preservar projetos, pareamentos e configurações, consulte [Atualização](ATUALIZACAO.md).
+
 ## Dados e retirada
 O programa grava configurações e rascunhos no diretório de configuração do usuário via QStandardPaths, não nos assets. Para remover o portátil, fechar e excluir a pasta extraída. Dados do workspace permanecem separados por padrão; preservar os arquivos se desejar continuar usando o projeto. O smoke automatizado usa pasta temporária distinta e não abre Blender. A CI usa modo Qt offscreen e não mede desempenho no notebook ou valida interface interativa real.
 

@@ -7,7 +7,7 @@ permissions:
 jobs:
   windows:
     runs-on: windows-2025
-    timeout-minutes: 20
+    timeout-minutes: 30
     env:
       QT_QPA_PLATFORM: offscreen
     steps:
@@ -15,6 +15,15 @@ jobs:
         with:
           persist-credentials: false
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/checkout@v4
+        with:
+          repository: marmottajr/habblaud
+          ref: faa1a012b5fbf632c66dc6801c5383e53a542406
+          path: upstream
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -24,17 +33,38 @@ jobs:
       - run: python -m unittest discover -s tests/desktop -v
       - name: Smoke test source
         run: python -m arvertes_desktop --self-test
+      - name: Build Habblaud visual bundle
+        shell: pwsh
+        run: |
+          python office_habblaud/prepare.py upstream
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Push-Location upstream
+          npm ci --ignore-scripts
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm run build:client
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Copy-Item LICENSE dist/client/HABBLAUD-LICENSE.txt
+          Set-Content -Encoding ascii dist/client/HABBLAUD-SOURCE.txt 'Habblaud / Márcio Junior / MIT / faa1a012b5fbf632c66dc6801c5383e53a542406'
+          Pop-Location
       - name: Build diagnostic portable
         shell: pwsh
         run: |
           git rev-parse HEAD | Set-Content -Encoding ascii arvertes_desktop/build_revision.txt
-          python -m PyInstaller --noconfirm --clean --onedir --windowed --name ArvertesStudio --add-data "arvertes_desktop/build_revision.txt:arvertes_desktop" desktop_launcher.py
+          python -m PyInstaller --noconfirm --clean --onedir --windowed --name ArvertesStudio --add-data "arvertes_desktop/build_revision.txt:arvertes_desktop" --add-data "arvertes_desktop/blender_worker.py:arvertes_desktop" --add-data "arvertes_studio:arvertes_studio" --add-data "upstream/dist/client:arvertes_desktop/habblaud_client" desktop_launcher.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Smoke test executable
         shell: pwsh
         run: |
           $p = Start-Process -FilePath "dist/ArvertesStudio/ArvertesStudio.exe" -ArgumentList "--self-test" -Wait -PassThru
           if ($p.ExitCode -ne 0) { throw "Executable smoke test failed: $($p.ExitCode)" }
+      - name: Smoke Habblaud on Windows
+        env:
+          QTWEBENGINE_CHROMIUM_FLAGS: --disable-gpu
+          QT_QUICK_BACKEND: software
+        shell: pwsh
+        run: |
+          $p = Start-Process -FilePath "dist/ArvertesStudio/ArvertesStudio.exe" -ArgumentList "--self-test-habblaud" -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "Habblaud smoke test failed: $($p.ExitCode)" }
       - name: Package
         shell: pwsh
         run: |
@@ -49,3 +79,23 @@ jobs:
             dist/SHA256.txt
           if-no-files-found: error
           retention-days: 14
+  blender:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Blender 5.3.0 oficial
+        run: |
+          cd "$RUNNER_TEMP"
+          release=https://download.blender.org/release/Blender5.3
+          curl -fsSLO "$release/blender-5.3.0-linux-x64.tar.xz"
+          curl -fsSL "$release/blender-5.3.0.sha256" | grep 'linux-x64.tar.xz' | sha256sum -c
+          tar -xJf blender-5.3.0-linux-x64.tar.xz
+      - name: Add-on e executor de cópia local
+        run: |
+          blender="$RUNNER_TEMP/blender-5.3.0-linux-x64/blender"
+          "$blender" --version
+          "$blender" --background --factory-startup --offline-mode --python-exit-code 1 --python tests/integration/test_blender.py
+          python tests/integration/check_blender_worker.py "$blender"

@@ -24,6 +24,8 @@ from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.x509.oid import NameOID
 from zeroconf import IPVersion, ServiceInfo, Zeroconf
 
+from .remote_work import KIND, RESERVATION_MIB, RemoteWork
+
 SERVICE = "_arvertes._tcp.local."
 LOCAL_NETWORKS = tuple(map(IPv4Network, ("10.0.0.0/8", "172.16.0.0/12",
                                         "192.168.0.0/16", "169.254.0.0/16")))
@@ -121,6 +123,10 @@ class Registry:
             record = db.execute("SELECT token_hash FROM devices WHERE id=? AND transport=?", (device, transport)).fetchone()
         return record is not None and hmac.compare_digest(record[0], digest(token))
 
+    def rename(self, device, name):
+        with closing(self.connect()) as db, db:
+            db.execute("UPDATE devices SET name=? WHERE id=?", (name, device))
+
     def revoke(self, device):
         with closing(self.connect()) as db, db:
             db.execute("DELETE FROM devices WHERE id=?", (device,))
@@ -178,6 +184,7 @@ class DeviceHub:
     def __init__(self, path):
         self.registry = Registry(path)
         self.context, self.fingerprint = tls_identity(self.registry)
+        self.work = RemoteWork(self.registry)
         self.lock = RLock()
         self.listeners = {}
         self.ticket = None
@@ -223,11 +230,14 @@ class DeviceHub:
     def revoke(self, device):
         with self.lock:
             self.registry.revoke(device)
+            self.work.stop(device, cancel=True)
             self.sessions.pop(device, None)
             self.probes.pop(device, None)
 
     def disconnect(self, device, reason):
         self.sessions.pop(device, None)
+        if self.work.latest(device)[0] in ("queued", "running"):
+            self.work.stop(device)
         if device in self.probes and self.probes[device]["state"] in ("queued", "sent"):
             self.probes[device].update(state="cancelled", detail=reason)
 
@@ -246,6 +256,32 @@ class DeviceHub:
             return [(key, name, dict(self.sessions.get(key, {})), dict(self.probes.get(key, {})))
                     for key, name in self.registry.devices()]
 
+    def rename(self, device, name):
+        name = name.strip()
+        if not 1 <= len(name) <= 80 or not name.isprintable():
+            raise ValueError("Use um nome de aparelho de 1 a 80 caracteres.")
+        with self.lock:
+            self.registry.rename(device, name)
+
+    def queue_work(self, device, kind=KIND):
+        with self.lock:
+            self.sweep()
+            session = self.sessions.get(device)
+            probe = self.probes.get(device, {})
+            if (not session or not session["work_enabled"]
+                    or not self.work_limits(session["metrics"])
+                    or probe.get("state") in ("queued", "sent")):
+                raise ValueError(SENTINEL + "aparelho indisponível, sem reserva livre ou sem consentimento para trabalho.")
+            self.work.create(device, kind)
+
+    @staticmethod
+    def work_limits(metrics):
+        return limits_ok(metrics) and metrics["ram_available"] >= 512 + RESERVATION_MIB
+
+    def cancel_work(self, device):
+        with self.lock:
+            self.work.stop(device, cancel=True)
+
     def send_probe(self, device):
         with self.lock:
             self.sweep()
@@ -254,6 +290,8 @@ class DeviceHub:
             session = self.sessions[device]
             if not session["consent"] or not limits_ok(session["metrics"]):
                 raise ValueError(SENTINEL + "consentimento ou limites de recursos insuficientes.")
+            if self.work.latest(device)[0] in ("queued", "running"):
+                raise ValueError(SENTINEL + "aparelho com trabalho reservado.")
             previous = self.probes.get(device)
             if previous and previous["state"] in ("queued", "sent"):
                 raise ValueError("Já existe uma mensagem em andamento.")
@@ -296,17 +334,23 @@ class DeviceHub:
             if action == "disconnect" and data.keys() == base:
                 self.disconnect(device, "Aparelho pausou a sessão.")
                 return {}
-            if action != "poll" or data.keys() != base | {"metrics", "reply", "consent"}:
+            poll = base | {"metrics", "reply", "consent"}
+            supports_work = data.keys() == poll | {"work_enabled", "work_result"}
+            if action != "poll" or (data.keys() != poll and not supports_work):
                 raise Denied(403, SENTINEL + "operação fora do protocolo.")
             metrics = validate_telemetry(data["metrics"])
             if type(data["consent"]) is not bool:
                 raise Denied(400, "Indicador de consentimento inválido.")
             consent = data["consent"]
+            work_enabled = data.get("work_enabled", False)
+            if type(work_enabled) is not bool:
+                raise Denied(400, "Consentimento de trabalho inválido.")
             reply = data["reply"]
             if reply is not None and (not isinstance(reply, str) or not DEVICE_ID.fullmatch(reply)):
                 raise Denied(400, "Resposta de mensagem inválida.")
             self.sessions[device] = {"listener": listener, "transport": listener.transport,
-                                     "metrics": metrics, "consent": consent, "seen": monotonic()}
+                                     "metrics": metrics, "consent": consent, "work_enabled": work_enabled,
+                                     "seen": monotonic()}
             probe = self.probes.get(device)
             if probe and probe["state"] in ("queued", "sent") and (not consent or not limits_ok(metrics)):
                 message = "Sentinel pausou o diagnóstico por consentimento ou recursos."
@@ -316,8 +360,16 @@ class DeviceHub:
                 probe.update(state="confirmed", detail="Resposta autenticada recebida.")
             if probe and probe["state"] in ("queued", "sent"):
                 probe["state"] = "sent"
-                return {"probe": probe["id"]}
-            return {"probe": None}
+                return {"probe": probe["id"], "work_version": 1, "work": None}
+            try:
+                offer = self.work.exchange(device, supports_work and work_enabled and self.work_limits(metrics),
+                                           data.get("work_result"))
+            except ValueError as error:
+                raise Denied(400, str(error)) from error
+            if offer == "rejected":
+                self.alert(SENTINEL + "resultado do trabalho móvel divergiu do cálculo local.")
+                offer = None
+            return {"probe": None, "work_version": 1, "work": offer}
 
     def alert(self, message):
         with self.lock:
@@ -384,8 +436,9 @@ class Listener(ThreadingHTTPServer):
         discovery = None
         try:
             discovery = Zeroconf(interfaces=[str(self.address.ip)], ip_version=IPVersion.V4Only)
+            host = f"arvertes-{self.hub.fingerprint[:12]}-{self.transport.replace('_', '-')}.local."
             info = ServiceInfo(SERVICE, f"Arvertes-{self.hub.fingerprint[:12]}-{self.transport}.{SERVICE}",
-                               addresses=[self.address.ip.packed], port=self.server_port,
+                               server=host, addresses=[self.address.ip.packed], port=self.server_port,
                                properties={"version": "1", "transport": self.transport})
             discovery.register_service(info, allow_name_change=True)
             with self.hub.lock:

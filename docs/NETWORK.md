@@ -21,3 +21,11 @@ A RAM exibida é a disponível em cada nó, em MiB. No Windows, CPU representa c
 ## Diagnóstico físico
 
 No notebook e no POCO, registre separadamente Wi-Fi, USB, dois aparelhos, suspensão, desconexão e revogação. Confira primeiro se surgiu uma interface de rede no Windows. Se houver interface, anote se o problema foi timeout, recusa de conexão, certificado divergente, código expirado ou credencial revogada. Confirme que a mensagem só chega a **Confirmada** após resposta autenticada. Mantenha endereços, códigos, identificadores, relatórios e nomes reais fora do Git. A instrumentação Android usa o endereço de loopback do runner via emulador e não valida cabos, controladores, ROMs ou o firewall do notebook.
+
+## Trabalho leve com checkpoint
+
+O Mobile atualizado pode autorizar **cálculo leve de diagnóstico** enquanto está visível. Com o aparelho selecionado no Studio, use **Iniciar cálculo leve**. A única ferramenta móvel é uma sequência SHA-256 sobre dados sintéticos criados para a tarefa. O Studio verifica cada resultado antes de salvar o checkpoint. A reserva é de 8 MiB por aparelho acima de 512 MiB livres e só admite uma tarefa ativa por telefone. O teste de mensagens e o cálculo não são despachados juntos para o mesmo aparelho.
+
+Desconexão, pausa ou perda de consentimento invalidam a reserva e preservam o último checkpoint. Ao reconectar e autorizar, a tarefa recomeça na primeira etapa pendente. Cancelamento e revogação encerram a tarefa. Comandos, arquivos e operações de produção ficam fora do contrato móvel. O nome de exibição pode ser alterado no Studio e fica associado à identidade pareada, sem trocar o certificado.
+
+Mobile e Studio negociam a extensão do protocolo. Aplicações da etapa 1 continuam a trocar mensagens. Para cálculo leve, atualize ambas. Ver [Atualização](ATUALIZACAO.md).

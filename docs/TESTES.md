@@ -44,3 +44,10 @@ O modelo é um personagem abstrato com 58 malhas e sem materiais, texturas, UVs,
 - **Físico.** USB RNDIS/NCM, mDNS no notebook, POCO X7 Pro, Galaxy S21 e consumo nesses aparelhos exigem a bancada do [manual de conexão](NETWORK.md). O resultado de um build ou de um emulador não confirma esses itens.
 
 Os checks e o download dos artefatos da revisão atual ficam na [PR do Studio](https://github.com/arvertes/Arvertes-Studio/pull/2/checks).
+
+## Segunda etapa
+
+- **Automatizado.** Fila por projeto, recuperação SQLite, checkpoints com reserva expirada, cancelamento e bloqueio independente do Sentinel. Clientes TLS locais verificam consentimento, reserva individual, checkpoint no reinício, rejeição de resultado incorreto e resposta atrasada após cancelamento.
+- **Emulado.** O Android real no emulador usa Keystore e TLS, executa quatro etapas de SHA-256 e reconecta no primeiro checkpoint pendente. A disponibilidade de bateria e memória para o cálculo usa fixture. O APK de instalação paralela é iniciado ao lado do aplicativo normal no mesmo emulador.
+- **Automatizado com executável real.** Blender 5.3.0 importa, organiza e reabre um .blend de trabalho e verifica que o GLB de origem mantém o mesmo hash. O teste está em `tests/integration/check_blender_worker.py`.
+- **Físico.** Os testes do notebook e dos celulares permanecem para a bancada. Descoberta Wi-Fi e USB reais, consumo do WebEngine e execução prolongada precisam ser observados nesses aparelhos.

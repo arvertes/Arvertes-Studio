@@ -4,6 +4,7 @@ on:
     paths:
       - 'mobile/**'
       - 'arvertes_desktop/network.py'
+      - 'arvertes_desktop/remote_work.py'
       - '.github/workflows/android-mobile.yml'
   workflow_dispatch:
 permissions:
@@ -50,6 +51,16 @@ jobs:
           cat /tmp/arvertes-permissions.txt
           diff -u <(printf "%s\n" "uses-permission: name='android.permission.INTERNET'") <(grep '^uses-permission' /tmp/arvertes-permissions.txt)
           sha256sum "$apk" | tee mobile/app/build/outputs/apk/debug/SHA256.txt
+      - name: Prepare APKs for upgrade or parallel installation
+        run: |
+          mkdir -p "$RUNNER_TEMP/arvertes-apks"
+          cp mobile/app/build/outputs/apk/debug/app-debug.apk "$RUNNER_TEMP/arvertes-apks/app-debug.apk"
+          gradle -p mobile --no-daemon -PparallelInstall :app:lintDebug :app:assembleDebug
+          cp mobile/app/build/outputs/apk/debug/app-debug.apk "$RUNNER_TEMP/arvertes-apks/app-stage2-debug.apk"
+          cd "$RUNNER_TEMP/arvertes-apks"
+          "$ANDROID_HOME/build-tools/34.0.0/apksigner" verify --verbose app-stage2-debug.apk
+          "$ANDROID_HOME/build-tools/34.0.0/aapt" dump badging app-stage2-debug.apk | grep "name='com.arvertes.mobile.stage2'"
+          sha256sum app-debug.apk app-stage2-debug.apk > SHA256.txt
       - name: Enable KVM for emulator
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
@@ -65,7 +76,8 @@ jobs:
         with:
           name: arvertes-mobile-debug
           path: |
-            mobile/app/build/outputs/apk/debug/app-debug.apk
-            mobile/app/build/outputs/apk/debug/SHA256.txt
+            ${{ runner.temp }}/arvertes-apks/app-debug.apk
+            ${{ runner.temp }}/arvertes-apks/app-stage2-debug.apk
+            ${{ runner.temp }}/arvertes-apks/SHA256.txt
           if-no-files-found: error
           retention-days: 14

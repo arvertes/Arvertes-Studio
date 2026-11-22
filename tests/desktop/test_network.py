@@ -9,6 +9,7 @@ from time import monotonic
 import unittest
 
 from arvertes_desktop.network import DeviceHub, SESSION_TIMEOUT
+from arvertes_desktop.remote_work import digest_step
 
 METRICS = {"ram_available": 900, "ram_total": 4096, "cpu_pct": 2, "battery": 95, "thermal": 0}
 
@@ -123,6 +124,54 @@ class NetworkTests(unittest.TestCase):
         self.listener = self.start("wifi_local")
         self.assertEqual(original, self.hub.fingerprint)
         self.assertEqual(self.poll()[0], 200)
+
+    def work_poll(self, enabled=True, result=None, metrics=METRICS):
+        return self.request("poll", reply=None, consent=True, metrics=metrics,
+                            work_enabled=enabled, work_result=result)
+
+    def test_mobile_work_checkpoint_resume_and_authentication(self):
+        self.pair()
+        device = self.identity["id"]
+        self.poll()
+        with self.assertRaisesRegex(ValueError, "Sentinel"):
+            self.hub.queue_work(device)
+        self.work_poll()
+        with self.assertRaisesRegex(ValueError, "Sentinel"):
+            self.hub.queue_work(device, "blender")
+        self.hub.queue_work(device)
+        with self.assertRaises(ValueError):
+            self.hub.queue_work(device)
+        with self.assertRaisesRegex(ValueError, "reservado"):
+            self.hub.send_probe(device)
+        first = self.work_poll()[1]["work"]
+        result = {"lease": first["lease"], "digest": digest_step(first["seed"], first["index"])}
+        second = self.work_poll(result=result)[1]["work"]
+        self.assertEqual(second["index"], 1)
+        self.hub.close()
+        self.hub = DeviceHub(self.path)
+        self.addCleanup(self.hub.close)
+        self.listener = self.start("wifi_local")
+        self.assertEqual(self.hub.work.latest(device), ("paused", 1))
+        resumed = self.work_poll(result=result)[1]["work"]
+        self.assertEqual(resumed["index"], 1)
+        self.assertNotEqual(resumed["lease"], second["lease"])
+        self.hub.cancel_work(device)
+        late = {"lease": resumed["lease"], "digest": digest_step(resumed["seed"], resumed["index"])}
+        self.assertIsNone(self.work_poll(result=late)[1]["work"])
+        self.assertEqual(self.hub.work.latest(device), ("cancelled", 1))
+
+    def test_mobile_work_refuses_bad_results_and_low_budget(self):
+        self.pair()
+        device = self.identity["id"]
+        self.work_poll(metrics={**METRICS, "ram_available": 519})
+        with self.assertRaisesRegex(ValueError, "Sentinel"):
+            self.hub.queue_work(device)
+        self.work_poll()
+        self.hub.queue_work(device)
+        offered = self.work_poll()[1]["work"]
+        self.work_poll(result={"lease": offered["lease"], "digest": "0" * 64})
+        self.assertEqual(self.hub.work.latest(device), ("rejected", 0))
+        self.assertIn("divergiu", self.hub.notice)
 
     def test_public_or_wildcard_addresses_rejected(self):
         for address in ("0.0.0.0/0", "8.8.8.8/24", "127.0.0.1/8"):

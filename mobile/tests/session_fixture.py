@@ -18,10 +18,13 @@ with TemporaryDirectory() as directory:
             for device, _, session, probe in hub.snapshot():
                 if session and session["consent"] and not probe:
                     hub.send_probe(device)
-                if probe.get("state") == "confirmed":
+                work, _ = hub.work.latest(device)
+                if probe.get("state") == "confirmed" and session and session["work_enabled"] and not work:
+                    hub.queue_work(device)
+                if work == "completed":
                     hub.revoke(device)
-                    print("Studio recebeu resposta autenticada e revogou a sessão.", flush=True)
-                    # Mantenha o serviço ativo até o cliente receber a rejeição.
+                    print("Studio confirmou mensagem, retomada e quatro checkpoints de cálculo e revogou a sessão.",
+                          flush=True)
                     sleep(5)
                     sys.exit(0)
             sleep(0.05)

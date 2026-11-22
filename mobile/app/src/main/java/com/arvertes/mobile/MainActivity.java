@@ -43,7 +43,12 @@ public final class MainActivity extends Activity {
     private String reply;
     private boolean active, busy;
     private int generation, failures, pairAttempt;
-    private Switch consent;
+    private Switch consent, workConsent;
+    private TextView workStatus;
+    private volatile boolean allowWork;
+    private volatile int workEpoch;
+    private boolean supportsWork;
+    private JSONObject workReply;
     private final Runnable tick = new Runnable() {
         @Override public void run() {
             MobileMetrics.Sample sample = refresh();
@@ -111,6 +116,19 @@ public final class MainActivity extends Activity {
         status = metric(jobs);
         consent.setOnCheckedChangeListener((button, checked) -> {
             reply = null;
+            refresh();
+        });
+
+        workConsent = new Switch(this);
+        workConsent.setText("Autorizar cálculo leve de diagnóstico");
+        workConsent.setTextColor(TEXT);
+        workConsent.setSaveEnabled(false);
+        jobs.addView(workConsent);
+        workStatus = metric(jobs);
+        workConsent.setOnCheckedChangeListener((button, checked) -> {
+            allowWork = checked;
+            workEpoch++;
+            workReply = null;
             refresh();
         });
 
@@ -224,6 +242,9 @@ public final class MainActivity extends Activity {
         failures = 0;
         connected = null;
         reply = null;
+        workReply = null;
+        supportsWork = false;
+        workConsent.setChecked(false);
         consent.setChecked(false);
         connectionStatus.setText(reason);
         if (previous != null) io.execute(() -> {
@@ -239,19 +260,33 @@ public final class MainActivity extends Activity {
         String response = reply;
         StudioSession session = paired;
         boolean allowed = sample.pauseReason(consent.isChecked()) == null;
+        boolean canWork = supportsWork;
+        JSONObject checkpoint = workReply;
+        boolean allowedWork = canWork && sample.available() >= 520 && sample.pauseReason(allowWork) == null;
+        int workRequest = workEpoch;
         int request = generation;
         busy = true;
         io.execute(() -> {
             try {
-                JSONObject result = session.request("poll", new JSONObject().put("metrics", sample.payload())
-                        .put("reply", response != null && allowed ? response : JSONObject.NULL)
-                        .put("consent", allowed));
+                JSONObject fields = new JSONObject().put("metrics", sample.payload())
+                        .put("reply", response != null && allowed ? response : JSONObject.NULL).put("consent", allowed);
+                if (canWork) {
+                    boolean enabled = allowedWork && allowWork && workEpoch == workRequest;
+                    fields.put("work_enabled", enabled).put("work_result",
+                            checkpoint != null && enabled ? checkpoint : JSONObject.NULL);
+                }
+                JSONObject result = session.request("poll", fields);
+                boolean version = result.optInt("work_version", 0) == 1;
+                JSONObject next = FixtureWork.perform(result.optJSONObject("work"),
+                        () -> allowedWork && allowWork && workEpoch == workRequest);
                 String nonce = result.isNull("probe") ? null : result.getString("probe");
                 if (nonce != null && !nonce.matches("[0-9a-f]{32}"))
                     throw new IOException("Mensagem de diagnóstico inválida.");
                 handler.post(() -> {
                     if (generation != request) return;
                     connected = session;
+                    supportsWork = version;
+                    workReply = allowWork && workEpoch == workRequest ? next : null;
                     if (savedPairing != session) {
                         savedPairing = session;
                         io.execute(() -> {
@@ -289,6 +324,7 @@ public final class MainActivity extends Activity {
                         pause(describe(error) + " Gere novo código no Studio.");
                         return;
                     }
+                    supportsWork = false;
                     failures++;
                     connectionStatus.setText(describe(error) + " Tentando reconectar.");
                     discovery.resolve(session, next -> handler.post(() -> {
@@ -320,6 +356,12 @@ public final class MainActivity extends Activity {
         String blocked = sample.pauseReason(consent.isChecked());
         status.setText(blocked != null ? blocked : reply == null
                 ? "Disponível para mensagens de diagnóstico." : "Mensagem autenticada pronta para responder.");
+        String workPause = sample.pauseReason(allowWork);
+        workStatus.setText(!supportsWork ? "Cálculo leve disponível com um Studio atualizado."
+                : workPause != null ? workPause
+                : sample.available() < 520 ? "Pausado: reserva de memória indisponível."
+                : workReply == null ? "Aguardando etapa sintética do Studio."
+                : "Etapa calculada. Aguardando confirmação do Studio.");
         return sample;
     }
 

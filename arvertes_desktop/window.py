@@ -3,11 +3,11 @@ from dataclasses import replace
 from pathlib import Path
 import sqlite3
 
-from PySide6.QtCore import QProcess, QStandardPaths, QTimer, Qt
+from PySide6.QtCore import QEvent, QProcess, QStandardPaths, QTimer, Qt
 from PySide6.QtWidgets import (
     QFileDialog, QFrame, QHBoxLayout, QLabel, QLineEdit, QListWidget,
     QMainWindow, QMessageBox, QPushButton, QScrollArea, QSizePolicy,
-    QStackedWidget, QVBoxLayout, QWidget, QStyle, QListWidgetItem,
+    QStackedWidget, QTabWidget, QVBoxLayout, QWidget, QStyle, QListWidgetItem,
 )
 
 from .agent_bridge import AgentBridge
@@ -20,6 +20,10 @@ from .office import build_office
 from .sentinel_page import build_sentinel
 from .roster import AGENTS
 from .pages import WorkspacePages, build_agents
+from .production import Production
+from .production_page import build_production
+from .status_snapshot import snapshot, export
+from .office_preview import BUILD
 from .workspace import Workspace
 from .settings import Settings, load_settings, save_settings, validate_blender_path
 from .theme import DARK_THEME
@@ -58,7 +62,8 @@ def panel() -> tuple[QFrame, QVBoxLayout]:
 class StudioWindow(QMainWindow):
     def __init__(self, *, config_dir=None):
         super().__init__()
-        self.setWindowTitle("Arvertes Studio — 0.2.2 dev")
+        self.setWindowTitle("Arvertes Studio — 0.2.3 dev")
+        self.auto_office = config_dir is None and (BUILD / "index.html").is_file()
         self.setMinimumSize(860, 540)
         self.resize(1200, 760)
         self.setStyleSheet(DARK_THEME)
@@ -86,6 +91,8 @@ class StudioWindow(QMainWindow):
             self.network_error = str(error)
         self.agent_bridge = AgentBridge(self)
         self.work_pages = WorkspacePages(self, self.workspace) if self.workspace else None
+        self.production = Production(self, self.workspace, self.agent_bridge, self.config_path.parent / "inspections",
+                                     lambda: self.settings.blender_path) if self.workspace else None
 
         self.process = QProcess(self)
         self.process.setProcessChannelMode(QProcess.ProcessChannelMode.MergedChannels)
@@ -154,7 +161,8 @@ class StudioWindow(QMainWindow):
                 build_agents(layout, self.agent_bridge)
                 build_agent_tools(layout, self.agent_bridge, self.settings, self._save_agents)
             elif section.key == "office":
-                build_office(layout, self._navigate, self.agent_bridge)
+                self.office_preview = build_office(layout, self._navigate, self.agent_bridge,
+                                                  self.production, self.auto_office)
             elif section.key == "sentinel":
                 build_sentinel(layout, self.network, self.agent_bridge)
             elif section.key == "network":
@@ -163,6 +171,18 @@ class StudioWindow(QMainWindow):
                 if self.work_pages is None:
                     layout.addWidget(label("Banco local indisponível: " + self.workspace_error, "muted"))
                     layout.addStretch()
+                elif section.key == "tasks":
+                    tabs = QTabWidget()
+                    for title in ("Rascunhos", "Inspeções GLB"):
+                        tab = QWidget()
+                        tabs.addTab(tab, title)
+                        tab_layout = QVBoxLayout(tab)
+                        if title == "Rascunhos":
+                            self.work_pages.tasks_page(tab_layout)
+                        else:
+                            refresh = build_production(tab_layout, self.production, self.work_pages.protect)
+                            tabs.currentChanged.connect(lambda index: refresh() if index == 1 else None)
+                    layout.addWidget(tabs, 1)
                 else:
                     getattr(self.work_pages, section.key + "_page")(layout)
             else:
@@ -190,7 +210,7 @@ class StudioWindow(QMainWindow):
             self.work_pages.refresh()
         self.menu.currentRowChanged.connect(self.pages.setCurrentIndex)
         self.menu.currentRowChanged.connect(lambda row: self.refresh_dashboard() if row == 0 else None)
-        self.menu.setCurrentRow(0)
+        self._navigate("office" if self.auto_office else "home")
         self.statusBar().showMessage("Versão de desenvolvimento • Conexões locais de diagnóstico")
 
     def _navigate(self, key):
@@ -225,7 +245,25 @@ class StudioWindow(QMainWindow):
             form.addWidget(label("Não foi possível carregar a configuração anterior: " + self.load_error, "muted"))
         form.addWidget(label("Configuração local: " + str(self.config_path), "muted"))
         layout.addWidget(frame)
+        sharing = QPushButton("Exportar estado para MCP")
+        sharing.setToolTip("Exporta nomes e estados locais. Revise o JSON antes de compartilhá-lo.")
+        sharing.clicked.connect(self._export_snapshot)
+        layout.addWidget(sharing)
         layout.addStretch()
+
+    def _export_snapshot(self):
+        directory = QFileDialog.getExistingDirectory(self, "Pasta para exportar arvertes-status.json")
+        if directory:
+            try:
+                target = Path(directory) / "arvertes-status.json"
+                if target.exists() and QMessageBox.question(
+                        self, "Atualizar exportação", "Substituir o arquivo de estado desta pasta?"
+                ) != QMessageBox.StandardButton.Yes:
+                    return
+                export(target, snapshot(self.workspace, self.network, self.agent_bridge))
+                self.statusBar().showMessage("Estado exportado. Revise o arquivo antes de compartilhá-lo.", 6000)
+            except (OSError, ValueError, sqlite3.Error) as error:
+                QMessageBox.warning(self, "Exportação indisponível", str(error))
 
     def _path_changed(self):
         self.blender_status.setText("Blender não verificado")
@@ -302,7 +340,14 @@ class StudioWindow(QMainWindow):
             self.feedback.setText("O executável não retornou uma versão válida do Blender.")
         self.blender_status.setText("Blender não verificado")
 
+    def changeEvent(self, event):
+        super().changeEvent(event)
+        if event.type() == QEvent.Type.WindowStateChange and hasattr(self, "office_preview"):
+            self.office_preview.set_suspended(self.isMinimized())
+
     def closeEvent(self, event):
+        if self.production:
+            self.production.close()
         self.agent_bridge.close()
         if self.network is not None:
             self.network.close()

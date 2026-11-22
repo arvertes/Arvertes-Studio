@@ -69,7 +69,7 @@ final class StudioSession {
                 || ip[0] == 192 && ip[1] == 168 || ip[0] == 169 && ip[1] == 254;
     }
 
-    private static String hex(byte[] bytes) {
+    static String hex(byte[] bytes) {
         StringBuilder result = new StringBuilder(bytes.length * 2);
         for (byte value : bytes) {
             result.append(Character.forDigit((value & 255) >>> 4, 16));

@@ -14,6 +14,8 @@ def main() -> int:
     app = QApplication(sys.argv)
     app.setApplicationName("Arvertes Studio")
     app.setOrganizationName("Arvertes")
+    if sys.argv[1:] == ["--self-test-habblaud"]:
+        return smoke_habblaud(app, StudioWindow)
     if sys.argv[1:] == ['--self-test']:
         return smoke_test(app, StudioWindow)
     window = StudioWindow()
@@ -90,6 +92,45 @@ def smoke_test(app, window_type):
             window.close()
             app.processEvents()
     return 0
+
+
+def smoke_habblaud(app, window_type):
+    """Confere renderização local e encerramento ao sair do escritório."""
+    from tempfile import TemporaryDirectory
+    from PySide6.QtCore import QEventLoop, QTimer
+    with TemporaryDirectory(prefix="arvertes-office-smoke-") as directory:
+        window = window_type(config_dir=directory)
+        loop = QEventLoop()
+        ready = []
+        timer = QTimer()
+        timer.setInterval(300)
+        window.show()
+        window._navigate("office")
+        app.processEvents()
+        preview = window.office_preview
+        preview.toggle()
+        if preview.view is None:
+            window.close()
+            return 2
+
+        def result(count):
+            if count == 26:
+                ready.append(True)
+                loop.quit()
+
+        def poll():
+            preview.page.runJavaScript("document.querySelectorAll('#agents option').length", result)
+
+        timer.timeout.connect(poll)
+        timer.start()
+        QTimer.singleShot(20000, loop.quit)
+        loop.exec()
+        timer.stop()
+        window._navigate("tasks")
+        app.processEvents()
+        suspended = preview.server is None and preview.view is None
+        window.close()
+        return 0 if ready and suspended else 3
 
 
 if __name__ == "__main__":

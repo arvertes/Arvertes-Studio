@@ -6,7 +6,7 @@ from urllib.parse import unquote, urlsplit
 import json
 import mimetypes
 
-from PySide6.QtCore import Signal
+from PySide6.QtCore import QTimer, Signal
 from PySide6.QtWidgets import QLabel, QPushButton, QVBoxLayout, QWidget
 
 BUILD = Path(__file__).resolve().parent / "habblaud_client"
@@ -78,28 +78,35 @@ class PreviewServer:
 class OfficePreview(QWidget):
     """Explicit, optional WebEngine preview; no process runs until requested."""
     active_changed = Signal(bool)
-    def __init__(self):
+    def __init__(self, auto=False):
         super().__init__()
+        self.desired, self.suspended = auto, False
         self.server = None
         self.view = None
-        self.states = {}
+        self.states = {"states": {}, "history": {}}
         self.box = QVBoxLayout(self)
         self.box.setContentsMargins(0, 0, 0, 0)
-        self.button = QPushButton("Abrir escritório original (experimental)")
+        self.button = QPushButton("Abrir escritório Habblaud")
         self.box.addWidget(self.button)
-        self.message = QLabel("Motor visual Habblaud (MIT). Requer bundle validado e Qt WebEngine opcional. Sem acesso às sessões Claude/Codex.")
+        self.message = QLabel("Habblaud · motor visual de Márcio Junior (MIT)")
         self.message.setWordWrap(True)
         self.box.addWidget(self.message)
         self.button.clicked.connect(self.toggle)
 
-    def update_states(self, states):
-        self.states = states
+    def update_states(self, states, history):
+        self.states = {"states": states, "history": history}
         if self.server:
-            self.server.server.states = json.dumps(states).encode("ascii")
+            self.server.server.states = json.dumps(self.states).encode("ascii")
 
     def toggle(self):
-        if self.view is not None:
+        self.desired = self.view is None
+        if self.desired:
+            self.activate()
+        else:
             self.stop()
+
+    def activate(self):
+        if not self.desired or self.suspended or not self.isVisible() or self.view is not None:
             return
         if not (BUILD / "index.html").is_file():
             self.message.setText("Bundle Habblaud ainda não instalado nesta edição. Use o mapa leve abaixo.")
@@ -113,7 +120,7 @@ class OfficePreview(QWidget):
             return
         try:
             self.server = PreviewServer(BUILD)
-            self.update_states(self.states)
+            self.update_states(**self.states)
             origin = QUrl(self.server.url)
             class LocalOnly(QWebEngineUrlRequestInterceptor):
                 def interceptRequest(self, info):
@@ -130,8 +137,8 @@ class OfficePreview(QWidget):
             self.view.setPage(self.page)
             self.box.addWidget(self.view, 1)
             self.view.load(origin)
-            self.button.setText("Fechar escritório original")
-            self.message.setText("Habblaud · estados das consultas locais do Studio.")
+            self.button.setText("Usar mapa leve")
+            self.message.setText("Habblaud · eventos de produção e movimento ambiente decorativo")
             self.active_changed.emit(True)
         except (OSError, RuntimeError, ValueError) as error:
             self.stop()
@@ -142,14 +149,26 @@ class OfficePreview(QWidget):
             self.view.stop()
             self.box.removeWidget(self.view)
             self.view.hide()
+            self.page.deleteLater()
             self.view.deleteLater()
-            self.view = None
+            self.view = self.page = self.profile = self.interceptor = None
         if self.server is not None:
             self.server.close()
             self.server = None
-        self.button.setText("Abrir escritório original (experimental)")
-        self.message.setText("Prévia fechada. Mapa leve disponível.")
+        self.button.setText("Abrir escritório Habblaud")
+        self.message.setText("Modo econômico · mapa Qt")
         self.active_changed.emit(False)
+
+    def set_suspended(self, suspended):
+        self.suspended = suspended
+        if suspended and self.view is not None:
+            self.stop()
+        elif not suspended:
+            QTimer.singleShot(0, self.activate)
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        QTimer.singleShot(0, self.activate)
 
     def hideEvent(self, event):
         if self.server is not None or self.view is not None:

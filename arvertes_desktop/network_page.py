@@ -5,12 +5,14 @@ from time import monotonic
 
 from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import (
-    QComboBox, QHBoxLayout, QLineEdit, QMessageBox, QPushButton,
+    QComboBox, QHBoxLayout, QInputDialog, QLineEdit, QMessageBox, QPushButton,
 )
 from .network import SENTINEL, THERMAL_STATES, desktop_metrics, interfaces
 from .pages import plain, rows, table
 
 TRANSPORTS = (("Wi-Fi local", "wifi_local"), ("Rede por USB", "usb"))
+WORK_STATES = {"queued": "Reservado", "running": "Em execução", "paused": "Pausado",
+               "completed": "Concluído", "cancelled": "Cancelado", "rejected": "Rejeitado"}
 PROBE_STATES = {"queued": "Na fila", "sent": "Aguardando resposta", "confirmed": "Confirmada",
                 "cancelled": "Cancelada", "expired": "Expirada"}
 
@@ -47,7 +49,7 @@ def build_network(layout, hub, hub_error, bridge):
     layout.addLayout(actions)
     layout.addWidget(invitation)
 
-    devices = table(["Aparelho", "Conexão", "RAM MiB", "CPU Mobile", "Bateria", "Térmico", "Mensagens"])
+    devices = table(["Aparelho", "Conexão", "RAM MiB", "CPU Mobile", "Bateria", "Térmico", "Mensagens", "Cálculo leve"])
     devices.setMinimumHeight(190)
     layout.addWidget(devices, 1)
     feedback = plain("")
@@ -104,7 +106,10 @@ def build_network(layout, hub, hub_error, bridge):
                               THERMAL_STATES[heat] if heat is not None else "—")
                 else:
                     values = ("Desconectado", "—", "—", "—", "—")
-                results.append((f"{name} · {identity[-6:]}", *values, PROBE_STATES.get(probe.get("state"), "—")))
+                work, checkpoint = hub.work.latest(identity)
+                progress = f"{WORK_STATES[work]} {checkpoint}/4" if work else "—"
+                results.append((f"{name} · {identity[-6:]}", *values, PROBE_STATES.get(probe.get("state"), "—"),
+                                progress))
             if results != refresh.previous:
                 devices.clearSelection()
                 rows(devices, results)
@@ -165,7 +170,7 @@ def build_network(layout, hub, hub_error, bridge):
         start.setEnabled(enabled or adapter.currentData() is not None)
         invite.setEnabled(enabled)
         selected = selected_id() is not None
-        for control in (send, cancel, revoke):
+        for control in (send, cancel, revoke, rename, work, stop_work):
             control.setEnabled(selected)
         atlas.setEnabled(bridge.connected and bool(records) and not bridge.busy)
 
@@ -184,6 +189,25 @@ def build_network(layout, hub, hub_error, bridge):
     cancel = QPushButton("Cancelar mensagem")
     cancel.clicked.connect(lambda: run(hub.cancel_probe, selected_id()))
     probes.addWidget(cancel)
+    controls = QHBoxLayout()
+    layout.addLayout(controls)
+    work = QPushButton("Iniciar cálculo leve")
+    work.clicked.connect(lambda: run(hub.queue_work, selected_id()))
+    controls.addWidget(work)
+    stop_work = QPushButton("Cancelar cálculo leve")
+    stop_work.clicked.connect(lambda: run(hub.cancel_work, selected_id()))
+    controls.addWidget(stop_work)
+    rename = QPushButton("Nomear aparelho")
+
+    def rename_selected():
+        device = selected_id()
+        if device is not None:
+            name, confirmed = QInputDialog.getText(devices, "Nome do aparelho", "Nome que aparecerá na lista")
+            if confirmed:
+                run(hub.rename, device, name)
+
+    rename.clicked.connect(rename_selected)
+    controls.addWidget(rename)
     revoke = QPushButton("Revogar pareamento")
 
     def revoke_selected():

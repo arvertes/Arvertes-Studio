@@ -16,7 +16,7 @@ python -m venv .venv
 
 ## O que funciona nesta entrega
 
-- Janela principal escura em português; navegação em dezesseis áreas.
+- Janela principal escura em português; navegação em dezessete áreas.
 - Painel inicial com divisão redimensionável e indicação explícita de que a visualização 3D ainda não está implementada.
 - Vinte e seis especialistas nomeados, em cinco departamentos, pesquisáveis pelo nome, cargo e ID; todos exibidos como não conectados.
 - Projetos locais com nome, biblioteca de referências (apenas caminhos; não copia nem modifica os originais) e fila persistente de rascunhos com prioridade e cancelamento.
@@ -58,7 +58,7 @@ Checklist manual pendente para Windows:
 6. Reexecutar os testes do add-on conforme TESTES.md.
 7. Criar dois projetos, registrar arquivo sintético, confirmar que o original permanece intacto e que cada projeto mostra apenas suas referências.
 8. Criar três rascunhos, reordenar, cancelar um e reiniciar para conferir persistência.
-9. Buscar Atlas e Aegis, filtrar departamentos; abrir as dezesseis áreas.
+9. Buscar Atlas e Aegis, filtrar departamentos; abrir as dezessete áreas.
 10. Acessar Dispositivos e seguir a revisão manual em [NETWORK.md](NETWORK.md).
 
-A dependência GUI não está instalada no ambiente Linux de desenvolvimento utilizado para esta entrega. Nesta ampliação, os 11 testes do núcleo desktop passaram em Python 3.13.5 no Linux, incluindo catálogo, banco local, navegação e configurações. Os sete hashes dos arquivos Python usados nos testes coincidem com os do GitHub. A janela e a verificação de um Blender real seguem pendentes. A contagem da navegação foi atualizada para 16 na ampliação Network; os testes ainda precisam ser reexecutados para essa revisão.
+A dependência GUI não está instalada no ambiente Linux de desenvolvimento utilizado para esta entrega. Nesta ampliação, os 11 testes do núcleo desktop passaram em Python 3.13.5 no Linux, incluindo catálogo, banco local, navegação e configurações. Os sete hashes dos arquivos Python usados nos testes coincidem com os do GitHub. A janela e a verificação de um Blender real seguem pendentes. A ampliação Network/Sentinel leva a navegação a 17 áreas. A CI Windows testa o núcleo e o smoke offscreen; consultar os logs desta revisão. Ver [pacote Windows](WINDOWS.md) e [Sentinel](SENTINEL.md).

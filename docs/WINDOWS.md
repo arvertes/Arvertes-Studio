@@ -7,7 +7,7 @@ No Pull Request #2, conferir que a execução Desktop checks da revisão escolhi
 
 ## Primeiro teste
 1. Abrir a versão de diagnóstico; conferir Sentinel e o SHA da revisão exibido.
-2. Navegar pelas 17 telas e criar um projeto de teste. Registrar referência sintética, sem usar originais.
+2. Navegar pelas 18 telas e criar um projeto de teste. Registrar referência sintética, sem usar originais.
 3. Criar rascunho de tarefa, fechar e reabrir para observar persistência.
 4. Somente depois, selecionar instalação confiável do Blender e usar Verificar Blender (apenas --version).
 5. Observar recursos em uso normal; não forçar carga ou temperatura. Fechar se houver instabilidade.

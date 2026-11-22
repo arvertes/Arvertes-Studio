@@ -18,7 +18,7 @@ python -m venv .venv
 
 - Janela principal escura em português; navegação em dezesseis áreas.
 - Painel inicial com divisão redimensionável e indicação explícita de que a visualização 3D ainda não está implementada.
-- Vinte e cinco especialistas nomeados, em cinco departamentos, pesquisáveis pelo nome, cargo e ID; todos exibidos como não conectados.
+- Vinte e seis especialistas nomeados, em cinco departamentos, pesquisáveis pelo nome, cargo e ID; todos exibidos como não conectados.
 - Projetos locais com nome, biblioteca de referências (apenas caminhos; não copia nem modifica os originais) e fila persistente de rascunhos com prioridade e cancelamento.
 - Telas de áudio, efeitos, qualidade, AutoPipeline e Central de Dispositivos, além das áreas existentes. As funcionalidades de produção ainda não estão conectadas.
 - Configuração do executável do Blender pelo seletor de arquivos e persistência em JSON v1 no diretório de configuração do usuário.
@@ -35,7 +35,7 @@ O banco SQLite v1 é criado no diretório de configuração local do usuário, s
 | arvertes_desktop/theme.py | Estilo visual separado |
 | arvertes_desktop/navigation.py | Identificadores estáveis das seções e perfis |
 | arvertes_desktop/settings.py | Persistência local e validação sem dependências gráficas |
-| arvertes_desktop/roster.py | IDs estáveis e nomes visuais dos 25 agentes |
+| arvertes_desktop/roster.py | IDs estáveis e nomes visuais dos 26 agentes |
 | arvertes_desktop/workspace.py | Banco SQLite local; projetos, referências e rascunhos |
 | arvertes_desktop/pages.py | Telas de projetos, biblioteca, fila e equipe |
 | arvertes_desktop/network_page.py | Central de dispositivos USB; layout sem transporte ou telemetria |

@@ -153,9 +153,11 @@ function renderEditor(record) {
     }catch(error){status(error.message,true);}
     finally{save.disabled=false;}
   });
+  const cover=mediaCard(record,"cover");
+  cover.classList.add("character-cover-card");
   const gallery=el("div","character-media-grid");
-  for(const kind of ["cover","model","animation","voice"])gallery.append(mediaCard(record,kind));
-  root.append(title,warning,form,el("h3","","Arquivos do personagem"),gallery);
+  for(const kind of ["model","animation","voice"])gallery.append(mediaCard(record,kind));
+  root.append(title,warning,cover,form,el("h3","","Modelo 3D, animações e voz"),gallery);
 }
 function mediaCard(record,kind) {
   const item=el("article","panel character-media-card");

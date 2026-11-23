@@ -24,3 +24,13 @@ Atlas propõe uma lista ordenada de tarefas e dependências. A aprovação inici
 6. **Ferramentas especializadas.** Integre cada executor com capacidades explícitas e testes com fixtures. Preserve a interface de aprovação e evidências enquanto os adaptadores evoluem. Mudanças no código e na arquitetura passam por testes e revisão humana.
 
 Sentinel no navegador impede transições indevidas pela interface. Na integração remota, o servidor precisa impor as permissões e verificar a evidência independentemente do cliente.
+
+## Dossiês autorais de personagens
+
+A rota `#characters` usa `character-model.mjs`, `character-store.mjs` e `characters-ui.mjs`. Cada personagem possui ID estável, revisão, texto de história e personalidade, roupas, aparência, créditos e mídias opcionais. O autor é o único que marca a ficha como aprovada. **Nenhuma informação de cânone é gerada automaticamente.** A capa é uma imagem 2D enviada pelo autor; GLBs e voz são arquivos anexados pelo usuário.
+
+Os textos, metadados e blobs ficam no IndexedDB `arvertes-character-dossiers` local. Hashes SHA-256 são calculados na seleção dos arquivos e conferidos novamente na exportação. Um ZIP local contém `manifesto.json` e, quando presentes, arquivos sob `midia/`. O usuário precisa salvar o ZIP fora do navegador, que pode apagar dados por política de armazenamento. Os limites conservadores protegem aparelhos de pouca memória. A transferência de GLB da ficha para Biblioteca só ocorre por ação explícita.
+
+A função `buildCharacterBrief` extrai exclusivamente os campos escritos pelo autor e o tipo personagem, com vínculo opcional `characterId`. A criação de planos continua sujeita a revisão e aprovação. O chat consulta dossiês locais por nome; o modelo por regras não faz inferência remota nem altera texto de personagem. Notas compartilhadas do chat são fontes locais separadas e não alteram o status de cânone.
+
+Os tipos em `integration-contracts.d.ts` descrevem interfaces futuras para `getCharacter`, `saveCharacter` e `processAgentMessage`. Elas ainda não possuem implementações remotas; quando implementadas, o servidor deve impor autenticação, idempotência, revisão esperada, proteção de dados e custo máximo R$ 0. Nunca transmitir memórias, manuscritos ou mídias a terceiros sem autorização explícita.

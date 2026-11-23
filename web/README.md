@@ -1,10 +1,21 @@
-# Arvertes Studio Web — início da migração
-Branch de trabalho derivada da etapa 3. A interface definitiva será Web; o histórico desktop e Android permanece preservado. Esta primeira entrega é uma prévia estática para revisão, não um produto offline.
-- Reutiliza Habblaud original preparado pelo pipeline existente, os 26 perfis e a licença MIT.
-- Produção: formulário de rascunho em memória da aba; abertura manual da demonstração oficial TRELLIS.2; referência nunca enviada automaticamente.
-- Biblioteca: inspeção limitada de metadados GLB 2.0 no navegador; sem execução de Blender, acesso externo a recursos do GLB, cópia para o servidor ou validação geométrica.
-- Nenhum dado real do jogo, segredo ou código privado Agents é publicado.
-- Nenhuma hospedagem contratada, nenhuma conta criada, nenhum executor pago autorizado, nenhuma cobrança.
-- Próximo marco: backend autenticado no repositório privado, armazenamento privado, fila persistente com isolamento e limites, integração efetiva com Agents e executor CPU na nuvem. Só habilitar geração automática TRELLIS.2 após verificar licença, cotas, termos de automação e custo zero efetivo. A demo manual não equivale a API de produção.
-- Próxima validação artística: GLB experimental já obtido pelo responsável, preservado fora do Git público; análise Blender, otimização, rig e exportação Unreal após executor real.
-O workflow gera um artefato estático com index.html, office.html, bundle original e licença. Sem deploy automático.
+# Arvertes Studio Web v0.3
+
+A interface Web reúne o escritório Habblaud, o cadastro dos 26 agentes, a preparação de tarefas e a inspeção local de assets para Unreal Engine.
+
+- **Escritório virtual.** Use o seletor ou clique num personagem para abrir o perfil. Os controles do Habblaud incluem zoom, enquadramento, tela cheia e modo econômico. O quadro usa a revisão fixada do projeto original e inclui seus créditos e licença MIT.
+- **Nova produção.** Prepare rascunhos nesta aba com uma prévia local da referência. A demonstração oficial do TRELLIS.2 pode ser aberta manualmente conforme as cotas e os termos do serviço.
+- **Biblioteca.** Importe GLBs de até 16 MiB, classifique os arquivos e consulte os metadados declarados. A prévia é carregada sob demanda, requer WebGL 2 e gera uma miniatura local para cada modelo visualizado. A visualização aceita recursos incorporados e uma exportação sem compressão que exija decodificadores adicionais. Os arquivos e rascunhos são descartados ao recarregar a página.
+- **AutoPipeline, Atlas e Sentinel.** Consulte as dependências planejadas, os rascunhos e as condições de liberação. A comunicação com Atlas, a execução, o Google Drive privado e as cotas remotas aguardam integração autenticada. O orçamento adicional autorizado é R$ 0.
+
+## Teste local
+
+Execute na raiz do repositório com Node 24 e Python 3.
+
+```sh
+bash web/build-netlify.sh
+python3 -m http.server --bind 127.0.0.1 --directory web/dist 8765
+```
+
+Abra [o Studio local](http://127.0.0.1:8765/). Use [a fixture sintética](../docs/TESTES.md#teste-visual-com-o-glb-sintético) para validar a importação sem dados privados.
+
+O build distribui as licenças do Habblaud e do Three.js (MIT) e das famílias Inter, Space Grotesk e JetBrains Mono (OFL-1.1). O empacotamento do visualizador usa esbuild (MIT). Consulte [a configuração da prévia Web](NETLIFY.md).

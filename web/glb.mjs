@@ -1,6 +1,6 @@
 const MAX = 16 * 1024 * 1024;
 const count = x => Array.isArray(x) ? x.length : 0;
-export function inspectGlb(buffer) {
+export function readGlbDocument(buffer) {
   if (!(buffer instanceof ArrayBuffer) || buffer.byteLength < 20 || buffer.byteLength > MAX) throw Error("Tamanho inválido (máximo 16 MiB).");
   const v = new DataView(buffer);
   if (v.getUint32(0,true)!==0x46546c67 || v.getUint32(4,true)!==2 || v.getUint32(8,true)!==buffer.byteLength) throw Error("GLB 2.0 inválido.");
@@ -16,6 +16,11 @@ export function inspectGlb(buffer) {
     }
     p+=len;
   }
+  return doc;
+}
+
+export function inspectGlb(buffer) {
+  const doc = readGlbDocument(buffer);
   if(!doc || doc.asset?.version!=="2.0" || !Array.isArray(doc.meshes) || !Array.isArray(doc.accessors)) throw Error("Metadados GLB 2.0 incompletos.");
   if(doc.meshes.length>10000 || doc.accessors.length>100000) throw Error("Limite de metadados excedido.");
   let triangles=0, uv=0, primitives=0, other=0;

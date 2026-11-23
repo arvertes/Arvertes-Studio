@@ -5,6 +5,9 @@ import type { OfficeSnapshot, AgentInfo } from '../../shared/types';
 import { HAIR_STYLES, TOP_STYLES, ACCESSORIES } from '../../shared/appearance';
 import roster from './arvertes-roster.json';
 
+const embedded = window.parent !== window && new URLSearchParams(location.search).get('embed') === 'studio';
+if (embedded) document.body.classList.add('studio-embed');
+const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 const now = Date.now();
 const departments = [...new Set(roster.map(a => a.department))];
 const hash = (s: string) => Array.from(s).reduce((h,c) => (Math.imul(h,31)+c.charCodeAt(0)) >>> 0, 2166136261);
@@ -32,11 +35,14 @@ view.setOptions({showNames:true,bubbles:'none',liveliness:'calm',theme:'none',da
 // Use real status snapshots from Studio without starting the upstream simulator.
 const economy = document.querySelector<HTMLInputElement>('#economy')!;
 function applyEconomy() {
-  canvas.dataset.frameInterval = economy.checked ? String(1000 / 15) : '0';
+  canvas.dataset.frameInterval = economy.checked || reducedMotion.matches ? String(1000 / 15) : '0';
 }
 economy.addEventListener('change', applyEconomy);
+reducedMotion.addEventListener('change', applyEconomy);
 applyEconomy();
-view.setPlayback?.({clock:()=>Date.now(),scale:()=>document.hidden ? 0 : economy.checked ? 0.25 : 1});
+view.setPlayback({clock:()=>Date.now(),scale:()=>reducedMotion.matches ? 0 : economy.checked ? 0.25 : 1});
+document.addEventListener('visibilitychange', () => view.setSuspended(document.hidden));
+view.setSuspended(document.hidden);
 store.pushReplay(snapshot); // Never call connect(), which would start a demo simulator or SSE.
 const selector = document.querySelector<HTMLSelectElement>('#agents')!;
 const details = document.querySelector<HTMLDivElement>('#details')!;
@@ -56,7 +62,31 @@ function detail(id:string) {
   }));
 }
 selector.addEventListener('change',()=>{view.select({type:'agent',id:selector.value},{focus:true});detail(selector.value)});
-view.onSelect(sel=>{if(sel?.type==='agent')detail(sel.id)});
+function notify(command: string, value?: string) {
+  if (embedded) window.parent.postMessage({scope:'arvertes-office', command, value}, location.origin);
+}
+view.onSelect(sel => {
+  if (sel?.type !== 'agent') return;
+  detail(sel.id);
+  notify('selected', sel.id);
+});
+if (embedded) {
+  window.addEventListener('message', event => {
+    if (event.origin !== location.origin || event.source !== window.parent || event.data?.scope !== 'arvertes-office') return;
+    const {command, value} = event.data;
+    if (command === 'agent' && agents.some(agent => agent.id === value)) {
+      view.select({type:'agent', id:value},{focus:true});
+      detail(value);
+    } else if (command === 'fit') view.overview();
+    else if (command === 'out') view.zoomBy(0.8);
+    else if (command === 'in') view.zoomBy(1.25);
+    else if (command === 'economy' && typeof value === 'boolean') {
+      economy.checked = value;
+      applyEconomy();
+    }
+  });
+  notify('ready');
+}
 document.querySelector('#overview')!.addEventListener('click',()=>view.overview());
 document.querySelector('#minus')!.addEventListener('click',()=>view.zoomBy(0.8));
 document.querySelector('#plus')!.addEventListener('click',()=>view.zoomBy(1.25));
@@ -88,7 +118,12 @@ const updates = import.meta.env.VITE_ARVERTES_STATIC_PREVIEW === '1' ? 0 : windo
     // The optional static bundle can also be opened without Studio snapshots.
   }
 }, 500);
-window.addEventListener('pagehide', () => {
+window.addEventListener('pagehide', event => {
+  if (event.persisted) {
+    view.setSuspended(true);
+    return;
+  }
   window.clearInterval(updates);
   view.destroy();
-}, {once: true});
+});
+window.addEventListener('pageshow', () => view.setSuspended(document.hidden));

@@ -17,36 +17,16 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - uses: actions/checkout@v4
-        with:
-          repository: marmottajr/habblaud
-          ref: faa1a012b5fbf632c66dc6801c5383e53a542406
-          path: upstream
-          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
-      - name: Test reader
-        run: |
-          node web/test-glb.mjs
-          node --check web/studio.mjs
       - name: Prepare and compile
         run: |
-          python office_habblaud/prepare.py upstream
-          cd upstream
-          npm ci --ignore-scripts
-          npm run build:client -- --base=./
-          cd ..
-          mv upstream/dist/client/index.html upstream/dist/client/office.html
-          cp upstream/LICENSE upstream/dist/client/HABBLAUD-LICENSE.txt
-          cp web/index.html web/studio.css web/studio.mjs web/glb.mjs office_habblaud/roster.json upstream/dist/client/
-          printf '%s\n' 'Habblaud / Márcio Junior / MIT / faa1a012b5fbf632c66dc6801c5383e53a542406' > upstream/dist/client/HABBLAUD-SOURCE.txt
-          touch upstream/dist/client/.nojekyll
-          test -s upstream/dist/client/index.html
-          test -s upstream/dist/client/office.html
+          bash web/build-netlify.sh
+          touch web/dist/.nojekyll
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: upstream/dist/client
+          path: web/dist
   deploy:
     needs: build
     runs-on: ubuntu-24.04

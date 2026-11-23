@@ -378,6 +378,7 @@ export function initProduction() {
     event.preventDefault();
     const feedback = byId("draft-error");
     const brief = { name: byId("name").value, instruction: byId("instruction").value, type: type.value };
+    if (form.dataset.characterId && byId("name").value.trim() === form.dataset.characterName) brief.characterId = form.dataset.characterId;
     const showMessage = message => {
       feedback.textContent = message;
       feedback.hidden = false;
@@ -412,6 +413,19 @@ export function initProduction() {
     target.replaceChildren(card);
     card.tabIndex = -1;
     card.focus();
+  });
+  document.addEventListener("studio:character-plan", event => {
+    const brief = event.detail;
+    if (!brief?.characterId || !brief?.name || !brief?.instruction) return;
+    byId("name").value = brief.name;
+    byId("instruction").value = brief.instruction;
+    type.value = brief.type;
+    form.dataset.characterId = brief.characterId;
+    form.dataset.characterName = brief.name;
+    target.replaceChildren();
+    byId("draft-error").hidden = true;
+    byId("reference").value = "";
+    byId("reference").dispatchEvent(new Event("change"));
   });
   updates?.addEventListener("message", () => void refresh());
   document.addEventListener("studio:library", async event => {

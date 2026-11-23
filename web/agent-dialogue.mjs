@@ -1,4 +1,5 @@
 import { agentStages, normalize } from "./production-catalog.mjs";
+import { matchingCharacter } from "./character-model.mjs";
 
 export const MAX_MESSAGE = 600;
 export const MAX_FACT = 320;
@@ -42,7 +43,7 @@ function productionSummary(productions) {
     "\nIsso não é acompanhamento de execuções na nuvem.";
 }
 
-export function agentResponse({agent, message, facts = [], productions = null}) {
+export function agentResponse({agent, message, facts = [], productions = null, characters = []}) {
   if (!agent || typeof message !== "string" || !message.trim() || message.length > MAX_MESSAGE)
     throw Error("Mensagem inválida (máximo de 600 caracteres).");
   const question = normalize(message);
@@ -67,6 +68,29 @@ export function agentResponse({agent, message, facts = [], productions = null}) 
   }
   if (/(crie|gere|gera|gerar|produza|anime|animar|execute|renderize|conecte)/.test(question)) {
     return { reply: "Ainda não consigo executar essa operação remotamente. Posso orientar o planejamento local, e o AutoPipeline permite registrar etapas e evidências reais. Geração, rig, animação e áudio exigem ferramentas conectadas." };
+  }
+  const character = matchingCharacter(message, characters);
+  if (character) {
+    const requested = [
+      [/(historia|origem|passado|lore|biografia)/, "História e origem", character.history],
+      [/(personalidade|jeito|comportamento)/, "Personalidade", character.personality],
+      [/(roupa|vestuario|veste|vestimenta|figurino|acessorio)/, "Vestuário", character.clothing],
+      [/(aparencia|visual|aspecto)/, "Aparência", character.appearance],
+      [/(voz|dublagem|fala)/, "Direção de voz", character.voiceDirection],
+      [/(animacao|animar|gesto|movimento)/, "Direção de animação", character.animationDirection],
+    ].find(([pattern]) => pattern.test(question));
+    const prefix = character.name + " · " + (character.status === "aprovado" ? "ficha aprovada pelo autor" : "rascunho do autor") + ".";
+    if (requested) return { reply: prefix + "\n" + requested[1] + ": " +
+      (requested[2] ? requested[2].slice(0,900) : "ainda não foi definido na ficha.") };
+    if (/(planej|producao|produzir)/.test(question)) return { reply: prefix +
+      "\nO dossiê pode gerar um briefing na seção Personagens usando 'Planejar com Atlas'. O plano ainda exige sua aprovação antes da fila local." };
+    const snippets = [["História",character.history],["Personalidade",character.personality],
+      ["Vestuário",character.clothing],["Aparência",character.appearance]]
+      .filter(([,v])=>v).map(([label,value])=>label + ": " + value.slice(0,400));
+    const memories = relatedFacts(message, facts, 2).map(f=>"Anotação compartilhada: "+f.text);
+    return { reply: prefix + "\n" + (snippets.length ? snippets.join("\n") : "Ainda não há detalhes narrativos preenchidos.") +
+      (memories.length ? "\n" + memories.join("\n") : "") +
+      "\nA ficha não é confirmação de execução 3D nem consulta a fontes externas." };
   }
   if (/^(oi|ola|bom dia|boa tarde|boa noite)[!.?\s]*$/.test(question)) {
     return { reply: "Sou " + agent.name + ", responsável por " + agent.role.toLocaleLowerCase("pt-BR") + ". Estou em modo local, com respostas por regras e memória compartilhada. Você pode perguntar sobre minhas tarefas ou dizer 'Lembre que ...'." };

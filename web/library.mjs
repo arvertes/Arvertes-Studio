@@ -179,6 +179,29 @@ function renderGallery() {
   }
 }
 
+export async function importCharacterGlb(file) {
+  if(importing) throw Error("A biblioteca já está importando arquivos.");
+  if(!file || !file.name.toLowerCase().endsWith(".glb") || file.size>maxGlbBytes)
+    throw Error("Selecione um GLB compatível de até 16 MiB.");
+  importing=true;
+  try {
+    const buffer=await file.arrayBuffer();
+    const data=inspectGlb(buffer);
+    const digest=Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",buffer)),byte=>byte.toString(16).padStart(2,"0")).join("");
+    const existing=assets.find(asset=>asset.digest===digest);
+    if(existing){showAsset(existing);return existing;}
+    const bytes=assets.reduce((sum,asset)=>sum+asset.file.size,0);
+    if(assets.length>=maxLibraryCount||bytes+file.size>maxLibraryBytes)
+      throw Error("Limite da biblioteca nesta aba atingido.");
+    const asset={file,data,digest,category:"0"};
+    assets.push(asset);
+    showAsset(asset);
+    document.dispatchEvent(new CustomEvent("studio:library",{detail:{productionId:"",errors:[]}}));
+    byId("asset-status").textContent="Modelo "+file.name+" importado a partir do dossiê do personagem.";
+    return asset;
+  }finally{importing=false;}
+}
+
 export function libraryUsage() {
   return { count: assets.length, bytes: assets.reduce((sum, asset) => sum + asset.file.size, 0) };
 }

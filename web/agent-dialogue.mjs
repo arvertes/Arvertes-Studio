@@ -83,6 +83,6 @@ export function agentResponse({agent, message, facts = [], productions = null}) 
     return { reply: "Sou " + agent.name + " (" + agent.role + "). Minhas responsabilidades no Studio incluem: " +
       responsibilities + ". Posso conversar usando regras locais e consultar memória; as tarefas que dependem de ferramentas externas ainda precisam de execução real." };
   }
-  return { reply: "Sobre "" + message.trim().slice(0,130) + "": não tenho informação suficiente para responder com segurança. Minha especialidade é " +
+  return { reply: 'Sobre "' + message.trim().slice(0,130) + '": não tenho informação suficiente para responder com segurança. Minha especialidade é ' +
     agent.role.toLocaleLowerCase("pt-BR") + ". Posso consultar anotações compartilhadas, explicar minhas responsabilidades ou orientar você a registrar um plano no AutoPipeline." };
 }

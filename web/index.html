@@ -40,9 +40,9 @@
             <div id="overview-office"></div>
             <aside class="operation-rail" aria-label="Resumo operacional">
               <article class="panel rail-panel">
-                <div class="panel-heading"><span class="tile-icon cyan" data-icon="activity"></span><div><h2>Fila de produção</h2><p>Rascunhos desta aba</p></div></div>
-                <div class="queue-count"><strong id="draft-count">0</strong><span id="draft-label">Rascunhos</span></div>
-                <p id="queue-summary">Nenhuma tarefa preparada.</p>
+                <div class="panel-heading"><span class="tile-icon cyan" data-icon="activity"></span><div><h2>Fila de produção</h2><p>Planos salvos neste navegador</p></div></div>
+                <div class="queue-count"><strong id="draft-count">0</strong><span id="draft-label">Produções</span></div>
+                <p id="queue-summary">Carregando fila local…</p>
                 <a class="text-link" href="#tasks">Abrir tarefas <span data-icon="arrow-right"></span></a>
               </article>
               <article class="panel rail-panel">
@@ -50,7 +50,7 @@
                 <ul class="status-list">
                   <li><span>Arvertes Agents</span><span class="status"><i></i>Desconectado</span></li>
                   <li><span>Google Drive</span><span class="status"><i></i>Planejado</span></li>
-                  <li><span>Sentinel</span><span class="status amber"><i></i>Execução bloqueada</span></li>
+                  <li><span>Sentinel</span><span class="status amber"><i></i>Execução remota bloqueada</span></li>
                 </ul>
                 <a class="text-link" href="#security">Ver segurança <span data-icon="arrow-right"></span></a>
               </article>
@@ -66,7 +66,7 @@
           </div>
           <div class="section-heading"><h2>Atalhos de produção</h2></div>
           <div class="shortcut-grid">
-            <a class="panel shortcut" href="#production"><span class="tile-icon cyan" data-icon="plus"></span><span><strong>Preparar produção</strong><small>Crie um rascunho nesta aba</small></span><span data-icon="arrow-up-right"></span></a>
+            <a class="panel shortcut" href="#production"><span class="tile-icon cyan" data-icon="plus"></span><span><strong>Preparar produção</strong><small>Planeje etapas com Atlas</small></span><span data-icon="arrow-up-right"></span></a>
             <a class="panel shortcut" href="#pipeline"><span class="tile-icon violet" data-icon="pipeline"></span><span><strong>AutoPipeline</strong><small>Consulte as etapas e dependências</small></span><span data-icon="arrow-up-right"></span></a>
             <a class="panel shortcut" href="#library"><span class="tile-icon teal" data-icon="cube"></span><span><strong>Biblioteca de assets</strong><small>Inspecione um modelo GLB</small></span><span data-icon="arrow-up-right"></span></a>
           </div>
@@ -92,17 +92,20 @@
         <section id="view-production" aria-labelledby="page-title" hidden>
           <div class="split-layout">
             <form id="draft" class="panel content-panel">
-              <div class="panel-heading"><span class="tile-icon cyan" data-icon="plus"></span><div><h2>Briefing de personagem</h2><p>Rascunho local · disponível nesta aba</p></div></div>
+              <div class="panel-heading"><span class="tile-icon cyan" data-icon="plus"></span><div><h2>Briefing de produção</h2><p>Planejamento por regras locais do Atlas</p></div></div>
               <label for="name">Nome da produção</label>
               <input id="name" required maxlength="100" placeholder="Ex.: Guardião da floresta">
               <label for="instruction">Instruções</label>
-              <textarea id="instruction" required maxlength="2000" rows="6" placeholder="Descreva o personagem, o estilo e o resultado esperado"></textarea>
+              <textarea id="instruction" required maxlength="2000" rows="6" placeholder="Ex.: Criar o personagem GVS em GLB, estilo estilizado, para importar no Unreal."></textarea>
+              <label for="production-type">Tipo de produção</label>
+              <select id="production-type"></select>
               <label for="reference">Imagem de referência <span class="muted">(opcional)</span></label>
               <input id="reference" type="file" accept="image/png,image/jpeg,image/webp" aria-describedby="reference-help">
               <p id="reference-help" class="muted">PNG, JPEG ou WebP, até 8 MiB. Prévia local.</p>
               <img id="reference-preview" hidden alt="Imagem de referência selecionada">
+              <p class="muted">Use somente informações de produção que podem ficar neste navegador. A referência visual é temporária.</p>
               <p id="draft-error" class="form-error" role="alert" hidden></p>
-              <button class="button primary" type="submit"><span data-icon="check"></span>Preparar tarefa</button>
+              <button class="button primary" type="submit"><span data-icon="check"></span>Propor plano</button>
             </form>
             <aside class="panel content-panel">
               <div class="panel-heading"><span class="tile-icon violet" data-icon="cube"></span><div><h2>TRELLIS.2</h2><p>Motor 3D candidato</p></div></div>
@@ -113,14 +116,16 @@
               <p class="muted">Executor remoto indisponível.</p>
             </aside>
           </div>
+          <div id="plan-preview" class="production-section"></div>
         </section>
 
         <section id="view-library" aria-labelledby="page-title" hidden>
+          <div id="library-production" class="production-section" hidden></div>
           <div class="panel library-tools">
             <label class="button primary import-button" for="glb"><span data-icon="upload"></span>Importar GLB<input id="glb" type="file" accept=".glb,model/gltf-binary" multiple aria-label="Importar GLB"></label>
             <label class="filter-field">Buscar<input id="asset-search" type="search" placeholder="Nome do arquivo"></label>
             <label class="filter-field">Categoria<select id="asset-category"></select></label>
-            <label class="filter-field">Estrutura<select id="asset-feature"><option value="">Todas</option><option value="uv">Com UVs</option><option value="skins">Com rig</option><option value="animations">Com animações</option></select></label>
+            <label class="filter-field">Estrutura<select id="asset-feature"><option value="">Todas</option><option value="uv">Com UVs</option><option value="skins">Com skins declaradas</option><option value="animations">Com animações</option></select></label>
           </div>
           <p id="asset-status" class="muted library-status" role="status">Arquivos GLB de até 16 MiB · leitura local nesta aba.</p>
           <div class="split-layout library-layout">
@@ -130,11 +135,12 @@
         </section>
 
         <section id="view-pipeline" aria-labelledby="page-title" hidden>
-          <div class="panel pipeline-panel">
-            <div class="panel-heading"><span class="tile-icon violet" data-icon="pipeline"></span><div><h2>Fluxo de produção Web</h2><p>Dependências da fundação Arvertes Agents</p></div><span class="badge amber">Executor indisponível</span></div>
+          <div id="pipeline-production" class="production-section"></div>
+          <details class="panel pipeline-panel pipeline-reference">
+            <summary>Mapa de referência das etapas externas</summary>
             <div id="pipeline-grid" class="pipeline-grid" aria-label="Etapas e dependências"></div>
-          </div>
-          <div id="stage-details" class="panel content-panel stage-details"></div>
+            <div id="stage-details" class="content-panel stage-details"></div>
+          </details>
         </section>
 
         <section id="view-agents" aria-labelledby="page-title" hidden>
@@ -146,20 +152,12 @@
         </section>
 
         <section id="view-atlas" aria-labelledby="page-title" hidden>
-          <div class="split-layout">
-            <article class="panel content-panel">
-              <div class="panel-heading"><span class="tile-icon cyan" data-icon="spark"></span><div><h2>Conversar com Atlas</h2><p>Coordenador geral · Fundação</p></div></div>
-              <div class="notice"><span data-icon="plug"></span><p>A comunicação depende da conexão autenticada com Arvertes Agents.</p></div>
-              <label for="atlas-message">Mensagem</label>
-              <textarea id="atlas-message" disabled rows="4" placeholder="Canal indisponível"></textarea>
-              <button type="button" class="button" disabled>Enviar mensagem</button>
-            </article>
-            <article class="panel content-panel">
-              <div class="panel-heading"><span class="tile-icon violet" data-icon="tasks"></span><div><h2>Plano de produção</h2><p>Rascunhos criados no Studio</p></div></div>
-              <div id="atlas-drafts" class="activity-list"></div>
-              <a class="text-link" href="#pipeline">Consultar AutoPipeline <span data-icon="arrow-right"></span></a>
-            </article>
-          </div>
+          <article class="panel content-panel">
+            <div class="panel-heading"><span class="tile-icon cyan" data-icon="spark"></span><div><h2>Planejador local</h2><p>Atlas · Coordenador geral</p></div></div>
+            <p>Atlas usa termos do briefing para sugerir o tipo de produção, distribuir etapas e apontar dependências. Quando houver dúvida, escolha o tipo de entrega.</p>
+            <a class="button primary" href="#production">Preparar briefing <span data-icon="arrow-right"></span></a>
+          </article>
+          <div id="atlas-drafts" class="production-section"></div>
         </section>
 
         <section id="view-tasks" aria-labelledby="page-title" hidden><div id="tasks-list" class="task-list"></div></section>

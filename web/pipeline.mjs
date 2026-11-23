@@ -7,7 +7,7 @@ const stages = [
   { id: "animation", title: "Animação", agent: "Kairo", symbol: "play", color: "teal", row: 1, column: 4, needs: ["rig"], output: "Asset com animações" },
   { id: "sound", title: "Som", agent: "Echo", symbol: "audio", color: "rose", row: 2, column: 4, needs: [], input: "Briefing de áudio", output: "Efeitos sonoros" },
   { id: "music", title: "Música", agent: "Lyra", symbol: "audio", color: "rose", row: 3, column: 4, needs: [], input: "Briefing musical", output: "Trilha musical" },
-  { id: "review", title: "Revisão", agent: "Argus", symbol: "shield", color: "amber", row: 2, column: 5, needs: ["animation", "sound", "music"], output: "Parecer para revisão humana" },
+  { id: "review", title: "Revisão", agent: "Argus", symbol: "shield", color: "amber", row: 2, column: 5, needs: ["animation"], output: "Parecer para revisão humana" },
   { id: "package", title: "Empacotamento", agent: "Bridge", symbol: "folder", color: "amber", row: 2, column: 6, needs: ["review"], output: "Pacote de exportação para Unreal" },
 ];
 const descriptions = new Map(stages.map(stage => [stage.id, stage]));
@@ -34,9 +34,9 @@ function selectStage(stage) {
     ["Dependências", dependencies.map(item => item.title).join(", ") || "Nenhuma etapa anterior"],
     ["Entradas", stage.input ?? dependencies.map(item => item.output).join(", ")],
     ["Saída esperada", stage.output],
-    ["Estado", "Etapa planejada"],
+    ["Estado", "Etapa de referência"],
     ["Checkpoint", "Sem artefato registrado"],
-    ["Motivo do bloqueio", "Conexão com o executor indisponível"],
+    ["Disponibilidade", stage.id === "model" ? "Demonstração manual; vínculo de GLB no AutoPipeline" : "Consulte o plano para separar inspeção local de execução externa"],
   ]), stateNotes);
 }
 

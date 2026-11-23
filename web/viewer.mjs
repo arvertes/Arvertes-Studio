@@ -11,8 +11,18 @@ const embeddedData = /^data:(?:application\/(?:octet-stream|gltf-buffer)|image\/
 const externalError = "A prévia exige um GLB autocontido com recursos incorporados.";
 const decoderExtensions = ["KHR_draco_mesh_compression", "EXT_meshopt_compression", "KHR_texture_basisu"];
 
-function validateResources(buffer) {
+function validateResources(buffer, stats) {
   const gltf = readGlbDocument(buffer);
+  const accessorSizes = { SCALAR: 1, VEC2: 2, VEC3: 3, VEC4: 4, MAT2: 4, MAT3: 9, MAT4: 16 };
+  let accessorBytes = 0;
+  for (const accessor of gltf.accessors ?? []) {
+    if (!Number.isSafeInteger(accessor.count) || accessor.count <= 0) throw Error("Accessor inválido.");
+    accessorBytes += accessor.count * (accessorSizes[accessor.type] ?? 16) * 4;
+  }
+  if (accessorBytes > 96 * 1024 * 1024 || (gltf.nodes?.length ?? 0) > 5000 ||
+      (gltf.images?.length ?? 0) > 32 || stats.triangles > 1000000 || stats.primitives > 3000) {
+    throw Error("Modelo acima do limite da prévia local. Consulte os metadados ou abra o GLB no Blender.");
+  }
   for (const resource of [...(gltf.buffers ?? []), ...(gltf.images ?? [])]) {
     if (resource.uri !== undefined && (typeof resource.uri !== "string" || !embeddedData.test(resource.uri))) {
       throw Error(externalError);
@@ -49,11 +59,12 @@ export function createViewer({ container, onError, onThumbnail }) {
   const camera = new PerspectiveCamera(40, 1);
   const center = new Vector3();
   let radius = 1;
-  let renderer, controls, observer, model, scene;
+  let renderer, controls, observer, intersection, model, scene;
+  let visible = true;
   let closed = false;
 
   function render() {
-    if (!closed && !document.hidden) renderer?.render(scene, camera);
+    if (!closed && visible && !document.hidden) renderer?.render(scene, camera);
   }
   function resize() {
     const { clientWidth: width, clientHeight: height } = container;
@@ -94,6 +105,7 @@ export function createViewer({ container, onError, onThumbnail }) {
     if (closed) return;
     closed = true;
     observer?.disconnect();
+    intersection?.disconnect();
     controls?.dispose();
     document.removeEventListener("visibilitychange", render);
     if (scene || model) disposeScenes([...(model?.scenes ?? []), ...(scene ? [scene] : [])]);
@@ -104,11 +116,11 @@ export function createViewer({ container, onError, onThumbnail }) {
     }
   }
 
-  async function load(file) {
+  async function load(file, stats) {
     try {
       const buffer = await file.arrayBuffer();
       if (closed) return;
-      validateResources(buffer);
+      validateResources(buffer, stats);
       const manager = new LoadingManager();
       manager.setURLModifier(url => {
         if (embeddedData.test(url) || url.startsWith(`blob:${location.origin}/`)) return url;
@@ -133,7 +145,8 @@ export function createViewer({ container, onError, onThumbnail }) {
       const gl = canvas.getContext("webgl2", { antialias: true, powerPreference: "low-power" });
       if (!gl) throw Error("WebGL 2 indisponível neste navegador.");
       renderer = new WebGLRenderer({ canvas, context: gl });
-      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
+      const compactDevice = matchMedia("(max-width: 760px)").matches;
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, compactDevice ? 1 : 1.5));
       renderer.toneMapping = ACESFilmicToneMapping;
       renderer.toneMappingExposure = 1.3;
       canvas.setAttribute("role", "img");
@@ -161,6 +174,11 @@ export function createViewer({ container, onError, onThumbnail }) {
       controls.addEventListener("change", render);
       observer = new ResizeObserver(resize);
       observer.observe(container);
+      intersection = new IntersectionObserver(([entry]) => {
+        visible = entry.isIntersecting;
+        render();
+      });
+      intersection.observe(container);
       document.addEventListener("visibilitychange", render);
       resize();
       frame();

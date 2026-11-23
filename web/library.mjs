@@ -1,14 +1,19 @@
-import { inspectGlb } from "./glb.mjs";
+import { inspectGlb, maxGlbBytes, maxLibraryBytes, maxLibraryCount } from "./glb.mjs";
+import { categories, normalize } from "./production-catalog.mjs";
+import { suggestCategory } from "./coordination.mjs";
 import { byId, el, empty, fields, icon } from "./ui.mjs";
 
-const categories = ["Sem categoria", "Personagens", "Criaturas", "Cenários", "Vegetação", "Objetos", "Acessórios"];
 const assets = [];
-const maxBytes = 16 * 1024 * 1024;
-const sessionBytes = 96 * 1024 * 1024;
 const format = new Intl.NumberFormat("pt-BR");
 let selected;
 let preview;
 let importing = false;
+
+export function localAssets() {
+  return assets.map(({ file, data, digest, category, categorized }) => ({
+    name: file.name, data: { ...data }, digest, category: categories[Number(category)], categorized,
+  }));
+}
 
 function categoryOptions(select) {
   for (const [index, category] of categories.entries()) select.add(new Option(category, String(index)));
@@ -72,7 +77,7 @@ async function openPreview(asset, trigger) {
         renderGallery();
       },
     });
-    await request.viewer.load(asset.file);
+    await request.viewer.load(asset.file, asset.data);
     if (preview === request && container.querySelector("canvas")) {
       status.hidden = true;
       for (const button of controls) button.disabled = false;
@@ -93,9 +98,9 @@ function showAsset(asset) {
   const title = el("h2", "asset-title", asset.file.name);
   const counts = Object.entries({
     "Tamanho (bytes)": asset.data.bytes, "Malhas": asset.data.meshes, "Primitivas": asset.data.primitives,
-    "Triângulos declarados": asset.data.triangles, "Primitivas com UV": asset.data.uv,
+    "Triângulos estimados": asset.data.triangles, "Primitivas com UV": asset.data.uv,
     "Materiais": asset.data.materials, "Texturas": asset.data.textures,
-    "Skins de rig": asset.data.skins, "Animações": asset.data.animations,
+    "Skins declaradas": asset.data.skins, "Nós com skin": asset.data.skinnedNodes, "Animações": asset.data.animations,
   }).map(([label, value]) => [label, format.format(value)]);
   const heading = el("div", "panel-heading");
   const badge = el("span", "tile-icon teal");
@@ -104,11 +109,13 @@ function showAsset(asset) {
   copy.append(el("p", "eyebrow", "Ficha técnica"), title);
   heading.append(badge, copy);
   const label = el("label", "filter-field", "Categoria");
+  const suggestion = suggestCategory({ name: asset.file.name, data: asset.data });
   const category = el("select");
   categoryOptions(category);
   category.value = asset.category;
   category.addEventListener("change", () => {
     asset.category = category.value;
+    asset.categorized = true;
     renderGallery();
   });
   label.append(category);
@@ -116,23 +123,33 @@ function showAsset(asset) {
   const remove = makeButton("Remover da aba", "close", () => {
     assets.splice(assets.indexOf(asset), 1);
     showAsset(undefined);
+    document.dispatchEvent(new CustomEvent("studio:library"));
     byId("glb").focus();
   });
-  inspector.append(heading, label, trigger, fields(counts), el("p", "muted", "Metadados declarados no arquivo GLB."), fields([
+  inspector.append(heading, label);
+  if (suggestion !== categories[0]) {
+    inspector.append(el("p", "muted", `Sugestão de Nexus · ${suggestion}.`),
+      makeButton("Usar sugestão", "check", () => {
+        category.value = String(categories.indexOf(suggestion));
+        category.dispatchEvent(new Event("change"));
+        category.focus();
+      }));
+  }
+  inspector.append(trigger, fields(counts), el("p", "muted", "Metadados declarados no arquivo GLB."), fields([
     ["Origem", "Arquivo local nesta aba"],
-    ["Histórico de versões", "Aguardando armazenamento remoto"],
+    ["Vínculos de produção", "No AutoPipeline, selecione um GLB para associá-lo a uma tarefa de Forge."],
   ]), remove);
 }
 
 function renderGallery() {
   const gallery = byId("asset-gallery");
-  const query = byId("asset-search").value.trim().toLocaleLowerCase("pt-BR");
+  const query = normalize(byId("asset-search").value.trim());
   const category = byId("asset-category").value;
   const feature = byId("asset-feature").value;
   const visible = assets.filter(asset => (
     (!category || asset.category === category) &&
     (!feature || asset.data[feature] > 0) &&
-    asset.file.name.toLocaleLowerCase("pt-BR").includes(query)
+    normalize(asset.file.name).includes(query)
   ));
   gallery.replaceChildren();
   if (!visible.length) {
@@ -176,6 +193,7 @@ export function initLibrary() {
     const input = event.target;
     if (importing || !input.files.length) return;
     const pending = [...input.files];
+    const productionId = byId("library-production").dataset.production;
     let size = assets.reduce((sum, asset) => sum + asset.file.size, 0);
     importing = true;
     input.disabled = true;
@@ -185,10 +203,12 @@ export function initLibrary() {
     try {
       for (const file of pending) {
         try {
-          if (file.size > maxBytes) throw Error("Arquivo excede 16 MiB.");
-          if (assets.length >= 50 || size + file.size > sessionBytes) throw Error("Limite da sessão atingido (50 arquivos ou 96 MiB).");
-          const data = inspectGlb(await file.arrayBuffer());
-          const asset = { file, data, category: "0" };
+          if (file.size > maxGlbBytes) throw Error("Arquivo excede 16 MiB.");
+          if (assets.length >= maxLibraryCount || size + file.size > maxLibraryBytes) throw Error("Limite da sessão atingido (50 arquivos ou 96 MiB).");
+          const buffer = await file.arrayBuffer();
+          const data = inspectGlb(buffer);
+          const digest = crypto.subtle ? Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", buffer)), byte => byte.toString(16).padStart(2, "0")).join("") : undefined;
+          const asset = { file, data, digest, category: "0" };
           assets.push(asset);
           added.push(asset);
           size += file.size;
@@ -197,6 +217,9 @@ export function initLibrary() {
         }
       }
       if (added.length) showAsset(added.at(-1));
+      if (added.length || errors.length) document.dispatchEvent(new CustomEvent("studio:library", {
+        detail: { productionId, errors: errors.slice(0, 3) },
+      }));
       status.textContent = [
         added.length ? `${added.length} ${added.length === 1 ? "arquivo importado" : "arquivos importados"}.` : "",
         ...errors.slice(0, 3),

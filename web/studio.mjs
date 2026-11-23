@@ -1,28 +1,31 @@
-import { byId, departments, el, empty, fillIcons, icon, link } from "./ui.mjs";
+import { byId, departments, el, empty, fields, fillIcons, icon, link } from "./ui.mjs";
 import { mountOffice, unmountOffice, setOfficeRoster } from "./office.mjs";
 import { initLibrary, closePreview } from "./library.mjs";
 import { initPipeline } from "./pipeline.mjs";
 import { applyDisplayPreferences, renderExtraPage } from "./system-panels.mjs";
+import { initProduction, showProductionPage } from "./production-ui.mjs";
+import { agentStages, normalize } from "./production-catalog.mjs";
 
 const groups = [
   ["Central", [
     ["overview", "overview", "Visão geral", "Seu espaço de trabalho para produção de assets para Unreal Engine."],
     ["office", "office", "Escritório virtual", "Explore a sede e consulte os perfis dos agentes por departamento."],
-    ["projects", "folder", "Projetos", "Organização da produção por projeto."],
+    ["projects", "folder", "Projetos", "Reabra as produções salvas neste navegador."],
   ]],
   ["Produção", [
+    ["tasks", "tasks", "Tarefas", "Consulte as produções e o histórico local."],
     ["production", "plus", "Nova produção", "Prepare o briefing e a referência para seu próximo asset."],
-    ["pipeline", "pipeline", "AutoPipeline", "Consulte a ordem de produção e os requisitos de cada etapa."],
+    ["pipeline", "pipeline", "AutoPipeline", "Aprove planos, associe arquivos e continue a partir dos checkpoints."],
     ["library", "cube", "Biblioteca de assets", "Organize e inspecione os modelos 3D importados nesta aba."],
     ["animation", "play", "Animações", "Animações e estruturas dos assets para Unreal Engine."],
     ["materials", "layers", "Materiais e texturas", "Materiais e mapas usados na produção visual."],
-    ["audio", "audio", "Áudio e música", "Design de som e composição para a produção."],
+    ["audio", "audio", "Áudio e música", "Planejamento de som e composição para a produção."],
   ]],
   ["Inteligência artificial", [
     ["agents", "users", "Agentes", "Consulte os especialistas cadastrados no Studio."],
-    ["atlas", "spark", "Atlas", "Acompanhe o planejamento e a disponibilidade do canal de coordenação."],
+    ["atlas", "spark", "Atlas", "Proponha etapas e responsáveis a partir de um briefing."],
     ["tools", "tools", "Ferramentas", "Consulte as ferramentas disponíveis para o seu fluxo."],
-    ["memory", "memory", "Memória", "Contexto de produção e histórico dos agentes."],
+    ["memory", "memory", "Memória", "Consulte a memória local, as notas e a disponibilidade da memória remota."],
   ]],
   ["Sistema", [
     ["storage", "disk", "Armazenamento", "Consulte a origem e a disponibilidade dos arquivos."],
@@ -31,7 +34,7 @@ const groups = [
     ["settings", "settings", "Configurações", "Preferências da interface e informações da versão."],
   ]],
 ];
-const pages = new Map([["tasks", { group: "Produção", title: "Tarefas", description: "Rascunhos preparados nesta aba do navegador." }]]);
+const pages = new Map();
 const nav = byId("navigation");
 for (const [group, items] of groups) {
   const block = el("div", "nav-group");
@@ -53,11 +56,12 @@ const shell = document.querySelector(".app-shell");
 const sidebar = byId("sidebar");
 const toggle = byId("sidebar-toggle");
 const scrim = byId("scrim");
-const drafts = [];
+const workspace = document.querySelector(".workspace");
 let referenceUrl;
 let roster = [];
 let rosterUnavailable = false;
 let current;
+let currentId;
 let collapsed = false;
 try { collapsed = localStorage.getItem("arvertes-sidebar") === "collapsed"; } catch { /* optional preference */ }
 
@@ -68,6 +72,7 @@ function updateNav(open = false) {
   scrim.hidden = !mobile.matches || !open;
   sidebar.inert = mobile.matches && !open;
   toggle.setAttribute("aria-expanded", String(expanded));
+  workspace.inert = mobile.matches && open;
   toggle.setAttribute("aria-label", expanded ? "Recolher navegação" : "Abrir navegação");
 }
 function closeDrawer(restoreFocus) {
@@ -94,7 +99,7 @@ document.addEventListener("keydown", event => {
   if (event.key === "Escape") closeDrawer(true);
   if (event.key !== "Tab" || !shell.classList.contains("drawer-open")) return;
   const first = sidebar.querySelector("a");
-  const last = nav.querySelector('a[href="#settings"]');
+  const last = nav.querySelector(".nav-group:last-child a:last-child");
   if (event.shiftKey && document.activeElement === first) {
     event.preventDefault();
     last.focus();
@@ -109,24 +114,28 @@ nav.addEventListener("click", event => {
 updateNav();
 
 const systemPages = {
-  projects: ["Nenhum projeto conectado", "Os projetos persistentes dependem do backend. Prepare um rascunho local para descrever seu próximo asset.", "Nova produção", "production"],
   animation: ["Nenhuma animação publicada", "Importe um GLB para conferir quantos clipes e skins o arquivo declara. A produção de animação depende de um executor.", "Inspecionar GLB", "library"],
   materials: ["Nenhum material publicado", "A ficha técnica de um GLB exibe os materiais, texturas e UVs declarados no arquivo.", "Abrir biblioteca", "library"],
-  audio: ["Nenhuma produção de áudio", "Som e música têm etapas independentes no AutoPipeline. Os executores ainda estão indisponíveis.", "Consultar etapas", "pipeline"],
-  tools: ["Catálogo de ferramentas", "A demonstração manual do TRELLIS.2 pode ser aberta na tela de produção. As ferramentas dos agentes exigem uma conexão autenticada.", "Ver TRELLIS.2", "production"],
-  memory: ["Memória indisponível", "O histórico dos agentes depende do backend. Os rascunhos de produção continuam disponíveis durante esta sessão.", "Consultar rascunhos", "tasks"],
-  storage: ["Armazenamento nesta aba", "Os GLBs importados e os rascunhos ficam em memória. O Google Drive privado está planejado e aguarda integração autenticada.", "Abrir biblioteca", "library"],
-  resources: ["Limites desta versão", "Importação GLB de até 16 MiB por arquivo. As cotas do provedor e o uso de CPU/GPU remota estão indisponíveis.", "Ver orçamento e conexões", "security"],
-  settings: ["Preferências do workspace", "O Studio guarda a preferência de navegação neste navegador. O modo econômico pode ser alternado nos controles do escritório.", "Abrir escritório", "office"],
+  audio: ["Etapas de áudio", "Som e música têm etapas independentes no AutoPipeline. Os executores ainda estão indisponíveis.", "Consultar produções", "pipeline"],
+  storage: ["Armazenamento do navegador", "Os arquivos GLB ficam na aba. O navegador guarda os planos, os vínculos e os metadados associados. O Google Drive aguarda integração autenticada.", "Abrir biblioteca", "library"],
 };
 function renderSystem(page) {
   const root = byId("system-content");
   if (["settings", "resources", "memory", "tools"].includes(page)) {
     renderExtraPage(page, root, { collapsed, setCollapsed(value) {
       collapsed = value;
-      try { localStorage.setItem("arvertes-sidebar", value ? "collapsed" : "expanded"); } catch {}
       updateNav();
+      try {
+        localStorage.setItem("arvertes-sidebar", value ? "collapsed" : "expanded");
+        return true;
+      } catch { return false; }
     }});
+    return;
+  }
+  if (page === "projects") {
+    const projects = el("div", "task-list");
+    projects.id = "local-projects";
+    root.replaceChildren(projects);
     return;
   }
   if (page !== "security") {
@@ -134,7 +143,10 @@ function renderSystem(page) {
     root.replaceChildren(empty(pages.get(page).symbol, title, text, link(actionTitle, target, "button")));
     return;
   }
-  const notice = empty("shield", "Execução remota bloqueada", "A liberação exige autenticação, armazenamento privado, fila persistente, cotas verificadas no provedor e aprovação humana.");
+  const notice = empty("shield", "Execução remota bloqueada", "A liberação exige executor conectado, autenticação, permissões, cotas verificadas e aprovação humana.");
+  const policy = el("article", "panel content-panel");
+  policy.append(el("h2", "", "Validação da fila local"), el("p", "", "O Sentinel verifica a aprovação, as dependências e a evidência de cada checkpoint. Etapas externas aguardam executor e permissões."),
+    link("Consultar AutoPipeline", "pipeline", "button"));
   const cards = el("div", "shortcut-grid system-grid");
   for (const [title, value, description, color, symbol] of [
     ["Orçamento adicional", "R$ 0", "Teto autorizado para novos gastos", "cyan", "shield"],
@@ -147,51 +159,8 @@ function renderSystem(page) {
     card.append(badge, el("h2", "", title), el("strong", "", value), el("p", "muted", description));
     cards.append(card);
   }
-  root.replaceChildren(cards, notice);
+  root.replaceChildren(cards, policy, notice);
 }
-
-function renderDrafts() {
-  byId("draft-count").textContent = drafts.length;
-  byId("draft-label").textContent = drafts.length === 1 ? "Rascunho" : "Rascunhos";
-  byId("queue-summary").textContent = drafts.length ? "Disponíveis somente nesta aba." : "Nenhuma tarefa preparada.";
-  const activity = byId("recent");
-  const atlas = byId("atlas-drafts");
-  const tasks = byId("tasks-list");
-  activity.replaceChildren();
-  atlas.replaceChildren();
-  tasks.replaceChildren();
-  if (!drafts.length) {
-    activity.append(el("p", "activity-empty", "Nenhuma atividade de produção nesta aba."));
-    atlas.append(el("p", "activity-empty", "Nenhum rascunho preparado."));
-    tasks.append(empty("tasks", "Nenhuma tarefa preparada", "Os rascunhos criados nesta aba aparecem aqui.", link("Preparar produção", "production", "button")));
-    return;
-  }
-  for (const [index, draft] of drafts.entries()) {
-    const task = el("article", "panel content-panel");
-    task.append(el("span", "badge cyan", "Rascunho local"), el("h2", "", draft.name), el("p", "draft-copy", draft.instruction), el("p", "muted", "Execução remota indisponível."));
-    tasks.append(task);
-    const row = el("div", "activity-row");
-    row.append(el("strong", "", draft.name), el("span", "badge", "Rascunho preparado"));
-    atlas.append(row);
-    if (index < 5) activity.append(row.cloneNode(true));
-  }
-}
-
-byId("draft").addEventListener("submit", event => {
-  event.preventDefault();
-  const name = byId("name").value.trim();
-  const instruction = byId("instruction").value.trim();
-  const error = byId("draft-error");
-  if (!name || !instruction || drafts.length >= 50) {
-    error.hidden = false;
-    error.textContent = drafts.length >= 50 ? "Limite de 50 rascunhos atingido nesta aba." : "Preencha o nome e as instruções com texto.";
-    return;
-  }
-  error.hidden = true;
-  drafts.unshift({ name, instruction });
-  renderDrafts();
-  location.hash = "tasks";
-});
 
 byId("reference").addEventListener("change", () => {
   if (referenceUrl) URL.revokeObjectURL(referenceUrl);
@@ -224,18 +193,28 @@ function renderAgents() {
     root.append(empty("users", rosterUnavailable ? "Cadastro indisponível" : "Carregando cadastro…", rosterUnavailable ? "Recarregue a página para tentar novamente." : ""));
     return;
   }
-  const query = byId("agent-search").value.trim().toLocaleLowerCase("pt-BR");
+  const query = normalize(byId("agent-search").value.trim());
   const department = byId("agent-department").value;
   for (const agent of roster) {
     if (department && department !== agent.department) continue;
-    if (!`${agent.name} ${agent.role}`.toLocaleLowerCase("pt-BR").includes(query)) continue;
+    if (!normalize(`${agent.name} ${agent.role}`).includes(query)) continue;
     const [color, symbol] = departments[agent.department] ?? ["cyan", "user"];
     const card = el("article", "panel agent-card");
     const avatar = el("span", `tile-icon ${color}`);
     avatar.innerHTML = icon(symbol);
     const info = el("div");
     info.append(el("h2", "", agent.name), el("p", "", agent.role));
-    card.append(avatar, info, el("span", `badge ${color}`, agent.department));
+    const steps = agentStages(agent.id);
+    const canOperate = steps.some(stage => stage.kind !== "external");
+    info.append(el("p", "muted", canOperate ? "Operação local disponível" : "Etapas planejáveis"));
+    const details = el("details", "agent-details");
+    details.append(el("summary", "", "Responsabilidades e ferramentas"), fields([
+      ["Conexão remota", "Desconectada"],
+      ["Etapas e responsabilidades", steps.map(stage => `${stage.title} · ${stage.description}`).join(" • ")],
+      ["Ferramentas", [...new Set(steps.map(stage => stage.tool))].join(" • ")],
+      ["Limite atual", canOperate ? "Ações locais conforme os checkpoints do AutoPipeline." : "A execução depende de uma integração validada."],
+    ]), link("Consultar AutoPipeline", "pipeline"));
+    card.append(avatar, info, el("span", `badge ${color}`, agent.department), details);
     root.append(card);
   }
   if (!root.firstChild) root.append(empty("users", "Nenhum agente encontrado", "Tente outro nome, especialidade ou departamento."));
@@ -258,17 +237,20 @@ fetch("./roster.json").then(response => {
 
 const sections = [...document.querySelectorAll("main > section")];
 function renderPage(focus = false) {
-  const id = location.hash.slice(1);
-  if (id === "content") return;
-  const page = pages.has(id) ? id : "overview";
-  if (page === current) return;
+  const [requestedPage, id] = location.hash.slice(1).split("/");
+  if (requestedPage === "content") return;
+  const page = pages.has(requestedPage) ? requestedPage : "overview";
+  const productionId = ["pipeline", "library"].includes(page) && /^[a-f0-9-]{36}$/.test(id || "") ? id : undefined;
+  if (page === current && productionId === currentId) return;
   const { group, title, description } = pages.get(page);
   if (current === "office" || current === "overview") unmountOffice();
   if (current === "library") closePreview();
   current = page;
+  currentId = productionId;
   const section = byId(`view-${page}`) || byId("system-page");
   for (const item of sections) item.hidden = item !== section;
   if (section.id === "system-page") renderSystem(page);
+  showProductionPage(page, productionId);
   for (const anchor of nav.querySelectorAll("a")) {
     if (anchor.hash === `#${page}`) anchor.setAttribute("aria-current", "page");
     else anchor.removeAttribute("aria-current");
@@ -288,10 +270,13 @@ function renderPage(focus = false) {
 
 applyDisplayPreferences();
 fillIcons();
-renderDrafts();
+initProduction();
 renderAgents();
 initLibrary();
 initPipeline();
+document.addEventListener("studio:library", () => {
+  if (current === "resources") renderSystem(current);
+});
 document.querySelector(".skip").addEventListener("click", event => {
   event.preventDefault();
   byId("content").focus();

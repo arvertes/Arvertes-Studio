@@ -344,3 +344,38 @@ html[data-density=compact] .detail-row { padding:8px 0; }
 html[data-reduce-motion=true] *,html[data-reduce-motion=true] *::before,html[data-reduce-motion=true] *::after { animation-duration:.01ms !important; transition-duration:.01ms !important; scroll-behavior:auto !important; }
 @media (max-width:1050px) { #system-content { grid-template-columns:1fr; } }
 @media (max-width:650px) { .system-detail { padding:16px; } .detail-row { align-items:flex-start; } .detail-row .badge { max-width:125px; white-space:normal; } .system-tool-action { max-width:135px; } }
+
+#system-content > :is(.system-grid, .empty-state, .task-list) { grid-column: 1 / -1; }
+#system-content > .system-grid { margin-bottom: 0; }
+.system-form .button, .system-tool-action { max-width: 100%; }
+.production-section, .production-form { display: grid; gap: 12px; }
+.production-section:empty { display: none; }
+#plan-preview, #atlas-drafts, #library-production, .pipeline-reference { margin-top: 14px; }
+.production-field { display: grid; gap: 5px; min-width: 0; }
+.production-form { width: min(100%, 640px); }
+.production-form > .button { justify-self: start; }
+.production-details, .agent-details { width: 100%; min-width: 0; }
+.production-details > summary, .agent-details > summary, .pipeline-reference > summary {
+  color: var(--cyan);
+  cursor: pointer;
+  padding-block: 7px;
+}
+.production-details[open] > :not(summary), .agent-details[open] > :not(summary) { margin-top: 6px; }
+.production-details :is(p, li), .production-history p, .activity-row p, .activity-row a { overflow-wrap: anywhere; }
+.production-tasks { list-style: none; padding: 0; margin: 0; width: 100%; display: grid; gap: 8px; }
+.production-task { padding: 12px 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); min-width: 0; }
+.production-task > * + * { margin-top: 4px; }
+.production-task > p { font-size: .86rem; }
+.production-task .badge { display: inline-flex; }
+.production-history, .inspection-list { padding-inline-start: 20px; margin-block: 0; }
+.production-history > li + li, .inspection-list > li + li { margin-top: 6px; }
+.inspection-list { line-height: 1.5; color: var(--muted); }
+.agent-details { grid-column: 1 / -1; border-top: 1px solid var(--line-soft); }
+.agent-details .detail-list div { grid-template-columns: 1fr; }
+#pipeline-feedback:empty, #draft-error:empty { display: none; }
+#pipeline-feedback, #plan-preview { scroll-margin-block-start: 72px; }
+#pipeline-production .content-panel h2, #tasks-list h2 { overflow-wrap: anywhere; }
+@media (max-width: 500px) {
+  .production-task, .production-section .content-panel { padding: 12px; }
+  .system-tool-action { flex: 0 1 45%; }
+}

@@ -66,3 +66,11 @@ A revisão no hardware físico Intel UHD e em celulares permanece pendente. As c
 - [Parecer preliminar no AutoPipeline](review/local-v03/01-autopipeline-parecer.png)
 - [Habblaud em viewport móvel](review/local-v03/02-escritorio-mobile.png)
 - [Memória em viewport móvel](review/local-v03/03-memoria-mobile.png)
+
+## Conversa e memória local dos 26 agentes
+
+Na aba **Atlas**, selecione o agente ou use **Conversar** em um dos 26 cartões na aba Agentes. Cada agente responde em modo determinístico, baseado em suas responsabilidades, notas compartilhadas e estado das produções locais; não há LLM remoto, ferramentas executoras ou respostas externas. Digite **Lembre que ...** para salvar uma anotação de até 320 caracteres, compartilhada entre os 26 agentes neste mesmo navegador. As perguntas sobre a anotação consultam as palavras relevantes. As conversas são separadas por agente, com histórico de até 60 mensagens por agente e até 24 notas compartilhadas. O usuário pode apagar uma nota ou o histórico de um agente explicitamente.
+
+As mensagens e notas ficam no IndexedDB local `arvertes-studio-agent-memory`. Não há backup, criptografia própria, conexão Google Drive ou sincronização entre dispositivos. **Não registre senhas, tokens ou dados confidenciais.** Os GLBs não são enviados. O Atlas pode resumir o número de planos e checkpoints do IndexedDB de produções, mas não pode executar tarefas por chat. A exclusão de notas é irreversível no navegador. A falta de armazenamento é informada e não resulta em falso sucesso.
+
+O build valida regras de resposta via `web/test-agents.mjs`. Testes de navegador cobrem persistência e exclusão de memória.

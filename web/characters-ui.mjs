@@ -124,6 +124,8 @@ function renderEditor(record) {
   controls.append(makeButton("Exportar pacote ZIP",async trigger=>{
     trigger.disabled=true;
     try {
+      const fields=Object.fromEntries(new FormData(form).entries());
+      await repo.save({...fields,id:record.id,revision:record.revision});
       const zip=await repo.exportZip(record.id);
       const name=record.name.normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-zA-Z0-9-_]+/g,"-").slice(0,60)||"personagem";
       download(zip,name+"-arvertes.zip");

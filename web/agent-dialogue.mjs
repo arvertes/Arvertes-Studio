@@ -59,7 +59,7 @@ export function agentResponse({agent, message, facts = [], productions = null}) 
   if (/(o que|quais|mostre|liste|minha).*(lembra|memoria|anotac|informac)/.test(question) || /^(memoria|o que sabe)$/.test(question)) {
     return { reply: "Memória compartilhada deste navegador:\n" + presentFacts(facts) };
   }
-  if (/(produco|projet|taref|andamento|checkpoint|progresso|status)/.test(question)) {
+  if (/(produc|projet|taref|andamento|checkpoint|progresso|status)/.test(question)) {
     return { reply: productionSummary(productions) };
   }
   if (/(custo|cota|gpu|credito|assinatura|dinheiro|orcamento)/.test(question)) {
@@ -68,7 +68,7 @@ export function agentResponse({agent, message, facts = [], productions = null}) 
   if (/(crie|gera|gerar|produza|anime|animar|execute|renderize|conecte)/.test(question)) {
     return { reply: "Ainda não consigo executar essa operação remotamente. Posso orientar o planejamento local, e o AutoPipeline permite registrar etapas e evidências reais. Geração, rig, animação e áudio exigem ferramentas conectadas." };
   }
-  if (/(oi|ola|bom dia|boa tarde|boa noite)/.test(question) && question.length < 40) {
+  if (/^(oi|ola|bom dia|boa tarde|boa noite)[!.?\\s]*$/.test(question)) {
     return { reply: "Sou " + agent.name + ", responsável por " + agent.role.toLocaleLowerCase("pt-BR") + ". Estou em modo local, com respostas por regras e memória compartilhada. Você pode perguntar sobre minhas tarefas ou dizer 'Lembre que ...'." };
   }
   const askedAboutMemory = /(qual|quais|como|porque|por que|sabe|lembra|me diga|resuma|informe|conte|mostre)/.test(question);

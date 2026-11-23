@@ -1,5 +1,8 @@
 """Verificações da distribuição estática com Chromium e dados sintéticos."""
 import argparse
+import base64
+import json
+import zipfile
 from functools import partial
 from hashlib import sha256
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -293,6 +296,63 @@ def agent_memory_flow(page, origin):
     expect(page.locator("#chat-facts")).to_contain_text("Nenhuma informação compartilhada")
 
 
+
+def character_bundle_flow(page, origin, directory):
+    page.goto(origin + "#characters")
+    expect(page.get_by_role("heading", name="Catálogo de personagens")).to_be_visible()
+    page.locator("#character-new-name").fill("GVS sintético")
+    page.get_by_role("button", name="Criar dossiê").click()
+    expect(page.locator("#character-editor").get_by_role("heading", name="GVS sintético")).to_be_visible()
+    page.locator("#character-history").fill("Veio da vila de testes, sem ligação com o cânone.")
+    page.locator("#character-personality").fill("Calmo e curioso.")
+    page.locator("#character-clothing").fill("Casaco azul e botas vermelhas.")
+    page.locator("#character-voiceDirection").fill("Voz suave.")
+    page.locator("#character-animationDirection").fill("Andar e pular.")
+    page.locator(".character-form").get_by_role("button", name="Salvar ficha").click()
+    expect(page.locator("#characters-status")).to_contain_text("Ficha salva")
+
+    cover = directory / "capa.png"
+    cover.write_bytes(base64.b64decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j"
+        "EWQAAAAASUVORK5CYII="
+    ))
+    page.locator("#char-attach-cover").set_input_files(cover)
+    expect(page.locator(".character-cover")).to_be_visible()
+
+    glb = directory / "gvs.glb"
+    FIXTURE(glb, 4)
+    page.locator("#char-attach-model").set_input_files(glb)
+    expect(page.locator(".character-file-name")).to_contain_text("gvs.glb")
+    with page.expect_download() as item:
+        page.get_by_role("button", name="Exportar pacote ZIP").click()
+    archive = item.value.path()
+    with zipfile.ZipFile(archive) as z:
+        files=set(z.namelist())
+        assert "manifesto.json" in files and "midia/capa.png" in files and "midia/modelo.glb" in files
+        manifest=json.loads(z.read("manifesto.json"))
+        assert manifest["character"]["name"]=="GVS sintético"
+        assert manifest["character"]["status"]=="rascunho"
+        assert z.read("midia/modelo.glb")==glb.read_bytes()
+
+    page.reload()
+    expect(page.locator("#characters-list").get_by_text("GVS sintético")).to_be_visible()
+    page.locator("#characters-list").get_by_role("button").first.click()
+    expect(page.locator("#character-history")).to_have_value("Veio da vila de testes, sem ligação com o cânone.")
+    expect(page.locator(".character-cover")).to_be_visible()
+    page.goto(origin + "#atlas")
+    page.locator("#chat-message").fill("Qual roupa do GVS sintético?")
+    page.locator("#chat-send").click()
+    expect(page.locator("#chat-messages")).to_contain_text("Casaco azul")
+
+    page.goto(origin + "#characters")
+    page.locator("#characters-list").get_by_role("button").first.click()
+    page.get_by_role("button", name="Planejar com Atlas").click()
+    expect(page).to_have_url(re.compile(r"#production$"))
+    expect(page.locator("#name")).to_have_value("GVS sintético")
+    expect(page.locator("#instruction")).to_contain_text("Casaco azul")
+    page.get_by_role("button", name="Propor plano").click()
+    expect(page.get_by_role("heading", name="Proposta de Atlas")).to_be_visible()
+
 def main():
     args = argparse.ArgumentParser(description=__doc__)
     args.add_argument("--chromium", help="Caminho do Chromium instalado, quando não fornecido pelo Playwright")
@@ -318,11 +378,12 @@ def main():
                     (browser_storage_failures, {"width": 1280, "height": 900}),
                     (concurrent_transactions, {"width": 1280, "height": 900}),
                     (agent_memory_flow, {"width": 1280, "height": 900}),
+                    (character_bundle_flow, {"width": 1280, "height": 900}),
                 ]:
-                    page = browser.new_page(viewport=viewport)
+                    page = browser.new_page(viewport=viewport, accept_downloads=True)
                     errors = []
                     page.on("pageerror", lambda error: errors.append(str(error)))
-                    extra = (Path(scratch), capture) if scenario is production_flow else (capture,) if scenario is office_and_mobile else ()
+                    extra = (Path(scratch), capture) if scenario is production_flow else (Path(scratch),) if scenario is character_bundle_flow else (capture,) if scenario is office_and_mobile else ()
                     scenario(page, origin, *extra)
                     assert not errors, errors
                     page.close()

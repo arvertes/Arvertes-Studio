@@ -6,6 +6,7 @@ export interface Brief {
   name: string;
   instruction: string;
   type?: ProductionType | "";
+  characterId?: string; // Vínculo opcional com um dossiê local
 }
 
 export interface GlbSnapshot {
@@ -43,6 +44,7 @@ export interface LocalProduction {
   name: string;
   instruction: string;
   createdAt: string;
+  characterId?: string;
   approvedAt?: string;
   tasks: Task[];
   history: { at: string; type: "plan" | "checkpoint" | "note" | "error"; message: string }[];
@@ -100,4 +102,56 @@ export interface FuturePorts {
     checkpoint?: VerifiedCheckpoint;
     errorCode?: string;
   }>;
+}
+
+
+// Dossiês locais v1. Mídias são Blobs em IndexedDB e só saem por exportação explícita.
+export type CharacterMediaSlot = "cover" | "model" | "animation" | "voice";
+export interface CharacterMediaMetadata {
+  name: string;
+  size: number;
+  mime: string;
+  digest: string; // SHA-256 verificado no arquivo local
+  at: string;
+}
+export interface CharacterDossier {
+  schema: 1;
+  id: string;
+  name: string;
+  history: string;
+  personality: string;
+  appearance: string;
+  clothing: string;
+  relationships: string;
+  voiceDirection: string;
+  animationDirection: string;
+  notes: string;
+  credits: string;
+  status: "rascunho" | "aprovado"; // Só o autor aprova
+  revision: number;
+  createdAt: string;
+  updatedAt: string;
+  attachments: Partial<Record<CharacterMediaSlot, CharacterMediaMetadata>>;
+  productionId: string | null;
+}
+export interface CharacterLocalRepository {
+  list(): Promise<CharacterDossier[]>;
+  get(id: string): Promise<CharacterDossier | null>;
+  create(data: {name: string}): Promise<CharacterDossier>;
+  save(data: CharacterDossier): Promise<CharacterDossier>;
+  attach(id: string,slot: CharacterMediaSlot,file: File): Promise<CharacterDossier>;
+  exportZip(id: string): Promise<Blob>;
+}
+// Interfaces futuras. Nenhuma API de inferência ou Drive é chamada nesta versão.
+export interface FutureCharacterPorts {
+  getCharacter(id: string): Promise<{revision: string; character: CharacterDossier}>;
+  saveCharacter(character: CharacterDossier, expectedRevision: string): Promise<{revision: string}>;
+  processAgentMessage(input: {
+    agentId: string;
+    characterId?: string;
+    productionId?: string;
+    message: string;
+    userApproved: boolean;
+    maxCostCentavos: 0;
+  }): Promise<{reply: string; sources: string[]; suggestions: string[]; executionStarted: false}>;
 }

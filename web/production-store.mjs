@@ -83,6 +83,10 @@ export function createProductionRepository(indexedDB) {
     },
     create(brief) {
       const plan = previewPlan(brief);
+      if (brief.characterId) {
+        if (!/^[a-f0-9-]{36}$/.test(brief.characterId)) throw Error("Vínculo de personagem inválido.");
+        plan.characterId = brief.characterId;
+      }
       const record = createProduction(plan);
       return transaction("readwrite", (store, read) => read(store.count(), total => {
         if (total >= productionLimit) throw Error(`Limite de ${productionLimit} produções neste navegador atingido.`);

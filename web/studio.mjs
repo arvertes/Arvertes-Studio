@@ -5,6 +5,7 @@ import { initPipeline } from "./pipeline.mjs";
 import { applyDisplayPreferences, renderExtraPage } from "./system-panels.mjs";
 import { initProduction, showProductionPage } from "./production-ui.mjs";
 import { agentStages, normalize } from "./production-catalog.mjs";
+import { initAgentChat, setChatAgents, openAgentChat } from "./agent-chat.mjs";
 
 const groups = [
   ["Central", [
@@ -214,7 +215,10 @@ function renderAgents() {
       ["Ferramentas", [...new Set(steps.map(stage => stage.tool))].join(" • ")],
       ["Limite atual", canOperate ? "Ações locais conforme os checkpoints do AutoPipeline." : "A execução depende de uma integração validada."],
     ]), link("Consultar AutoPipeline", "pipeline"));
-    card.append(avatar, info, el("span", `badge ${color}`, agent.department), details);
+    const talk = el("button", "button", "Conversar");
+    talk.type = "button";
+    talk.addEventListener("click", () => openAgentChat(agent.id));
+    card.append(avatar, info, el("span", `badge ${color}`, agent.department), details, talk);
     root.append(card);
   }
   if (!root.firstChild) root.append(empty("users", "Nenhum agente encontrado", "Tente outro nome, especialidade ou departamento."));
@@ -228,10 +232,12 @@ fetch("./roster.json").then(response => {
   roster = data;
   for (const department of new Set(roster.map(agent => agent.department))) byId("agent-department").add(new Option(department, department));
   setOfficeRoster(roster);
+  setChatAgents(roster);
   renderAgents();
 }).catch(() => {
   rosterUnavailable = true;
   setOfficeRoster([]);
+  setChatAgents([]);
   renderAgents();
 });
 
@@ -271,6 +277,7 @@ function renderPage(focus = false) {
 applyDisplayPreferences();
 fillIcons();
 initProduction();
+initAgentChat();
 renderAgents();
 initLibrary();
 initPipeline();

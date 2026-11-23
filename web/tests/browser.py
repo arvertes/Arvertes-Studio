@@ -349,7 +349,7 @@ def character_bundle_flow(page, origin, directory):
     page.get_by_role("button", name="Planejar com Atlas").click()
     expect(page).to_have_url(re.compile(r"#production$"))
     expect(page.locator("#name")).to_have_value("GVS sintético")
-    expect(page.locator("#instruction")).to_contain_text("Casaco azul")
+    expect(page.locator("#instruction")).to_have_value(re.compile("Casaco azul"))
     page.get_by_role("button", name="Propor plano").click()
     expect(page.get_by_role("heading", name="Proposta de Atlas")).to_be_visible()
 

@@ -65,10 +65,10 @@ export function agentResponse({agent, message, facts = [], productions = null}) 
   if (/(custo|cota|gpu|credito|assinatura|dinheiro|orcamento)/.test(question)) {
     return { reply: "Orçamento adicional autorizado: R$ 0. Cotas de GPU e créditos externos não são consultados nesta versão. Sentinel mantém a execução remota bloqueada." };
   }
-  if (/(crie|gera|gerar|produza|anime|animar|execute|renderize|conecte)/.test(question)) {
+  if (/(crie|gere|gera|gerar|produza|anime|animar|execute|renderize|conecte)/.test(question)) {
     return { reply: "Ainda não consigo executar essa operação remotamente. Posso orientar o planejamento local, e o AutoPipeline permite registrar etapas e evidências reais. Geração, rig, animação e áudio exigem ferramentas conectadas." };
   }
-  if (/^(oi|ola|bom dia|boa tarde|boa noite)[!.?\\s]*$/.test(question)) {
+  if (/^(oi|ola|bom dia|boa tarde|boa noite)[!.?\s]*$/.test(question)) {
     return { reply: "Sou " + agent.name + ", responsável por " + agent.role.toLocaleLowerCase("pt-BR") + ". Estou em modo local, com respostas por regras e memória compartilhada. Você pode perguntar sobre minhas tarefas ou dizer 'Lembre que ...'." };
   }
   const askedAboutMemory = /(qual|quais|como|porque|por que|sabe|lembra|me diga|resuma|informe|conte|mostre)/.test(question);

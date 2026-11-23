@@ -157,6 +157,31 @@
             <p>Atlas usa termos do briefing para sugerir o tipo de produção, distribuir etapas e apontar dependências. Quando houver dúvida, escolha o tipo de entrega.</p>
             <a class="button primary" href="#production">Preparar briefing <span data-icon="arrow-right"></span></a>
           </article>
+          <article class="panel content-panel agent-chat-panel" aria-labelledby="chat-title">
+            <div class="panel-heading">
+              <span class="tile-icon cyan" data-icon="users"></span>
+              <div><h2 id="chat-title">Conversar com os agentes</h2><p>Modo local · respostas por regras · sem servidor de IA</p></div>
+            </div>
+            <p class="muted">Escolha um dos 26 agentes. As conversas são separadas, e informações salvas com “Lembre que ...” são compartilhadas entre eles neste navegador.</p>
+            <label class="production-field" for="chat-agent">Agente
+              <select id="chat-agent" aria-describedby="chat-specialty"></select>
+            </label>
+            <p id="chat-specialty" class="muted">Carregando cadastro dos agentes…</p>
+            <div id="chat-messages" class="chat-log" role="log" aria-label="Mensagens da conversa" aria-live="polite" aria-relevant="additions text"></div>
+            <form id="chat-form" class="production-form">
+              <label class="production-field" for="chat-message">Mensagem
+                <textarea id="chat-message" required maxlength="600" rows="3" placeholder="Ex.: O que você faz? Ou: Lembre que o GVS usa um amuleto vermelho."></textarea>
+              </label>
+              <button id="chat-send" class="button primary" type="submit">Enviar mensagem</button>
+            </form>
+            <p id="chat-status" class="muted" role="status" aria-live="polite"></p>
+            <details class="production-details">
+              <summary>Memória compartilhada dos agentes <span id="chat-count">0/24</span></summary>
+              <p class="muted">Salva no IndexedDB deste navegador, sem criptografia própria e sem sincronização. Não coloque senhas, tokens ou informações privadas. A exclusão é permanente neste navegador.</p>
+              <div id="chat-facts" class="chat-facts"></div>
+            </details>
+            <button id="chat-clear" type="button" class="button">Apagar histórico de conversa deste agente</button>
+          </article>
           <div id="atlas-drafts" class="production-section"></div>
         </section>
 

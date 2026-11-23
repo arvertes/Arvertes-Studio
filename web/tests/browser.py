@@ -256,6 +256,43 @@ def concurrent_transactions(page, origin):
     expect(sound_task.locator(".checkpoint")).to_have_count(0)
 
 
+
+def agent_memory_flow(page, origin):
+    page.goto(origin + "#atlas")
+    expect(page.get_by_role("heading", name="Conversar com os agentes")).to_be_visible()
+    page.locator("#chat-agent").select_option("coordenador")
+    page.locator("#chat-message").fill("Lembre que o GVS usa um amuleto vermelho.")
+    page.locator("#chat-send").click()
+    expect(page.locator("#chat-facts")).to_contain_text("amuleto vermelho")
+    expect(page.locator("#chat-messages .chat-bubble")).to_have_count(2)
+
+    page.locator("#chat-agent").select_option("modelador")
+    page.locator("#chat-message").fill("Qual amuleto do GVS?")
+    page.locator("#chat-send").click()
+    expect(page.locator("#chat-messages")).to_contain_text("amuleto vermelho")
+    page.reload()
+    page.locator("#chat-agent").select_option("modelador")
+    expect(page.locator("#chat-messages")).to_contain_text("Qual amuleto do GVS?")
+    expect(page.locator("#chat-facts")).to_contain_text("amuleto vermelho")
+
+    page.goto(origin + "#agents")
+    forge = page.locator(".agent-card").filter(has=page.get_by_role("heading", name="Forge"))
+    forge.get_by_role("button", name="Conversar").click()
+    expect(page).to_have_url(re.compile(r"#atlas$"))
+    expect(page.locator("#chat-agent")).to_have_value("modelador")
+
+    page.once("dialog", lambda dialog: dialog.accept())
+    page.locator("#chat-clear").click()
+    expect(page.locator("#chat-messages .chat-bubble")).to_have_count(0)
+    expect(page.locator("#chat-facts")).to_contain_text("amuleto vermelho")
+
+    page.once("dialog", lambda dialog: dialog.accept())
+    page.locator("#chat-facts").get_by_role("button", name=re.compile("Excluir anotação")).click()
+    expect(page.locator("#chat-facts")).to_contain_text("Nenhuma informação compartilhada")
+    page.reload()
+    expect(page.locator("#chat-facts")).to_contain_text("Nenhuma informação compartilhada")
+
+
 def main():
     args = argparse.ArgumentParser(description=__doc__)
     args.add_argument("--chromium", help="Caminho do Chromium instalado, quando não fornecido pelo Playwright")
@@ -280,6 +317,7 @@ def main():
                     (office_and_mobile, {"width": 375, "height": 812}),
                     (browser_storage_failures, {"width": 1280, "height": 900}),
                     (concurrent_transactions, {"width": 1280, "height": 900}),
+                    (agent_memory_flow, {"width": 1280, "height": 900}),
                 ]:
                     page = browser.new_page(viewport=viewport)
                     errors = []

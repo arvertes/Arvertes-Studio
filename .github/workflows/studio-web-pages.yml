@@ -1,0 +1,63 @@
+name: Publish Studio Web preview
+# Publication requires a deliberate marker commit after the owner enables Pages.
+on:
+  push:
+    branches: [feat/v0.3-web]
+    paths: ['web/publish-preview.txt']
+permissions:
+  contents: read
+concurrency:
+  group: studio-pages-preview
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: marmottajr/habblaud
+          ref: faa1a012b5fbf632c66dc6801c5383e53a542406
+          path: upstream
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Test reader
+        run: |
+          node web/test-glb.mjs
+          node --check web/studio.mjs
+      - name: Prepare and compile
+        run: |
+          python office_habblaud/prepare.py upstream
+          cd upstream
+          npm ci --ignore-scripts
+          npm run build:client -- --base=./
+          cd ..
+          mv upstream/dist/client/index.html upstream/dist/client/office.html
+          cp upstream/LICENSE upstream/dist/client/HABBLAUD-LICENSE.txt
+          cp web/index.html web/studio.css web/studio.mjs web/glb.mjs office_habblaud/roster.json upstream/dist/client/
+          printf '%s\n' 'Habblaud / Márcio Junior / MIT / faa1a012b5fbf632c66dc6801c5383e53a542406' > upstream/dist/client/HABBLAUD-SOURCE.txt
+          touch upstream/dist/client/.nojekyll
+          test -s upstream/dist/client/index.html
+          test -s upstream/dist/client/office.html
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: upstream/dist/client
+  deploy:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy preview
+        id: deployment
+        uses: actions/deploy-pages@v4

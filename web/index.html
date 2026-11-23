@@ -151,6 +151,29 @@
           <div id="roster" class="roster" aria-live="polite"></div>
         </section>
 
+        <section id="view-characters" aria-labelledby="page-title" hidden>
+          <div class="character-intro panel content-panel">
+            <div class="panel-heading"><span class="tile-icon cyan" data-icon="users"></span><div><h2>Catálogo de personagens</h2><p>Dossiê autoral, memória de produção e arquivos do personagem</p></div></div>
+            <p>Organize cada personagem como um pacote completo: capa 2D, nome, história, personalidade, vestuário, modelo 3D, animações e voz. Tudo permanece local até você exportar o ZIP. Uma ficha não publicada é apenas um rascunho.</p>
+            <form id="character-create" class="character-create-form">
+              <label class="character-field" for="character-new-name">Nome do novo personagem
+                <input id="character-new-name" type="text" required maxlength="100" placeholder="Ex.: GVS">
+              </label>
+              <button class="button primary" type="submit">Criar dossiê</button>
+            </form>
+            <p id="characters-status" class="muted" role="status" aria-live="polite"></p>
+          </div>
+          <div class="character-workspace">
+            <aside class="character-sidebar">
+              <h2>Personagens cadastrados</h2>
+              <div id="characters-list" class="character-list"></div>
+            </aside>
+            <div id="character-editor" class="panel content-panel character-editor" aria-live="polite">
+              <p class="muted">Selecione um personagem ou crie uma ficha.</p>
+            </div>
+          </div>
+        </section>
+
         <section id="view-atlas" aria-labelledby="page-title" hidden>
           <article class="panel content-panel">
             <div class="panel-heading"><span class="tile-icon cyan" data-icon="spark"></span><div><h2>Planejador local</h2><p>Atlas · Coordenador geral</p></div></div>

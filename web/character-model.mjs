@@ -68,7 +68,7 @@ export function buildCharacterBrief(record) {
   if (!record?.name) throw Error("Personagem não selecionado.");
   const parts = ["Criar o personagem " + record.name + " em GLB para Unreal Engine."];
   for (const [label, key] of [
-    ["Aparência","appearance"],["Vestuário","clothing"],["Personalidade","personality"],
+    ["História (contexto autoral)","history"],["Aparência","appearance"],["Vestuário","clothing"],["Personalidade","personality"],
     ["Direção de animação","animationDirection"],["Direção de voz","voiceDirection"],
   ]) {
     if (record[key]?.trim()) parts.push(label + ": " + record[key].trim().slice(0,280) + ".");

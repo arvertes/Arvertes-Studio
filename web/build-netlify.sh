@@ -3,6 +3,7 @@ set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$root"
 node web/test-glb.mjs
+node web/test-system.mjs
 for module in web/*.mjs; do
   node --check "$module"
 done

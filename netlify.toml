@@ -1,0 +1,17 @@
+[build]
+  base = "web"
+  command = "bash build-netlify.sh"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "24"
+  VITE_ARVERTES_STATIC_PREVIEW = "1"
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "no-referrer"
+    X-Frame-Options = "SAMEORIGIN"
+    X-Robots-Tag = "noindex, nofollow"
+    Permissions-Policy = "camera=(), microphone=(), geolocation=()"

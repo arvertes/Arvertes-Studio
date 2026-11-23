@@ -379,3 +379,30 @@ html[data-reduce-motion=true] *,html[data-reduce-motion=true] *::before,html[dat
   .production-task, .production-section .content-panel { padding: 12px; }
   .system-tool-action { flex: 0 1 45%; }
 }
+
+
+/* Conversas locais por agente. Sem conexão remota nesta fase. */
+.agent-chat-panel { display:grid; gap:15px; max-width:1000px; margin-bottom:18px; }
+.agent-chat-panel > .muted { max-width:720px; }
+.agent-chat-panel .production-field select { max-width:440px; }
+.chat-log { display:flex; flex-direction:column; align-items:flex-start; gap:11px; min-height:190px; max-height:430px; overflow-y:auto; padding:16px; border:1px solid var(--line); border-radius:9px; background:#0e151d; }
+.chat-bubble { width:fit-content; max-width:min(87%,680px); border:1px solid #344554; border-radius:10px; background:var(--panel-raised); padding:11px 14px; }
+.chat-bubble strong { font-size:.8rem; color:var(--cyan); display:block; margin-bottom:5px; }
+.chat-bubble p { color:var(--text); white-space:pre-wrap; word-break:break-word; }
+.chat-user { align-self:flex-end; border-color:#295e65; background:#17333b; }
+.chat-user strong { color:var(--teal); }
+.agent-chat-panel .production-form { width:100%; }
+.agent-chat-panel textarea { width:100%; min-height:75px; resize:vertical; background:var(--base); color:var(--text); border:1px solid #394b5f; border-radius:7px; padding:12px; }
+.chat-facts { display:grid; gap:5px; margin:10px 0; }
+.chat-fact { display:flex; justify-content:space-between; align-items:center; gap:12px; padding:11px 0; border-bottom:1px solid var(--line-soft); }
+.chat-fact p { white-space:pre-wrap; overflow-wrap:anywhere; min-width:0; }
+.chat-fact .button { flex:none; }
+#chat-clear { justify-self:start; }
+#chat-status:empty { display:none; }
+.agent-card > .button { justify-self:start; }
+@media (max-width:650px) {
+  .agent-chat-panel { padding:14px; }
+  .chat-log { min-height:160px; max-height:50dvh; padding:10px; }
+  .chat-bubble { max-width:95%; }
+  .chat-fact { align-items:flex-start; flex-wrap:wrap; }
+}

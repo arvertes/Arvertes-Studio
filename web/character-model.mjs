@@ -5,7 +5,7 @@ export const MEDIA_LIMITS = Object.freeze({cover: 2*1024*1024, model: 16*1024*10
 export const MEDIA_LABELS = Object.freeze({cover:"Capa 2D",model:"Modelo 3D",animation:"Animações",voice:"Voz"});
 export const FIELDS = Object.freeze({
   name: 100, history: 4000, personality: 2000, appearance: 1500, clothing: 2000,
-  voiceDirection: 1200, animationDirection: 1200, relationships: 1600, notes: 2000,
+  voiceDirection: 1200, animationDirection: 1200, relationships: 1600, notes: 2000, credits: 1200,
 });
 export const MAX_TOTAL_FILE_BYTES = 50*1024*1024;
 export const allowedStatus = ["rascunho", "aprovado"];

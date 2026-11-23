@@ -2,6 +2,7 @@ import { byId, el, empty, link } from "./ui.mjs";
 import { createCharacterRepository } from "./character-store.mjs";
 import { buildCharacterBrief, FIELDS, MEDIA_LABELS, MEDIA_LIMITS } from "./character-model.mjs";
 import { inspectGlb } from "./glb.mjs";
+import { importCharacterGlb } from "./library.mjs";
 
 const repo=createCharacterRepository(typeof indexedDB!=="undefined"?indexedDB:null);
 const labels={
@@ -9,6 +10,7 @@ const labels={
   appearance:"Aparência e características",clothing:"Roupas, acessórios e variações",
   relationships:"Relações e vínculos",voiceDirection:"Voz: tom, fala e interpretação",
   animationDirection:"Animações e gestos",notes:"Notas de produção e referências",
+  credits:"Créditos, licença e origem da arte",
 };
 const mediaAccept={cover:"image/png,image/jpeg,image/webp",model:".glb",animation:".glb",voice:".wav,.ogg,.mp3"};
 let entries=[],selected=null,initialized=false,revision=0,coverUrl,voiceUrl,viewer;
@@ -169,6 +171,16 @@ function mediaCard(record,kind) {
     if(kind==="cover")void showCover(record.id,surface);
     if(kind==="voice")void showVoice(record.id,surface);
     if(kind==="model"||kind==="animation")item.append(makeButton("Visualizar GLB",()=>void showModel(record.id,kind,surface)));
+    if(kind==="model")item.append(makeButton("Enviar modelo à biblioteca",async ()=>{
+      try{
+        const saved=await repo.media(record.id,kind);
+        if(!saved?.blob)throw Error("Arquivo 3D indisponível.");
+        const file=new File([saved.blob],meta.name,{type:"model/gltf-binary"});
+        await importCharacterGlb(file);
+        status("Modelo disponível na biblioteca nesta aba. Você pode associá-lo ao plano no AutoPipeline.");
+        location.hash="#library";
+      }catch(error){status(error.message,true);}
+    }));
     item.append(makeButton("Remover arquivo",async ()=>{
       if(!confirm("Remover este arquivo do dossiê local?"))return;
       try{await repo.removeAttachment(record.id,kind);status("Anexo removido.");await refresh();}
@@ -184,7 +196,15 @@ function mediaCard(record,kind) {
   input.addEventListener("change",async ()=>{
     if(!input.files?.length)return;
     input.disabled=true;
-    try{await repo.attach(record.id,kind,input.files[0]);status(MEDIA_LABELS[kind]+" anexado com hash SHA-256.");await refresh();}
+    try{
+      const form=byId("character-editor").querySelector(".character-form");
+      if(form){
+        const fields=Object.fromEntries(new FormData(form).entries());
+        await repo.save({...fields,id:record.id,revision:record.revision});
+      }
+      await repo.attach(record.id,kind,input.files[0]);
+      status(MEDIA_LABELS[kind]+" anexado com hash SHA-256.");await refresh();
+    }
     catch(error){status(error.message,true);}
     finally{input.disabled=false;input.value="";}
   });

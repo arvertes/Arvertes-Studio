@@ -63,7 +63,8 @@ document.querySelector('#plus')!.addEventListener('click',()=>view.zoomBy(1.25))
 detail(agents[0].id);
 let revision = 1;
 let last = '';
-const updates = window.setInterval(async () => {
+// Static hosting must not poll a nonexistent live endpoint.
+const updates = import.meta.env.VITE_ARVERTES_STATIC_PREVIEW === '1' ? 0 : window.setInterval(async () => {
   try {
     const response = await fetch('/office-state.json', {cache: 'no-store'});
     if (!response.ok) return;

@@ -206,6 +206,7 @@ function memory(root) {
   b.append(labelValue("Conversas dos 26 agentes", "Local", "Históricos por agente e anotações compartilhadas no IndexedDB. Não há LLM conectado."));
   b.append(labelValue("Memória remota dos agentes", "Desconectada", "Sincronização entre dispositivos e backend ainda aguardam autenticação."));
   b.append(link("Abrir conversas dos agentes", "atlas", "button"));
+  b.append(link("Ver dossiês de personagens", "characters", "button"));
   b.append(link("Reabrir produções locais", "tasks", "button"));
   root.append(a, b);
   paint();

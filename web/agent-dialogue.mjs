@@ -66,7 +66,7 @@ export function agentResponse({agent, message, facts = [], productions = null, c
   if (/(custo|cota|gpu|credito|assinatura|dinheiro|orcamento)/.test(question)) {
     return { reply: "Orçamento adicional autorizado: R$ 0. Cotas de GPU e créditos externos não são consultados nesta versão. Sentinel mantém a execução remota bloqueada." };
   }
-  if (/(crie|gere|gera|gerar|produza|anime|animar|execute|renderize|conecte)/.test(question)) {
+  if (/(crie|criar|gere|gera|gerar|produza|anime|animar|execute|renderize|conecte)/.test(question)) {
     return { reply: "Ainda não consigo executar essa operação remotamente. Posso orientar o planejamento local, e o AutoPipeline permite registrar etapas e evidências reais. Geração, rig, animação e áudio exigem ferramentas conectadas." };
   }
   const character = matchingCharacter(message, characters);

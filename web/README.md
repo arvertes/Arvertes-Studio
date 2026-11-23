@@ -74,3 +74,17 @@ Na aba **Atlas**, selecione o agente ou use **Conversar** em um dos 26 cartões 
 As mensagens e notas ficam no IndexedDB local `arvertes-studio-agent-memory`. Não há backup, criptografia própria, conexão Google Drive ou sincronização entre dispositivos. **Não registre senhas, tokens ou dados confidenciais.** Os GLBs não são enviados. O Atlas pode resumir o número de planos e checkpoints do IndexedDB de produções, mas não pode executar tarefas por chat. A exclusão de notas é irreversível no navegador. A falta de armazenamento é informada e não resulta em falso sucesso.
 
 O build valida regras de resposta via `web/test-agents.mjs`. Testes de navegador cobrem persistência e exclusão de memória.
+
+## Dossiês de personagem e pacotes locais
+
+Na seção **Personagens**, cada ficha guarda nome, história, personalidade, aparência, vestuário, relações, direção de voz, animações e notas. O status começa como **rascunho**; a opção "Aprovado por mim" depende de decisão explícita do autor. O Studio não gera ou modifica a história do jogo sem autorização. A arte 2D do GVS e demais personagens deve ser escolhida pelo autor, não substituída por uma imagem inventada.
+
+A ficha aceita até quatro anexos por personagem:
+- Capa 2D PNG/JPEG/WebP, até 2 MiB;
+- Modelo GLB com geometria, até 16 MiB;
+- Outro GLB com animações, até 16 MiB;
+- Voz WAV/OGG/MP3, até 16 MiB.
+
+As mídias são verificadas por tipo, formato e SHA-256 e persistem, enquanto o navegador permitir, em IndexedDB separado (`arvertes-character-dossiers`). No máximo 40 personagens e 50 MiB por personagem. Um dossiê pode gerar um briefing para Atlas, com as descrições autorais. Os agentes consultam as fichas salvas por nome; anotações de chat não alteram o status editorial.
+
+**Exportar pacote ZIP** produz `manifesto.json` com metadados, status e hashes, um `LEIA-ME.txt` e os arquivos anexados em `midia/`. ZIP usa STORE (sem compressão), limitado a 64 MiB, sem bibliotecas externas, e pode ficar maior que os arquivos compactados comuns. Nenhum arquivo é enviado à nuvem; o pacote exportado é a cópia de segurança recomendada. Limpar dados do navegador ou trocar de dispositivo pode apagar as fichas e os anexos locais. O Google Drive e a produção automática aguardam backend autenticado e consentimento.

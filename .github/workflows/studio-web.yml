@@ -4,6 +4,7 @@ on:
     paths:
       - 'web/**'
       - 'office_habblaud/**'
+      - 'netlify.toml'
       - '.github/workflows/studio-web.yml'
 permissions:
   contents: read
@@ -15,36 +16,14 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - uses: actions/checkout@v4
-        with:
-          repository: marmottajr/habblaud
-          ref: faa1a012b5fbf632c66dc6801c5383e53a542406
-          path: upstream
-          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
-      - name: Test GLB reader and JavaScript syntax
-        run: |
-          node web/test-glb.mjs
-          node --check web/studio.mjs
-      - name: Prepare Habblaud
-        run: python office_habblaud/prepare.py upstream
-      - name: Build browser site
-        run: |
-          cd upstream
-          npm ci --ignore-scripts
-          npm run build:client
-          cd ..
-          mv upstream/dist/client/index.html upstream/dist/client/office.html
-          cp upstream/LICENSE upstream/dist/client/HABBLAUD-LICENSE.txt
-          cp web/index.html web/studio.css web/studio.mjs web/glb.mjs office_habblaud/roster.json upstream/dist/client/
-          test -s upstream/dist/client/index.html
-          test -s upstream/dist/client/office.html
-          test -s upstream/dist/client/HABBLAUD-LICENSE.txt
+      - name: Build and test the Netlify preview
+        run: bash web/build-netlify.sh
       - uses: actions/upload-artifact@v4
         with:
           name: arvertes-studio-web-preview
-          path: upstream/dist/client
+          path: web/dist
           if-no-files-found: error
           retention-days: 14

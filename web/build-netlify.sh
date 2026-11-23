@@ -23,7 +23,7 @@ python3 office_habblaud/prepare.py "$temp/upstream"
 output="$temp/upstream/dist/client"
 mv "$output/index.html" "$output/office.html"
 cp "$temp/upstream/LICENSE" "$output/HABBLAUD-LICENSE.txt"
-cp web/index.html web/studio.css web/{studio,ui,office,library,pipeline,glb}.mjs office_habblaud/roster.json "$output/"
+cp web/index.html web/studio.css web/{studio,ui,office,library,pipeline,glb,system-panels}.mjs office_habblaud/roster.json "$output/"
 mkdir -p "$output/fonts" "$output/licenses"
 modules=web/node_modules
 "$modules/.bin/esbuild" web/viewer.mjs --bundle --minify --format=esm --outfile="$output/viewer.mjs"

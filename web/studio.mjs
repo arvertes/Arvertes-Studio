@@ -6,12 +6,14 @@ import { applyDisplayPreferences, renderExtraPage } from "./system-panels.mjs";
 import { initProduction, showProductionPage } from "./production-ui.mjs";
 import { agentStages, normalize } from "./production-catalog.mjs";
 import { initAgentChat, setChatAgents, openAgentChat } from "./agent-chat.mjs";
+import { initCharacters, showCharacters, leaveCharacters } from "./characters-ui.mjs";
 
 const groups = [
   ["Central", [
     ["overview", "overview", "Visão geral", "Seu espaço de trabalho para produção de assets para Unreal Engine."],
     ["office", "office", "Escritório virtual", "Explore a sede e consulte os perfis dos agentes por departamento."],
     ["projects", "folder", "Projetos", "Reabra as produções salvas neste navegador."],
+    ["characters", "users", "Personagens", "Dossiês com história, personalidade, capa 2D, 3D, animações e voz."],
   ]],
   ["Produção", [
     ["tasks", "tasks", "Tarefas", "Consulte as produções e o histórico local."],
@@ -251,12 +253,14 @@ function renderPage(focus = false) {
   const { group, title, description } = pages.get(page);
   if (current === "office" || current === "overview") unmountOffice();
   if (current === "library") closePreview();
+  if (current === "characters") leaveCharacters();
   current = page;
   currentId = productionId;
   const section = byId(`view-${page}`) || byId("system-page");
   for (const item of sections) item.hidden = item !== section;
   if (section.id === "system-page") renderSystem(page);
   showProductionPage(page, productionId);
+  if (page === "characters") void showCharacters();
   for (const anchor of nav.querySelectorAll("a")) {
     if (anchor.hash === `#${page}`) anchor.setAttribute("aria-current", "page");
     else anchor.removeAttribute("aria-current");
@@ -278,6 +282,7 @@ applyDisplayPreferences();
 fillIcons();
 initProduction();
 initAgentChat();
+initCharacters();
 renderAgents();
 initLibrary();
 initPipeline();

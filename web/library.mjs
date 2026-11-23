@@ -162,6 +162,10 @@ function renderGallery() {
   }
 }
 
+export function libraryUsage() {
+  return { count: assets.length, bytes: assets.reduce((sum, asset) => sum + asset.file.size, 0) };
+}
+
 export function initLibrary() {
   const select = byId("asset-category");
   select.add(new Option("Todas", ""));

@@ -2,6 +2,7 @@ import { byId, el } from "./ui.mjs";
 import { agentResponse } from "./agent-dialogue.mjs";
 import { createAgentMemory } from "./agent-memory.mjs";
 import { createProductionRepository } from "./production-store.mjs";
+import { createCharacterRepository } from "./character-store.mjs";
 
 let agents = [];
 let initialized = false;
@@ -10,6 +11,7 @@ let refreshId = 0;
 let busy = false;
 let memory;
 let productionRepository;
+let characterRepository;
 
 function status(message, isError = false) {
   const root = byId("chat-status");
@@ -91,6 +93,7 @@ export function initAgentChat() {
   try { db = window.indexedDB; } catch { /* IndexedDB may be disabled */ }
   memory = createAgentMemory(db);
   productionRepository = createProductionRepository(db);
+  characterRepository = createCharacterRepository(db);
   byId("chat-agent").addEventListener("change", event => showAgent(event.target.value));
   byId("chat-clear").addEventListener("click", async () => {
     if (!confirm("Apagar o histórico de conversa com este agente? As anotações compartilhadas não serão apagadas.")) return;
@@ -112,7 +115,9 @@ export function initAgentChat() {
       const saved = await memory.getState(active);
       let productions = null;
       try { productions = await productionRepository.list(); } catch { /* Status should remain unknown */ }
-      const response = agentResponse({ agent, message, facts: saved.facts, productions });
+      let characters = [];
+      try { characters = await characterRepository.list(); } catch { /* Dossiês indisponíveis: não inventar informação */ }
+      const response = agentResponse({ agent, message, facts: saved.facts, productions, characters });
       const updated = await memory.append(agent.id, message, response.reply, response.remember ?? null);
       input.value = "";
       await render();

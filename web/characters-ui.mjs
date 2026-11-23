@@ -240,6 +240,7 @@ async function showModel(id,kind,surface) {
     const {createViewer}=await import("./viewer.mjs");
     if(selected!==id || !surface.isConnected)return;
     surface.replaceChildren();
+    surface.classList.add("model-preview");
     viewer=createViewer({container:surface,onError:msg=>status(msg,true),onThumbnail(){}});
     await viewer.load(file,data);
     surface.scrollIntoView({block:"nearest",behavior:"instant"});

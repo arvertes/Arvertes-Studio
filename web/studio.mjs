@@ -2,6 +2,7 @@ import { byId, departments, el, empty, fillIcons, icon, link } from "./ui.mjs";
 import { mountOffice, unmountOffice, setOfficeRoster } from "./office.mjs";
 import { initLibrary, closePreview } from "./library.mjs";
 import { initPipeline } from "./pipeline.mjs";
+import { applyDisplayPreferences, renderExtraPage } from "./system-panels.mjs";
 
 const groups = [
   ["Central", [
@@ -120,6 +121,14 @@ const systemPages = {
 };
 function renderSystem(page) {
   const root = byId("system-content");
+  if (["settings", "resources", "memory", "tools"].includes(page)) {
+    renderExtraPage(page, root, { collapsed, setCollapsed(value) {
+      collapsed = value;
+      try { localStorage.setItem("arvertes-sidebar", value ? "collapsed" : "expanded"); } catch {}
+      updateNav();
+    }});
+    return;
+  }
   if (page !== "security") {
     const [title, text, actionTitle, target] = systemPages[page];
     root.replaceChildren(empty(pages.get(page).symbol, title, text, link(actionTitle, target, "button")));
@@ -277,6 +286,7 @@ function renderPage(focus = false) {
   if (focus) byId("content").focus({ preventScroll: true });
 }
 
+applyDisplayPreferences();
 fillIcons();
 renderDrafts();
 renderAgents();

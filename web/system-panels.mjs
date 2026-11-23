@@ -203,7 +203,9 @@ function memory(root) {
   b.append(labelValue("Memória local do Studio", "Neste navegador", "Briefings, requisitos, metadados dos GLBs vinculados e relatórios preliminares."));
   b.append(labelValue("Histórico de tarefas", "Neste navegador", "Aprovações, decisões, checkpoints e erros com data, por produção."));
   b.append(labelValue("Arquivos GLB e referências", "Nesta aba", "Importe novamente o arquivo original para reabrir a prévia 3D."));
-  b.append(labelValue("Memória futura dos agentes", "Desconectada", "A integração remota ainda aguarda autenticação."));
+  b.append(labelValue("Conversas dos 26 agentes", "Local", "Históricos por agente e anotações compartilhadas no IndexedDB. Não há LLM conectado."));
+  b.append(labelValue("Memória remota dos agentes", "Desconectada", "Sincronização entre dispositivos e backend ainda aguardam autenticação."));
+  b.append(link("Abrir conversas dos agentes", "atlas", "button"));
   b.append(link("Reabrir produções locais", "tasks", "button"));
   root.append(a, b);
   paint();

@@ -1,6 +1,6 @@
 # Integração progressiva do Studio Web
 
-A interface estática já atende ao fluxo local. Os tipos em [integration-contracts.d.ts](integration-contracts.d.ts) documentam o lado atual e os adaptadores propostos. As interfaces remotas aguardam implementação e testes no backend.
+A interface estática já atende ao fluxo local. Os tipos em [integration-contracts.d.ts](integration-contracts.d.ts) documentam o lado atual e os adaptadores propostos. A seção Ativação da API v1 descreve o modo autenticado disponível nesta revisão.
 
 ## Fronteiras atuais
 
@@ -14,7 +14,7 @@ O comando lê e atualiza o plano dentro da mesma transação. Uma rejeição pre
 
 Atlas propõe uma lista ordenada de tarefas e dependências. A aprovação inicial cria o checkpoint humano que libera a fila. Cada tarefa só conclui por uma ação específica, registrada com evidência correspondente. Ao retomar, a fila é derivada das dependências ainda abertas. A validação de Argus confirma o aceite do parecer preliminar. Escala, topologia, qualidade de materiais, rig, clipes, colisões e importação no destino continuam sujeitos a validação nas ferramentas especializadas.
 
-## Pontos de integração previstos
+## Requisitos de integração
 
 1. **Identidade e permissões.** O backend deve autenticar cada pedido e verificar acesso à produção e à ferramenta. Aprovações humanas remotas devem estar vinculadas ao plano, à revisão, ao executor e ao limite de custo. Credenciais ficam fora dos registros de produção.
 2. **Capacidades e cotas.** O adaptador deve retornar status, validade e cota verificada por ferramenta. Estado desconhecido ou expirado mantém a execução suspensa. O teto atual de custo adicional é zero.
@@ -33,4 +33,24 @@ Os textos, metadados e blobs ficam no IndexedDB `arvertes-character-dossiers` lo
 
 A função `buildCharacterBrief` extrai exclusivamente os campos escritos pelo autor e o tipo personagem, com vínculo opcional `characterId`. A criação de planos continua sujeita a revisão e aprovação. O chat consulta dossiês locais por nome; o modelo por regras não faz inferência remota nem altera texto de personagem. Notas compartilhadas do chat são fontes locais separadas e não alteram o status de cânone.
 
-Os tipos em `integration-contracts.d.ts` descrevem interfaces futuras para `getCharacter`, `saveCharacter` e `processAgentMessage`. Elas ainda não possuem implementações remotas; quando implementadas, o servidor deve impor autenticação, idempotência, revisão esperada, proteção de dados e custo máximo R$ 0. Nunca transmitir memórias, manuscritos ou mídias a terceiros sem autorização explícita.
+Os tipos em `integration-contracts.d.ts` descrevem interfaces futuras para `getCharacter`, `saveCharacter` e `processAgentMessage`. O adaptador autenticado implementa esses fluxos com controle de acesso, revisão esperada e custo máximo R$ 0. Nunca transmitir memórias, manuscritos ou mídias a terceiros sem autorização explícita.
+
+## Ativação da API v1
+
+O Studio usa o backend quando o build tem configuração pública e o operador entra na conta em **Configurações**. O início de sessão utiliza Supabase Auth com GitHub e PKCE. O backend verifica o usuário autorizado antes de atender cada requisição. Ao sair da conta, o modo local volta a exibir os dados do IndexedDB.
+
+| Variável do Netlify | Valor |
+| --- | --- |
+| `ARVERTES_WEB_API_ORIGIN` | Origem HTTPS do backend, sem `/api/v1` |
+| `ARVERTES_WEB_SUPABASE_URL` | Origem HTTPS do projeto Supabase |
+| `ARVERTES_WEB_SUPABASE_PUBLISHABLE_KEY` | Chave publicável com prefixo `sb_publishable_` |
+
+O build produz `backend-config.mjs` apenas com essas três informações públicas. Tokens de sessão são específicos da aba. DSN, OAuth do Drive, IDs de pastas e chaves privadas pertencem ao backend.
+
+- **Atlas** abre conversas persistentes e registra solicitações explícitas de anotação na conta.
+- **Personagens** abre fichas versionadas da conta. A exportação do servidor verifica cada arquivo selecionado contra o SHA-256 registrado. O operador pode recadastrar os dados locais que deseja sincronizar.
+- **Nova produção** oferece uma fila de inspeção autenticada a partir do briefing. No AutoPipeline, aprove o custo de R$ 0, selecione o GLB, revise a evidência e baixe o ZIP. Quando o plano estiver ligado a uma ficha com o mesmo modelo, o ZIP inclui as mídias da revisão e pode ser arquivado no Drive após uma ação separada.
+
+Para testar a distribuição e os fluxos locais, execute `bash web/build-netlify.sh` e `python web/tests/browser.py --chromium /caminho/chromium`. Antes de uma publicação manual, valide um login autorizado, a origem CORS e o arquivamento de um pacote sintético com as credenciais próprias do backend.
+
+O teste `web/tests/backend_browser.py` exercita o Chromium contra o código real da API e um PostgreSQL descartável. Use `PYTHONPATH` com o checkout do Agents, `ARVERTES_TEST_POSTGRES` com o DSN de teste e, se necessário, `ARVERTES_TEST_CHROMIUM` com o caminho do binário. Execute depois de gerar o build. A autenticação é uma fixture de teste introduzida na fronteira do navegador.

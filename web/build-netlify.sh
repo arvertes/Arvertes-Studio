@@ -6,7 +6,7 @@ node web/test-glb.mjs
 node web/test-system.mjs
 node --test web/test-coordination.mjs
 node --test web/test-agents.mjs
-node --test web/test-characters.mjs
+node --test web/test-characters.mjs web/test-backend.mjs
 for module in web/*.mjs; do
   node --check "$module"
 done
@@ -27,9 +27,11 @@ python3 office_habblaud/prepare.py "$temp/upstream"
 output="$temp/upstream/dist/client"
 mv "$output/index.html" "$output/office.html"
 cp "$temp/upstream/LICENSE" "$output/HABBLAUD-LICENSE.txt"
-cp web/index.html web/studio.css web/{studio,ui,office,library,pipeline,glb,system-panels,coordination,production-catalog,production-store,production-ui,agent-dialogue,agent-memory,agent-chat,character-model,character-store,characters-ui,package-zip}.mjs office_habblaud/roster.json "$output/"
+cp web/index.html web/studio.css web/{studio,ui,office,library,pipeline,glb,system-panels,coordination,production-catalog,production-store,production-ui,agent-dialogue,agent-memory,agent-chat,character-model,character-store,characters-ui,package-zip,backend}.mjs office_habblaud/roster.json "$output/"
 mkdir -p "$output/fonts" "$output/licenses"
 modules=web/node_modules
+python3 web/write-backend-config.py "$output/backend-config.mjs"
+"$modules/.bin/esbuild" web/backend-auth.mjs --bundle --minify --format=esm --outfile="$output/backend-auth.mjs"
 "$modules/.bin/esbuild" web/viewer.mjs --bundle --minify --format=esm --outfile="$output/viewer.mjs"
 cp "$modules/three/LICENSE" "$output/licenses/three-MIT.txt"
 cp "$modules/@fontsource-variable/inter/files/inter-latin-wght-normal.woff2" "$output/fonts/inter.woff2"

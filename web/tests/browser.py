@@ -52,7 +52,7 @@ def settings_and_panels(page, origin):
     expect(page.get_by_text("Nenhuma ferramenta corresponde à busca.")).to_be_visible()
 
     page.get_by_role("navigation").get_by_role("link", name="Memória").click()
-    expect(page.get_by_text("Memória futura dos agentes", exact=True)).to_be_visible()
+    expect(page.get_by_text("Memória remota dos agentes", exact=True)).to_be_visible()
     expect(page.get_by_text("Histórico de tarefas", exact=True)).to_be_visible()
     page.get_by_label("Nova nota de produção").fill("Ajustar a escala no Blender.")
     page.get_by_role("button", name="Salvar nota neste navegador").click()
@@ -289,6 +289,8 @@ def agent_memory_flow(page, origin):
     expect(page.locator("#chat-messages .chat-bubble")).to_have_count(0)
     expect(page.locator("#chat-facts")).to_contain_text("amuleto vermelho")
 
+    page.get_by_text("Memória compartilhada dos agentes", exact=False).filter(
+        has=page.locator("#chat-count")).click()
     page.once("dialog", lambda dialog: dialog.accept())
     page.locator("#chat-facts").get_by_role("button", name=re.compile("Excluir anotação")).click()
     expect(page.locator("#chat-facts")).to_contain_text("Nenhuma informação compartilhada")
@@ -322,7 +324,7 @@ def character_bundle_flow(page, origin, directory):
     glb = directory / "gvs.glb"
     FIXTURE(glb, 4)
     page.locator("#char-attach-model").set_input_files(glb)
-    expect(page.locator(".character-file-name")).to_contain_text("gvs.glb")
+    expect(page.locator(".character-file-name").filter(has_text=re.compile(r"^gvs\.glb$"))).to_be_visible()
     with page.expect_download() as item:
         page.get_by_role("button", name="Exportar pacote ZIP").click()
     archive = item.value.path()

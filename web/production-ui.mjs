@@ -1,3 +1,4 @@
+import { studioBackend } from "./backend.mjs";
 import { activeTasks, previewPlan, suggestCategory, taskLabels, taskState } from "./coordination.mjs";
 import { availableStages, categories, productionTypes, stages, trellisDemo } from "./production-catalog.mjs";
 import { createProductionRepository } from "./production-store.mjs";
@@ -17,6 +18,9 @@ let ready = false;
 let storageError;
 let route = {};
 let readRevision = 0;
+let remoteRevision = 0;
+let remoteRecords = [];
+let remoteError;
 
 function button(text, action, primary = false) {
   const node = el("button", primary ? "button primary" : "button", text);
@@ -130,6 +134,11 @@ function taskEvidence(task) {
 async function refresh() {
   const revision = ++readRevision;
   try {
+    const remote = studioBackend()?.productions;
+    if (remote) {
+      try { remoteRecords = await remote.list(); remoteError = undefined; }
+      catch (error) { remoteError = error.message; }
+    }
     const list = await repository.list();
     if (revision !== readRevision) return;
     records = list;
@@ -316,6 +325,89 @@ function attachmentForm(production, assets, feedback) {
   return form;
 }
 
+function showRemoteList(root) {
+  if (!studioBackend() || !remoteRecords.length && !remoteError) return;
+  const box = panel("Produções no servidor", remoteError);
+  for (const job of remoteRecords) box.append(link(job.title, `pipeline/${job.id}`, "button"));
+  root.append(box);
+}
+
+async function showRemotePlan(root, id) {
+  const remote = studioBackend()?.productions;
+  if (!remote) return;
+  const generation = ++remoteRevision;
+  const box = panel("Produção no servidor", "Carregando checkpoints…");
+  root.append(box);
+  try {
+    const [job, reports] = await Promise.all([remote.get(id), remote.reports(id)]);
+    if (generation !== remoteRevision || !box.isConnected) return;
+    const feedback = status();
+    box.replaceChildren(el("h2", "", job.title), el("p", "draft-copy", job.briefing), feedback);
+    const stages = el("ol", "production-tasks");
+    for (const step of job.steps) {
+      const row = el("li", "production-task");
+      const labels = { inspect: "Inspeção GLB", review: "Revisão humana", package: "Empacotamento" };
+      row.append(el("h3", "", labels[step.stage] || step.stage), el("p", "muted", step.status));
+      const report = reports.find(item => item.stage === step.stage);
+      if (report?.sha256) row.append(el("p", "muted", "SHA-256 " + report.sha256));
+      stages.append(row);
+    }
+    const run = (label, action) => button(label, async trigger => {
+      trigger.disabled = true;
+      try { await action(); render(); }
+      catch (error) { announce(feedback, error.message, true); trigger.disabled = false; }
+    });
+    if (!job.approved) {
+      box.append(run("Aprovar fila com custo de R$ 0", () => remote.control(id, "approve")));
+    } else if (job.workflow === "inspection") {
+      const pending = job.steps.find(step => step.status !== "done");
+      if (pending?.status === "pending" && pending.stage === "inspect") {
+        const file = el("input");
+        file.type = "file";
+        file.accept = ".glb";
+        box.append(label("GLB autorizado para inspeção", file), run("Inspecionar GLB", () => {
+          if (!file.files?.length) throw Error("Escolha um arquivo GLB.");
+          if (file.files[0].size > 16 * 1024 * 1024) throw Error("O GLB ultrapassa 16 MiB.");
+          return remote.inspect(id, file.files[0]);
+        }));
+      }
+      const inspection = reports.find(item => item.stage === "inspect");
+      if (pending?.status === "pending" && pending.stage === "review" && inspection) {
+        box.append(el("p", "", "Revise os metadados medidos antes de confirmar."),
+          fields(Object.entries(inspection.counts).map(([name, count]) => [name, String(count)])),
+          run("Confirmar revisão da inspeção", () => remote.review(id, inspection.sha256)));
+      }
+      if (!pending || pending.status === "pending" && pending.stage === "package") {
+        box.append(run("Baixar pacote verificado", async () => {
+          const url = URL.createObjectURL(await remote.package(id));
+          const anchor = el("a");
+          anchor.href = url;
+          anchor.download = "producao-arvertes.zip";
+          document.body.append(anchor);
+          anchor.click();
+          anchor.remove();
+          setTimeout(() => URL.revokeObjectURL(url), 30000);
+        }));
+      }
+      if (!pending && job.character_id) {
+        if (reports.some(item => item.stage === "storage")) box.append(el("p", "muted", "Pacote verificado no Drive."));
+        else box.append(run("Arquivar pacote no Drive", () => remote.archive(id)));
+      }
+      if (pending?.status === "pending") box.append(run("Pausar fila", () => remote.control(id, "pause")));
+      if (pending?.status === "paused") box.append(run("Retomar fila", () => remote.control(id, "resume")));
+      if (pending && ["pending", "paused"].includes(pending.status)) {
+        box.append(run("Cancelar etapas pendentes", () => {
+          if (!confirm("Cancelar as etapas pendentes desta produção?")) return;
+          return remote.control(id, "cancel");
+        }));
+      }
+    }
+    box.append(stages);
+  } catch (error) {
+    if (generation === remoteRevision && box.isConnected) box.replaceChildren(el("p", "", error.message));
+  }
+}
+
 function render() {
   renderSummary();
   const { page, id } = route;
@@ -337,6 +429,11 @@ function render() {
   const root = byId(roots[page]);
   if (!root) return;
   root.replaceChildren();
+  if (page === "pipeline" && /^[a-f0-9]{32}$/.test(id || "") && studioBackend()) {
+    root.append(link("Ver todas as produções", "pipeline"));
+    void showRemotePlan(root, id);
+    return;
+  }
   if (storageError) {
     const card = panel("Memória local indisponível", storageError);
     card.append(button("Tentar novamente", () => void refresh()));
@@ -347,6 +444,7 @@ function render() {
     root.append(loading);
   } else if (page !== "pipeline" || !id) {
     productionList(root, records, page !== "atlas");
+    showRemoteList(root);
   } else {
     const production = records.find(item => item.id === id);
     if (production) {
@@ -410,6 +508,26 @@ export function initProduction() {
       } catch (error) { announce(resultStatus, error.message, true); }
       finally { trigger.disabled = false; }
     }, true), resultStatus);
+    const remote = studioBackend()?.productions;
+    if (remote && plan.type !== "audio") {
+      const idem = crypto.randomUUID();
+      card.append(button("Salvar fila de inspeção no servidor", async trigger => {
+        trigger.disabled = true;
+        try {
+          const saved = await remote.create({ title: brief.name, briefing: brief.instruction,
+            workflow: "inspection", ...(brief.characterId ? { characterId: brief.characterId } : {}) }, idem);
+          void refresh();
+          if (target.contains(trigger) && route.page === "production") {
+            form.reset();
+            delete form.dataset.characterId;
+            delete form.dataset.characterName;
+            target.replaceChildren();
+            location.hash = `pipeline/${saved.job}`;
+          }
+        } catch (error) { announce(resultStatus, error.message, true); }
+        finally { trigger.disabled = false; }
+      }));
+    }
     target.replaceChildren(card);
     card.tabIndex = -1;
     card.focus();

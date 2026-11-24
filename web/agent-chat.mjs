@@ -1,5 +1,6 @@
 import { byId, el } from "./ui.mjs";
-import { agentResponse } from "./agent-dialogue.mjs";
+import { studioBackend } from "./backend.mjs";
+import { agentResponse, memoryIntent } from "./agent-dialogue.mjs";
 import { createAgentMemory } from "./agent-memory.mjs";
 import { createProductionRepository } from "./production-store.mjs";
 import { createCharacterRepository } from "./character-store.mjs";
@@ -48,7 +49,7 @@ async function render() {
       remove.setAttribute("aria-label", "Excluir anotação: " + fact.text.slice(0,70));
       remove.addEventListener("click", async () => {
         if (!confirm("Excluir esta anotação da memória compartilhada dos agentes?")) return;
-        try { await memory.deleteFact(fact.id); status("Anotação excluída."); await render(); }
+        try { await memory.deleteFact(fact.id, fact.revision); status("Anotação excluída."); await render(); }
         catch (e) { status(e.message, true); }
       });
       row.append(txt, remove);
@@ -60,7 +61,7 @@ async function render() {
   } catch (e) {
     if (revision !== refreshId) return;
     status("Memória indisponível: " + e.message + " As mensagens não estão sendo guardadas.", true);
-    log.append(el("p", "muted", "O navegador bloqueou o armazenamento. Verifique a permissão de dados do site."));
+    log.append(el("p", "muted", studioBackend() ? "Confira a sessão e a conexão com o servidor." : "O navegador bloqueou o armazenamento. Verifique a permissão de dados do site."));
   }
 }
 function showAgent(agentId) {
@@ -68,7 +69,7 @@ function showAgent(agentId) {
   active = agentId;
   byId("chat-agent").value = agentId;
   const agent = agents.find(a => a.id === agentId);
-  byId("chat-specialty").textContent = agent.name + " · " + agent.role + " · respostas por regras locais";
+  byId("chat-specialty").textContent = agent.name + " · " + agent.role + (studioBackend() ? " · memória do Studio" : " · respostas por regras locais");
   status("");
   void render();
 }
@@ -91,7 +92,12 @@ export function initAgentChat() {
   initialized = true;
   let db;
   try { db = window.indexedDB; } catch { /* IndexedDB may be disabled */ }
-  memory = createAgentMemory(db);
+  const remote = studioBackend();
+  memory = remote?.memory ?? createAgentMemory(db);
+  if (remote) {
+    byId("chat-facts").previousElementSibling.textContent =
+      "As anotações ficam na sua conta do Studio. Guarde somente informações que os agentes podem consultar.";
+  }
   productionRepository = createProductionRepository(db);
   characterRepository = createCharacterRepository(db);
   byId("chat-agent").addEventListener("change", event => showAgent(event.target.value));
@@ -112,6 +118,16 @@ export function initAgentChat() {
     button.disabled = true;
     status("");
     try {
+      if (remote) {
+        const intent = memoryIntent(message);
+        if (intent?.error) throw Error(intent.error);
+        const reply = await remote.chat(agent.id, message, intent?.fact);
+        input.value = "";
+        await render();
+        status(reply.mode === "local_inference" ? "Resposta do modelo local registrada."
+          : "Resposta por regras registrada no servidor.");
+        return;
+      }
       const saved = await memory.getState(active);
       let productions = null;
       try { productions = await productionRepository.list(); } catch { /* Status should remain unknown */ }

@@ -8,6 +8,10 @@ import { agentStages, normalize } from "./production-catalog.mjs";
 import { initAgentChat, setChatAgents, openAgentChat } from "./agent-chat.mjs";
 import { initCharacters, showCharacters, leaveCharacters } from "./characters-ui.mjs";
 
+import { initializeBackend, studioBackend } from "./backend.mjs";
+
+await initializeBackend();
+
 const groups = [
   ["Central", [
     ["overview", "overview", "Visão geral", "Seu espaço de trabalho para produção de assets para Unreal Engine."],
@@ -142,18 +146,20 @@ function renderSystem(page) {
     return;
   }
   if (page !== "security") {
-    const [title, text, actionTitle, target] = systemPages[page];
+    const [title, text, actionTitle, target] = page === "storage" && studioBackend()
+      ? ["Arquivos de personagens", "Anexos enviados pela conta usam o Drive quando configurado. O ZIP verifica os hashes da revisão.", "Abrir dossiês", "characters"]
+      : systemPages[page];
     root.replaceChildren(empty(pages.get(page).symbol, title, text, link(actionTitle, target, "button")));
     return;
   }
-  const notice = empty("shield", "Execução remota bloqueada", "A liberação exige executor conectado, autenticação, permissões, cotas verificadas e aprovação humana.");
+  const notice = empty("shield", "Executores externos bloqueados", "A liberação exige executor conectado, autenticação, permissões, cotas verificadas e aprovação humana.");
   const policy = el("article", "panel content-panel");
   policy.append(el("h2", "", "Validação da fila local"), el("p", "", "O Sentinel verifica a aprovação, as dependências e a evidência de cada checkpoint. Etapas externas aguardam executor e permissões."),
     link("Consultar AutoPipeline", "pipeline", "button"));
   const cards = el("div", "shortcut-grid system-grid");
   for (const [title, value, description, color, symbol] of [
     ["Orçamento adicional", "R$ 0", "Teto autorizado para novos gastos", "cyan", "shield"],
-    ["Conexões", "Desconectadas", "Arvertes Agents e Google Drive", "violet", "plug"],
+    ["Conexões", studioBackend() ? "Sessão autenticada" : "Desconectadas", "Arvertes Agents e Google Drive", "violet", "plug"],
     ["Recursos", "Indisponíveis", "Executor remoto e cotas do provedor", "amber", "activity"],
   ]) {
     const card = el("article", "panel content-panel system-card");
@@ -248,7 +254,7 @@ function renderPage(focus = false) {
   const [requestedPage, id] = location.hash.slice(1).split("/");
   if (requestedPage === "content") return;
   const page = pages.has(requestedPage) ? requestedPage : "overview";
-  const productionId = ["pipeline", "library"].includes(page) && /^[a-f0-9-]{36}$/.test(id || "") ? id : undefined;
+  const productionId = ["pipeline", "library"].includes(page) && /^(?:[a-f0-9-]{36}|[a-f0-9]{32})$/.test(id || "") ? id : undefined;
   if (page === current && productionId === currentId) return;
   const { group, title, description } = pages.get(page);
   if (current === "office" || current === "overview") unmountOffice();

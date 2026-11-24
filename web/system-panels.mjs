@@ -1,3 +1,4 @@
+import { studioAuthActions, studioBackend, studioBackendError } from "./backend.mjs";
 import { el, link, fields, icon } from "./ui.mjs";
 import { libraryUsage } from "./library.mjs";
 import { maxGlbBytes, maxLibraryBytes, maxLibraryCount } from "./glb.mjs";
@@ -93,11 +94,28 @@ function settings(root, context) {
   b.append(fields([
     ["Versão da interface", "Arvertes Studio Web v0.3"],
     ["Renderizador de escritório", "Habblaud original, licença MIT"],
-    ["Modo de operação", "Prévia no navegador, sem backend de produção"],
+    ["Modo de operação", studioBackend() ? "Sessão do Studio autenticada" : "Prévia no navegador"],
     ["Geração automática", "Não conectada"],
     ["Arquivos de produção", "Não enviados automaticamente"],
   ]));
   b.append(link("Abrir escritório", "office", "button"));
+  const auth = studioAuthActions();
+  const error = studioBackendError();
+  if (auth || error) {
+    const feedback = el("p", "muted", error || "");
+    feedback.setAttribute("role", "status");
+    if (auth) {
+      const control = el("button", "button", auth.label);
+      control.type = "button";
+      control.addEventListener("click", async () => {
+        control.disabled = true;
+        try { await auth.action(); }
+        catch (error) { feedback.textContent = error.message; control.disabled = false; }
+      });
+      b.append(control);
+    }
+    b.append(feedback);
+  }
   root.append(a, b);
 }
 function resources(root) {
@@ -115,14 +133,26 @@ function resources(root) {
   progress.setAttribute("aria-label", "Espaço da sessão utilizado");
   progress.setAttribute("aria-valuetext", `${fmtBytes(usage.bytes)} de ${fmtBytes(maxLibraryBytes)}`);
   a.append(progress, link("Abrir biblioteca", "library", "button"));
-  const b = panel("Nuvem, provedores e custos", "Sem integração autenticada, não é possível consultar saldos de terceiros.", "plug");
+  const backend = studioBackend();
+  const b = panel("Nuvem, provedores e custos", "As cotas externas dependem de verificação com cada provedor.", "plug");
+  const drive = labelValue("Google Drive", "Desconectado", "O Studio ainda não consulta a cota da conta.");
   for (const item of [
     ["Netlify", "Site publicado", "Hospedagem da interface estática."],
-    ["Arvertes Agents", "Desconectado", "Sem leitura ou execução de agentes remotos."],
-    ["Google Drive", "Desconectado", "O Studio ainda não consulta a cota da conta."],
+    ["Arvertes Agents", backend ? "Sessão autenticada" : "Desconectado", "Estado da sessão do Studio."],
+    drive,
     ["TRELLIS.2 / ZeroGPU", "Cota desconhecida", "Nenhuma consulta autenticada ao provedor nesta versão."],
     ["Orçamento adicional autorizado", "R$ 0", "Nenhum executor ou serviço pago pode iniciar automaticamente."],
-  ]) b.append(labelValue(...item));
+  ]) b.append(Array.isArray(item) ? labelValue(...item) : item);
+  if (backend) {
+    backend.resources().then(state => {
+      if (drive?.isConnected) drive.replaceWith(labelValue("Google Drive",
+        state.drive_configured ? "Configurado" : "Aguardando configuração",
+        "A integridade é confirmada a cada arquivo enviado."));
+    }).catch(() => {
+      if (drive?.isConnected) drive.replaceWith(labelValue("Google Drive", "Estado indisponível",
+        "Confira a sessão e a conexão com o servidor."));
+    });
+  }
   root.append(a, b);
 }
 export function fmtBytes(n) {
@@ -203,8 +233,11 @@ function memory(root) {
   b.append(labelValue("Memória local do Studio", "Neste navegador", "Briefings, requisitos, metadados dos GLBs vinculados e relatórios preliminares."));
   b.append(labelValue("Histórico de tarefas", "Neste navegador", "Aprovações, decisões, checkpoints e erros com data, por produção."));
   b.append(labelValue("Arquivos GLB e referências", "Nesta aba", "Importe novamente o arquivo original para reabrir a prévia 3D."));
-  b.append(labelValue("Conversas dos 26 agentes", "Local", "Históricos por agente e anotações compartilhadas no IndexedDB. Não há LLM conectado."));
-  b.append(labelValue("Memória remota dos agentes", "Desconectada", "Sincronização entre dispositivos e backend ainda aguardam autenticação."));
+  const backend = studioBackend();
+  b.append(labelValue("Conversas dos 26 agentes", backend ? "Na conta" : "Local",
+    backend ? "Históricos por agente e anotações da sua conta." : "Históricos por agente e anotações compartilhadas no IndexedDB."));
+  b.append(labelValue("Memória remota dos agentes", backend ? "Sessão autenticada" : "Desconectada",
+    backend ? "As conversas e notas são consultadas pelo servidor." : "O servidor está disponível após configurar a integração e entrar na conta."));
   b.append(link("Abrir conversas dos agentes", "atlas", "button"));
   b.append(link("Ver dossiês de personagens", "characters", "button"));
   b.append(link("Reabrir produções locais", "tasks", "button"));

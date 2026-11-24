@@ -4,7 +4,9 @@ import { buildCharacterBrief, FIELDS, MEDIA_LABELS, MEDIA_LIMITS } from "./chara
 import { inspectGlb } from "./glb.mjs";
 import { importCharacterGlb } from "./library.mjs";
 
-const repo=createCharacterRepository(typeof indexedDB!=="undefined"?indexedDB:null);
+import { studioBackend } from "./backend.mjs";
+
+let repo;
 const labels={
   name:"Nome do personagem",history:"História e origem",personality:"Personalidade",
   appearance:"Aparência e características",clothing:"Roupas, acessórios e variações",
@@ -96,7 +98,7 @@ function renderEditor(record) {
   const copy=el("div");
   copy.append(el("p","eyebrow","Dossiê do personagem"),el("h2","",record.name),el("p","muted","Versão da ficha: "+record.revision+" · "+(record.status==="aprovado"?"Aprovado pelo autor":"Rascunho editorial")));
   title.append(copy);
-  const warning=el("p","muted","A história, as características e a arte são definidas pelo autor. Não existe geração automática nem publicação no jogo. Os dados ficam neste navegador; exporte um ZIP como cópia.");
+  const warning=el("p","muted","A história, as características e a arte são definidas pelo autor. Não existe geração automática nem publicação no jogo. " + (studioBackend() ? "A ficha fica na sua conta; exporte a versão exibida como ZIP." : "Os dados ficam neste navegador; exporte um ZIP como cópia."));
   const form=el("form","character-form");
   for(const [name,limit] of Object.entries(FIELDS))form.append(field(name,limit,record[name]));
   const approval=el("label","character-field");
@@ -122,12 +124,13 @@ function renderEditor(record) {
     }catch(error){status(error.message,true);}
   }));
   controls.append(makeButton("Exportar pacote ZIP",async trigger=>{
+    trigger=trigger.currentTarget;
     trigger.disabled=true;
     try {
       const fields=Object.fromEntries(new FormData(form).entries());
       const current=await repo.save({...fields,id:record.id,revision:record.revision});
       Object.assign(record,current);
-      const zip=await repo.exportZip(record.id);
+      const zip=await repo.exportZip(record.id, record.revision);
       const name=record.name.normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-zA-Z0-9-_]+/g,"-").slice(0,60)||"personagem";
       download(zip,name+"-arvertes.zip");
       status("Pacote ZIP exportado, incluindo manifesto e todos os anexos registrados.");
@@ -135,8 +138,9 @@ function renderEditor(record) {
     finally{trigger.disabled=false;}
   }));
   controls.append(makeButton("Excluir personagem",async ()=>{
-    if(!confirm("Excluir o personagem e TODAS as mídias locais? Esta ação não pode ser desfeita. Exporte o ZIP antes de continuar."))return;
-    try {await repo.remove(record.id);selected=null;cleanPreview();root.replaceChildren();await refresh();status("Dossiê excluído do navegador.");}
+    if(!confirm(studioBackend() ? "Remover o acesso ao dossiê e às versões pelo Studio? Os originais no Drive são preservados."
+      : "Excluir o personagem e TODAS as mídias locais? Esta ação não pode ser desfeita. Exporte o ZIP antes de continuar."))return;
+    try {await repo.remove(record.id);selected=null;cleanPreview();root.replaceChildren();await refresh();status(studioBackend() ? "Dossiê removido da conta." : "Dossiê excluído do navegador.");}
     catch(error){status(error.message,true);}
   }));
   form.append(controls);
@@ -147,7 +151,7 @@ function renderEditor(record) {
       const payload=Object.fromEntries(new FormData(form).entries());
       payload.id=record.id;payload.revision=record.revision;
       const updated=await repo.save(payload);
-      status("Ficha salva neste navegador.");
+      status(studioBackend() ? "Ficha salva na sua conta." : "Ficha salva neste navegador.");
       await refresh();
       selected=updated.id;
     }catch(error){status(error.message,true);}
@@ -173,8 +177,8 @@ function mediaCard(record,kind) {
     item.append(el("p","character-file-name",meta.name),el("small","muted",(meta.size/1048576).toLocaleString("pt-BR",{maximumFractionDigits:2})+" MiB · SHA-256 "+meta.digest.slice(0,12)+"…"));
     const surface=el("div","character-media-surface");
     item.append(surface);
-    if(kind==="cover")void showCover(record.id,surface);
-    if(kind==="voice")void showVoice(record.id,surface);
+    if(kind==="cover")void showCover(record.id,surface).catch(error=>status(error.message,true));
+    if(kind==="voice")void showVoice(record.id,surface).catch(error=>status(error.message,true));
     if(kind==="model"||kind==="animation")item.append(makeButton("Visualizar GLB",()=>void showModel(record.id,kind,surface)));
     if(kind==="model")item.append(makeButton("Enviar modelo à biblioteca",async ()=>{
       try{
@@ -187,7 +191,7 @@ function mediaCard(record,kind) {
       }catch(error){status(error.message,true);}
     }));
     item.append(makeButton("Remover arquivo",async ()=>{
-      if(!confirm("Remover este arquivo do dossiê local?"))return;
+      if(!confirm("Remover este arquivo da versão atual do dossiê?"))return;
       try{await repo.removeAttachment(record.id,kind);status("Anexo removido.");await refresh();}
       catch(error){status(error.message,true);}
     }));
@@ -252,6 +256,9 @@ export function leaveCharacters() {cleanPreview();}
 export async function showCharacters() {await refresh();}
 export function initCharacters() {
   if(initialized)return;initialized=true;
+  let db;
+  try { db=window.indexedDB; } catch { /* O navegador pode bloquear armazenamento local. */ }
+  repo=studioBackend()?.characters ?? createCharacterRepository(db);
   const form=byId("character-create");
   form.addEventListener("submit",async event=>{
     event.preventDefault();

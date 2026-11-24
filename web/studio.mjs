@@ -1,5 +1,5 @@
 import { byId, departments, el, empty, fields, fillIcons, icon, link } from "./ui.mjs";
-import { mountOffice, unmountOffice, setOfficeRoster } from "./office.mjs";
+import { mountOffice, unmountOffice, setOfficeRoster, setOfficeActivity } from "./office.mjs";
 import { initLibrary, closePreview } from "./library.mjs";
 import { initPipeline } from "./pipeline.mjs";
 import { applyDisplayPreferences, renderExtraPage } from "./system-panels.mjs";
@@ -8,7 +8,9 @@ import { agentStages, normalize } from "./production-catalog.mjs";
 import { initAgentChat, setChatAgents, openAgentChat } from "./agent-chat.mjs";
 import { initCharacters, showCharacters, leaveCharacters } from "./characters-ui.mjs";
 
-import { initializeBackend, studioBackend } from "./backend.mjs";
+import {
+  connectionLabels, initializeBackend, studioBackend, studioConnection, subscribeStudioConnection, studioAuthActions,
+} from "./backend.mjs";
 
 await initializeBackend();
 
@@ -67,6 +69,7 @@ const workspace = document.querySelector(".workspace");
 let referenceUrl;
 let roster = [];
 let rosterUnavailable = false;
+let officeRevision = 0;
 let current;
 let currentId;
 let collapsed = false;
@@ -159,13 +162,15 @@ function renderSystem(page) {
   const cards = el("div", "shortcut-grid system-grid");
   for (const [title, value, description, color, symbol] of [
     ["Orçamento adicional", "R$ 0", "Teto autorizado para novos gastos", "cyan", "shield"],
-    ["Conexões", studioBackend() ? "Sessão autenticada" : "Desconectadas", "Arvertes Agents e Google Drive", "violet", "plug"],
+    ["Conexões", connectionLabels[studioConnection().phase], "Arvertes Agents e Google Drive", "violet", "plug"],
     ["Recursos", "Indisponíveis", "Executor remoto e cotas do provedor", "amber", "activity"],
   ]) {
     const card = el("article", "panel content-panel system-card");
     const badge = el("span", `tile-icon ${color}`);
     badge.innerHTML = icon(symbol);
-    card.append(badge, el("h2", "", title), el("strong", "", value), el("p", "muted", description));
+    const indicator = el("strong", "", value);
+    if (title === "Conexões") indicator.dataset.connectionLabel = "";
+    card.append(badge, el("h2", "", title), indicator, el("p", "muted", description));
     cards.append(card);
   }
   root.replaceChildren(cards, policy, notice);
@@ -204,6 +209,8 @@ function renderAgents() {
   }
   const query = normalize(byId("agent-search").value.trim());
   const department = byId("agent-department").value;
+  const state = studioConnection();
+  const profiles = new Map(state.agents.map(agent => [agent.id, agent]));
   for (const agent of roster) {
     if (department && department !== agent.department) continue;
     if (!normalize(`${agent.name} ${agent.role}`).includes(query)) continue;
@@ -214,13 +221,16 @@ function renderAgents() {
     const info = el("div");
     info.append(el("h2", "", agent.name), el("p", "", agent.role));
     const steps = agentStages(agent.id);
+    const remote = profiles.get(agent.id);
     const canOperate = steps.some(stage => stage.kind !== "external");
     info.append(el("p", "muted", canOperate ? "Operação local disponível" : "Etapas planejáveis"));
     const details = el("details", "agent-details");
     details.append(el("summary", "", "Responsabilidades e ferramentas"), fields([
-      ["Conexão remota", "Desconectada"],
+      ["Conexão remota", remote ? "Perfil verificado no servidor" : connectionLabels[state.phase]],
+      ...(remote ? [["Responsabilidade no servidor", remote.responsibility || remote.role]] : []),
       ["Etapas e responsabilidades", steps.map(stage => `${stage.title} · ${stage.description}`).join(" • ")],
-      ["Ferramentas", [...new Set(steps.map(stage => stage.tool))].join(" • ")],
+      ["Ferramentas", Array.isArray(remote?.tools) && remote.tools.length ? remote.tools.join(" • ")
+        : [...new Set(steps.map(stage => stage.tool))].join(" • ")],
       ["Limite atual", canOperate ? "Ações locais conforme os checkpoints do AutoPipeline." : "A execução depende de uma integração validada."],
     ]), link("Consultar AutoPipeline", "pipeline"));
     const talk = el("button", "button", "Conversar");
@@ -236,18 +246,56 @@ byId("agent-department").addEventListener("change", renderAgents);
 fetch("./roster.json").then(response => {
   if (!response.ok) throw Error();
   return response.json();
-}).then(data => {
+}).then(setRoster).catch(() => {
+  rosterUnavailable = true;
+  if (!roster.length) setRoster(studioConnection().agents);
+});
+
+function setRoster(data) {
   roster = data;
-  for (const department of new Set(roster.map(agent => agent.department))) byId("agent-department").add(new Option(department, department));
+  const departmentPicker = byId("agent-department");
+  const department = departmentPicker.value;
+  departmentPicker.replaceChildren(departmentPicker.options[0], ...[...new Set(roster.map(agent => agent.department))]
+    .map(name => new Option(name, name)));
+  if ([...departmentPicker.options].some(option => option.value === department)) departmentPicker.value = department;
   setOfficeRoster(roster);
   setChatAgents(roster);
   renderAgents();
-}).catch(() => {
-  rosterUnavailable = true;
-  setOfficeRoster([]);
-  setChatAgents([]);
-  renderAgents();
-});
+}
+
+async function refreshOfficeActivity() {
+  const revision = ++officeRevision;
+  if (current !== "office" && current !== "overview") return;
+  if (studioConnection().phase !== "connected") {
+    setOfficeActivity(null, "Estado ao vivo indisponível");
+    return;
+  }
+  setOfficeActivity(null, "Consultando fila…");
+  try {
+    const snapshot = await studioBackend().activity();
+    if (revision === officeRevision) setOfficeActivity(snapshot);
+  } catch {
+    if (revision === officeRevision) setOfficeActivity(null, "Atividade do escritório indisponível");
+  }
+}
+
+function paintConnection(state) {
+  const message = connectionLabels[state.phase];
+  for (const node of document.querySelectorAll("[data-connection-label]")) node.textContent = message;
+  const modeLabel = document.querySelector("[data-workspace-mode]");
+  modeLabel.textContent = state.mode === "remote" ? "Workspace da conta" : "Workspace local";
+  for (const node of document.querySelectorAll("[data-operation-mode]")) {
+    node.textContent = state.mode === "remote" ? "Dados da conta do Studio" : "Dados deste navegador";
+  }
+  const pending = ["checking", "waking", "verifying"].includes(state.phase);
+  for (const node of document.querySelectorAll("[data-connection-retry]")) node.disabled = pending;
+  for (const node of document.querySelectorAll("[data-connection-auth]")) node.textContent = studioAuthActions()?.label ?? "";
+  byId("chat-connection").textContent = state.mode === "remote"
+    ? "Servidor · respostas por regras do backend" : "Modo local · respostas por regras do navegador";
+  if (!roster.length && state.agents.length && rosterUnavailable) setRoster(state.agents);
+  else renderAgents();
+  void refreshOfficeActivity();
+}
 
 const sections = [...document.querySelectorAll("main > section")];
 function renderPage(focus = false) {
@@ -279,6 +327,7 @@ function renderPage(focus = false) {
   byId("new-production").hidden = !["overview", "office"].includes(page);
   document.title = `${title} · Arvertes Studio`;
   if (page === "office" || page === "overview") mountOffice(page);
+  void refreshOfficeActivity();
   closeDrawer(false);
   window.scrollTo(0, 0);
   if (focus) byId("content").focus({ preventScroll: true });
@@ -301,4 +350,6 @@ document.querySelector(".skip").addEventListener("click", event => {
 });
 window.addEventListener("hashchange", () => renderPage(true));
 if (location.hash === "#content") history.replaceState(null, "", "#overview");
+if (studioConnection().phase === "unconfigured") paintConnection(studioConnection());
+else subscribeStudioConnection(paintConnection);
 renderPage();

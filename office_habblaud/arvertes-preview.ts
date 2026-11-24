@@ -70,6 +70,21 @@ view.onSelect(sel => {
   detail(sel.id);
   notify('selected', sel.id);
 });
+let revision = 1;
+let last = '';
+
+function applyActivity(states: Record<string, {label: string, working: boolean}>) {
+  const time = Date.now();
+  agents = agents.map(agent => {
+    const entry = Object.hasOwn(states, agent.id) ? states[agent.id] : undefined;
+    const title = typeof entry?.label === 'string' ? entry.label.slice(0, 100) : 'Sem conexão ao vivo';
+    return {...agent, title, status: entry?.working === true ? 'working' : 'idle',
+      lastEventAt: time, statusSince: title === agent.title ? agent.statusSince : time};
+  });
+  store.pushReplay({...snapshot, rev: ++revision, serverTime: time, agents});
+  detail(selector.value);
+}
+
 if (embedded) {
   window.addEventListener('message', event => {
     if (event.origin !== location.origin || event.source !== window.parent || event.data?.scope !== 'arvertes-office') return;
@@ -77,7 +92,8 @@ if (embedded) {
     if (command === 'agent' && agents.some(agent => agent.id === value)) {
       view.select({type:'agent', id:value},{focus:true});
       detail(value);
-    } else if (command === 'fit') view.overview();
+    } else if (command === 'activity' && value && typeof value === 'object') applyActivity(value);
+    else if (command === 'fit') view.overview();
     else if (command === 'out') view.zoomBy(0.8);
     else if (command === 'in') view.zoomBy(1.25);
     else if (command === 'economy' && typeof value === 'boolean') {
@@ -91,8 +107,6 @@ document.querySelector('#overview')!.addEventListener('click',()=>view.overview(
 document.querySelector('#minus')!.addEventListener('click',()=>view.zoomBy(0.8));
 document.querySelector('#plus')!.addEventListener('click',()=>view.zoomBy(1.25));
 detail(agents[0].id);
-let revision = 1;
-let last = '';
 // Static hosting must not poll a nonexistent live endpoint.
 const updates = import.meta.env.VITE_ARVERTES_STATIC_PREVIEW === '1' ? 0 : window.setInterval(async () => {
   try {
@@ -106,14 +120,8 @@ const updates = import.meta.env.VITE_ARVERTES_STATIC_PREVIEW === '1' ? 0 : windo
     workflow.textContent = data.flow || 'Nenhuma inspeção ativa';
     if (JSON.stringify(data) === last) return;
     last = JSON.stringify(data);
-    const time = Date.now();
-    agents = agents.map(agent => {
-      const title = states[agent.id] || 'Não conectado';
-      return {...agent, title, status: title === 'Trabalhando' ? 'working' : 'idle',
-        lastEventAt: time, statusSince: title === agent.title ? agent.statusSince : time};
-    });
-    store.pushReplay({...snapshot, rev: ++revision, serverTime: time, agents});
-    detail(selector.value);
+    applyActivity(Object.fromEntries(Object.entries(states).map(([id, label]) =>
+      [id, {label, working: label === 'Trabalhando'}])));
   } catch {
     // The optional static bundle can also be opened without Studio snapshots.
   }

@@ -3,19 +3,29 @@ from pathlib import Path
 from urllib.parse import urlsplit
 import json
 import os
+import re
 import sys
 
-names = {"api": "ARVERTES_WEB_API_ORIGIN", "supabaseUrl": "ARVERTES_WEB_SUPABASE_URL",
-         "supabaseKey": "ARVERTES_WEB_SUPABASE_PUBLISHABLE_KEY"}
-config = {key: os.environ.get(name, "") for key, name in names.items()}
-if any(config.values()):
-    if not all(config.values()) or not config["supabaseKey"].startswith("sb_publishable_"):
-        raise SystemExit("A integração requer duas origens HTTPS e uma chave publicável do Supabase.")
-    for key in ("api", "supabaseUrl"):
-        value = config[key]
+
+def origin(value):
+    try:
         url = urlsplit(value)
-        if url.scheme != "https" or not url.hostname or url.username or url.password or value != f"https://{url.netloc}":
-            raise SystemExit("Use origens HTTPS sem caminhos nem credenciais.")
-else:
-    config = None
+        return (url.scheme == "https" and bool(url.hostname) and url.username is None and url.password is None
+                and value == f"https://{url.netloc}" and not re.search(r"[\s\\]", value)
+                and (url.port is None or 1 <= url.port <= 65535))
+    except ValueError:
+        return False
+
+
+api = os.environ.get("ARVERTES_WEB_API_ORIGIN", "")
+auth_url = os.environ.get("ARVERTES_WEB_SUPABASE_URL", "")
+publishable = os.environ.get("ARVERTES_WEB_SUPABASE_PUBLISHABLE_KEY", "")
+if (api and not origin(api)) or (auth_url and not origin(auth_url)):
+    raise SystemExit("Use origens HTTPS sem caminhos nem credenciais.")
+if (auth_url or publishable) and (
+        not api or not auth_url or not re.fullmatch(r"sb_publishable_[a-zA-Z0-9_-]+", publishable)):
+    raise SystemExit("A autenticação requer as duas origens e uma chave publicável do Supabase.")
+config = {"api": api} if api else None
+if auth_url:
+    config.update(supabaseUrl=auth_url, supabaseKey=publishable)
 Path(sys.argv[1]).write_text("export default " + json.dumps(config) + ";\n", encoding="utf-8")

@@ -1,4 +1,7 @@
-import { studioAuthActions, studioBackend, studioBackendError } from "./backend.mjs";
+import {
+  connectionLabels, studioAuthActions, studioBackend, studioBackendError, studioConnection,
+  studioLocalModeAction, verifyStudioConnection,
+} from "./backend.mjs";
 import { el, link, fields, icon } from "./ui.mjs";
 import { libraryUsage } from "./library.mjs";
 import { maxGlbBytes, maxLibraryBytes, maxLibraryCount } from "./glb.mjs";
@@ -94,28 +97,40 @@ function settings(root, context) {
   b.append(fields([
     ["Versão da interface", "Arvertes Studio Web v0.3"],
     ["Renderizador de escritório", "Habblaud original, licença MIT"],
-    ["Modo de operação", studioBackend() ? "Sessão do Studio autenticada" : "Prévia no navegador"],
-    ["Geração automática", "Não conectada"],
+    ["Geração automática", "Aguardando executor autorizado"],
     ["Arquivos de produção", "Não enviados automaticamente"],
   ]));
   b.append(link("Abrir escritório", "office", "button"));
-  const auth = studioAuthActions();
-  const error = studioBackendError();
-  if (auth || error) {
-    const feedback = el("p", "muted", error || "");
-    feedback.setAttribute("role", "status");
-    if (auth) {
-      const control = el("button", "button", auth.label);
-      control.type = "button";
-      control.addEventListener("click", async () => {
-        control.disabled = true;
-        try { await auth.action(); }
-        catch (error) { feedback.textContent = error.message; control.disabled = false; }
-      });
-      b.append(control);
-    }
-    b.append(feedback);
+  const state = studioConnection();
+  const mode = labelValue("Modo de operação", state.mode === "remote" ? "Dados da conta do Studio" : "Dados deste navegador");
+  mode.querySelector(".badge").dataset.operationMode = "";
+  const server = labelValue("Arvertes Agents", connectionLabels[state.phase],
+    state.origin || "Origem configurável no build do Netlify.");
+  server.querySelector(".badge").dataset.connectionLabel = "";
+  b.append(mode, server);
+  const feedback = el("p", "muted", studioBackendError() || "");
+  feedback.setAttribute("role", "status");
+  if (state.origin && state.phase !== "local") {
+    const retry = button("Verificar conexão", () => void verifyStudioConnection());
+    retry.dataset.connectionRetry = "";
+    retry.disabled = ["checking", "waking", "verifying"].includes(state.phase);
+    b.append(retry);
   }
+  function actionControl(action, getAction) {
+    const control = button(action.label, async () => {
+      control.disabled = true;
+      try { await getAction()?.action(); }
+      catch (error) { feedback.textContent = error.message; }
+      finally { control.disabled = false; }
+    });
+    b.append(control);
+    return control;
+  }
+  const auth = studioAuthActions();
+  if (auth) actionControl(auth, studioAuthActions).dataset.connectionAuth = "";
+  const local = studioLocalModeAction();
+  if (local) actionControl(local, studioLocalModeAction);
+  if (state.origin) b.append(feedback);
   root.append(a, b);
 }
 function resources(root) {
@@ -138,7 +153,11 @@ function resources(root) {
   const drive = labelValue("Google Drive", "Desconectado", "O Studio ainda não consulta a cota da conta.");
   for (const item of [
     ["Netlify", "Site publicado", "Hospedagem da interface estática."],
-    ["Arvertes Agents", backend ? "Sessão autenticada" : "Desconectado", "Estado da sessão do Studio."],
+    (() => {
+      const row = labelValue("Arvertes Agents", connectionLabels[studioConnection().phase], "Estado da sessão do Studio.");
+      row.querySelector(".badge").dataset.connectionLabel = "";
+      return row;
+    })(),
     drive,
     ["TRELLIS.2 / ZeroGPU", "Cota desconhecida", "Nenhuma consulta autenticada ao provedor nesta versão."],
     ["Orçamento adicional autorizado", "R$ 0", "Nenhum executor ou serviço pago pode iniciar automaticamente."],
@@ -236,8 +255,10 @@ function memory(root) {
   const backend = studioBackend();
   b.append(labelValue("Conversas dos 26 agentes", backend ? "Na conta" : "Local",
     backend ? "Históricos por agente e anotações da sua conta." : "Históricos por agente e anotações compartilhadas no IndexedDB."));
-  b.append(labelValue("Memória remota dos agentes", backend ? "Sessão autenticada" : "Desconectada",
-    backend ? "As conversas e notas são consultadas pelo servidor." : "O servidor está disponível após configurar a integração e entrar na conta."));
+  const remoteMemory = labelValue("Memória remota dos agentes", connectionLabels[studioConnection().phase],
+    backend ? "As conversas e notas são consultadas pelo servidor." : "Entre na conta para consultar a memória remota.");
+  remoteMemory.querySelector(".badge").dataset.connectionLabel = "";
+  b.append(remoteMemory);
   b.append(link("Abrir conversas dos agentes", "atlas", "button"));
   b.append(link("Ver dossiês de personagens", "characters", "button"));
   b.append(link("Reabrir produções locais", "tasks", "button"));

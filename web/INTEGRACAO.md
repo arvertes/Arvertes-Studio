@@ -37,20 +37,25 @@ Os tipos em `integration-contracts.d.ts` descrevem interfaces futuras para `getC
 
 ## Ativação da API v1
 
-O Studio usa o backend quando o build tem configuração pública e o operador entra na conta em **Configurações**. O início de sessão utiliza Supabase Auth com GitHub e PKCE. O backend verifica o usuário autorizado antes de atender cada requisição. Ao sair da conta, o modo local volta a exibir os dados do IndexedDB.
+O Studio usa o backend quando o build tem configuração pública e o operador entra na conta em **Configurações**. O início de sessão utiliza Supabase Auth com GitHub e PKCE. O backend verifica o usuário autorizado antes de atender cada requisição. O botão **Usar dados deste navegador** ativa o modo local na aba mesmo com sessão existente. A troca de modo não migra, apaga ou envia dados do IndexedDB. Use **Voltar ao modo servidor** para consultar a conta novamente.
 
 | Variável do Netlify | Valor |
 | --- | --- |
-| `ARVERTES_WEB_API_ORIGIN` | Origem HTTPS do backend, sem `/api/v1` |
+| `ARVERTES_WEB_API_ORIGIN` | `https://arvertes-agents.onrender.com`, sem `/api/v1` |
 | `ARVERTES_WEB_SUPABASE_URL` | Origem HTTPS do projeto Supabase |
 | `ARVERTES_WEB_SUPABASE_PUBLISHABLE_KEY` | Chave publicável com prefixo `sb_publishable_` |
 
-O build produz `backend-config.mjs` apenas com essas três informações públicas. Tokens de sessão são específicos da aba. DSN, OAuth do Drive, IDs de pastas e chaves privadas pertencem ao backend.
+O build produz `backend-config.mjs` apenas com essas três informações públicas. Com apenas a origem da API, **Configurações** verifica a saúde e indica autenticação pendente. Sem variáveis, o Studio inicia em modo local. Depois de definir as variáveis no Netlify, um novo build autorizado é necessário para enviá-las ao navegador. Tokens de sessão são específicos da aba. DSN, OAuth do Drive, IDs de pastas e chaves privadas pertencem ao backend.
+
+No Supabase Auth, habilite o GitHub e inclua `https://arvertes-studio.netlify.app/` nas URLs de redirecionamento. Use o mesmo projeto Supabase dos dois lados. A conta precisa estar em `ARVERTES_SUPABASE_SUBJECTS` e a origem do Studio em `ARVERTES_STUDIO_ORIGINS` no Render. Na produção atual, o CORS já aceita a origem do Netlify.
+
+**Verificar conexão** consulta `/health` sem token e confirma a sessão com `/api/v1/agents`. O primeiro health check aguarda até 65 segundos para acomodar o início lento. Requisições autenticadas usam prazo próprio e erros de gravação são mostrados sem repetição automática. Em caso de timeout, verifique o histórico ou a fila antes de refazer a ação. O servidor conectado pode responder por regras. Geração externa continua sujeita aos bloqueios do Sentinel.
 
 - **Atlas** abre conversas persistentes e registra solicitações explícitas de anotação na conta.
+- **Escritório** consulta `/api/v1/agents/activity` ao abrir ou após verificar a conexão. Mostra a hora da observação e distingue uma tarefa pronta de trabalho em execução. Se a API ainda não oferecer essa rota, o escritório informa a indisponibilidade da atividade.
 - **Personagens** abre fichas versionadas da conta. A exportação do servidor verifica cada arquivo selecionado contra o SHA-256 registrado. O operador pode recadastrar os dados locais que deseja sincronizar.
 - **Nova produção** oferece uma fila de inspeção autenticada a partir do briefing. No AutoPipeline, aprove o custo de R$ 0, selecione o GLB, revise a evidência e baixe o ZIP. Quando o plano estiver ligado a uma ficha com o mesmo modelo, o ZIP inclui as mídias da revisão e pode ser arquivado no Drive após uma ação separada.
 
 Para testar a distribuição e os fluxos locais, execute `bash web/build-netlify.sh` e `python web/tests/browser.py --chromium /caminho/chromium`. Antes de uma publicação manual, valide um login autorizado, a origem CORS e o arquivamento de um pacote sintético com as credenciais próprias do backend.
 
-O teste `web/tests/backend_browser.py` exercita o Chromium contra o código real da API e um PostgreSQL descartável. Use `PYTHONPATH` com o checkout do Agents, `ARVERTES_TEST_POSTGRES` com o DSN de teste e, se necessário, `ARVERTES_TEST_CHROMIUM` com o caminho do binário. Execute depois de gerar o build. A autenticação é uma fixture de teste introduzida na fronteira do navegador.
+O teste `web/tests/backend_browser.py` exercita o Chromium contra o código real da API e um PostgreSQL descartável. Use `PYTHONPATH` com o checkout do Agents, `ARVERTES_TEST_POSTGRES` com o DSN de teste e, se necessário, `ARVERTES_TEST_CHROMIUM` com o caminho do binário. Execute depois de gerar o build. Defina também `ARVERTES_TEST_GOTRUE_URL` para apontar para uma instância descartável do Supabase Auth em que o teste possa criar duas contas sintéticas com e-mail confirmado automaticamente. Assim o SDK do navegador renova a sessão e a API valida o token com Auth real. Sem essa variável, apenas a sessão é substituída no teste. O OAuth hospedado do GitHub exige um teste separado com a conta autorizada.

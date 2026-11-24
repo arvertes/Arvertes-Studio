@@ -6,7 +6,7 @@ node web/test-glb.mjs
 node web/test-system.mjs
 node --test web/test-coordination.mjs
 node --test web/test-agents.mjs
-node --test web/test-characters.mjs web/test-backend.mjs
+node --test web/test-characters.mjs web/test-backend.mjs web/test-connection.mjs
 for module in web/*.mjs; do
   node --check "$module"
 done

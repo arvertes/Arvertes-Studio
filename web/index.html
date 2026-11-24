@@ -19,7 +19,7 @@
       <nav id="navigation" aria-label="Áreas do Studio"></nav>
       <div class="sidebar-footer">
         <span class="build-letter" aria-hidden="true">A</span>
-        <div><strong>Workspace local</strong><small>Studio Web · v0.3</small></div>
+        <div><strong data-workspace-mode>Workspace local</strong><small>Studio Web · v0.3</small></div>
       </div>
     </aside>
     <button id="scrim" class="scrim" aria-label="Fechar navegação" hidden></button>
@@ -27,7 +27,7 @@
       <header class="topbar">
         <button id="sidebar-toggle" type="button" class="icon-button" data-icon="sidebar" aria-controls="sidebar" aria-label="Recolher navegação"></button>
         <div class="breadcrumb"><span id="group-name">Central</span><span data-icon="chevron-right"></span><strong id="page-name">Visão geral</strong></div>
-        <a class="connection" href="#security"><span class="dot"></span><span>Modo local</span></a>
+        <a class="connection" href="#security"><span class="dot"></span><span data-connection-label>Modo local</span></a>
       </header>
       <main id="content" tabindex="-1">
         <div class="page-heading">
@@ -183,9 +183,9 @@
           <article class="panel content-panel agent-chat-panel" aria-labelledby="chat-title">
             <div class="panel-heading">
               <span class="tile-icon cyan" data-icon="users"></span>
-              <div><h2 id="chat-title">Conversar com os agentes</h2><p>Modo local · respostas por regras · sem servidor de IA</p></div>
+              <div><h2 id="chat-title">Conversar com os agentes</h2><p id="chat-connection">Modo local · respostas por regras</p></div>
             </div>
-            <p class="muted">Escolha um dos 26 agentes. As conversas são separadas, e informações salvas com “Lembre que ...” são compartilhadas entre eles neste navegador.</p>
+            <p class="muted">Escolha um dos 26 agentes. As conversas são separadas, e informações salvas com “Lembre que ...” são compartilhadas no modo atual.</p>
             <label class="production-field" for="chat-agent">Agente
               <select id="chat-agent" aria-describedby="chat-specialty"></select>
             </label>
@@ -224,7 +224,7 @@
               </div>
             </div>
             <div class="office-viewport"><p class="office-message" role="status">Carregando escritório…</p></div>
-            <div class="office-footer"><span><span class="dot"></span> Estado ao vivo indisponível</span><a class="text-link office-open" href="#office">Abrir escritório <span data-icon="arrow-right"></span></a><span class="office-hint">Arraste para navegar · selecione um agente</span></div>
+            <div class="office-footer"><span><span class="dot"></span> <span data-office-activity>Estado ao vivo indisponível</span></span><a class="text-link office-open" href="#office">Abrir escritório <span data-icon="arrow-right"></span></a><span class="office-hint">Arraste para navegar · selecione um agente</span></div>
           </article>
         </template>
       </main>

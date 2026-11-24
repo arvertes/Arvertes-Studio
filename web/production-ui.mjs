@@ -133,22 +133,30 @@ function taskEvidence(task) {
 
 async function refresh() {
   const revision = ++readRevision;
-  try {
-    const remote = studioBackend()?.productions;
-    if (remote) {
-      try { remoteRecords = await remote.list(); remoteError = undefined; }
-      catch (error) { remoteError = error.message; }
-    }
-    const list = await repository.list();
+  const remote = studioBackend()?.productions;
+  const localRequest = repository.list().then(list => {
     if (revision !== readRevision) return;
     records = list;
     storageError = undefined;
-  } catch (error) {
+  }, error => {
+    if (revision === readRevision) storageError = error.message;
+  }).finally(() => {
     if (revision !== readRevision) return;
-    storageError = error.message;
-  }
-  ready = true;
-  render();
+    ready = true;
+    render();
+  });
+  const remoteRequest = remote?.list().then(list => {
+    if (revision !== readRevision) return;
+    remoteRecords = list;
+    remoteError = undefined;
+  }, error => {
+    if (revision !== readRevision) return;
+    remoteRecords = [];
+    remoteError = error.message;
+  }).finally(() => {
+    if (revision === readRevision && !route.id) render();
+  });
+  await Promise.all([localRequest, remoteRequest]);
 }
 
 function renderSummary() {
@@ -326,8 +334,9 @@ function attachmentForm(production, assets, feedback) {
 }
 
 function showRemoteList(root) {
-  if (!studioBackend() || !remoteRecords.length && !remoteError) return;
-  const box = panel("Produções no servidor", remoteError);
+  if (!studioBackend()) return;
+  const box = panel("Produções no servidor", remoteError || (!remoteRecords.length ? "Nenhuma produção carregada." : ""));
+  if (remoteError) box.append(button("Recarregar fila do servidor", () => void refresh()));
   for (const job of remoteRecords) box.append(link(job.title, `pipeline/${job.id}`, "button"));
   root.append(box);
 }
@@ -404,7 +413,9 @@ async function showRemotePlan(root, id) {
     }
     box.append(stages);
   } catch (error) {
-    if (generation === remoteRevision && box.isConnected) box.replaceChildren(el("p", "", error.message));
+    if (generation === remoteRevision && box.isConnected) {
+      box.replaceChildren(el("p", "", error.message), button("Recarregar produção", () => render()));
+    }
   }
 }
 
@@ -438,6 +449,7 @@ function render() {
     const card = panel("Memória local indisponível", storageError);
     card.append(button("Tentar novamente", () => void refresh()));
     root.append(card);
+    if (!id) showRemoteList(root);
   } else if (!ready) {
     const loading = el("p", "muted", "Carregando planos locais…");
     loading.setAttribute("role", "status");
@@ -492,7 +504,8 @@ export function initProduction() {
     feedback.hidden = true;
     const card = panel("Proposta de Atlas", `${productionTypes[plan.type].label} · Planejamento por regras locais`);
     const resultStatus = status();
-    card.append(taskList(plan, true), button("Salvar plano para aprovação", async trigger => {
+    const localSave = studioBackend() ? "Salvar plano neste navegador" : "Salvar plano para aprovação";
+    card.append(taskList(plan, true), button(localSave, async trigger => {
       trigger.disabled = true;
       try {
         const saved = await repository.create(brief);

@@ -60,7 +60,7 @@ async function render() {
     log.scrollTop = log.scrollHeight;
   } catch (e) {
     if (revision !== refreshId) return;
-    status("Memória indisponível: " + e.message + " As mensagens não estão sendo guardadas.", true);
+    status("Não foi possível consultar a memória. " + e.message, true);
     log.append(el("p", "muted", studioBackend() ? "Confira a sessão e a conexão com o servidor." : "O navegador bloqueou o armazenamento. Verifique a permissão de dados do site."));
   }
 }
@@ -84,7 +84,11 @@ export function setChatAgents(data) {
   const select = byId("chat-agent");
   const previous = select.value || active;
   select.replaceChildren(...agents.map(a => new Option(a.name + " · " + a.department, a.id)));
-  if (agents.length) showAgent(agents.some(a => a.id === previous) ? previous : agents[0].id);
+  if (agents.length) {
+    select.disabled = false;
+    byId("chat-send").disabled = busy;
+    showAgent(agents.some(a => a.id === previous) ? previous : agents[0].id);
+  }
   else { select.add(new Option("Cadastro indisponível")); select.disabled = true; byId("chat-send").disabled = true; }
 }
 export function initAgentChat() {
@@ -139,7 +143,7 @@ export function initAgentChat() {
       await render();
       status(response.remember ? "Informação guardada apenas neste navegador." : "Resposta local registrada. " + updated.messages.length + " mensagens no histórico.");
     } catch (e) {
-      status("A mensagem não foi registrada: " + e.message, true);
+      status(remote ? e.message : "A mensagem não foi registrada: " + e.message, true);
     } finally {
       busy = false;
       button.disabled = false;

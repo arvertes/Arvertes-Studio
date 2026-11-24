@@ -5,6 +5,20 @@ let roster = [];
 let selected = "coordenador";
 let economy = true;
 let loadedRoster = false;
+let activity = {};
+let activityMessage = "Estado ao vivo indisponível";
+const activityLabels = {
+  idle: "Sem tarefa ativa na fila",
+  awaiting_dependencies: "Aguardando dependências",
+  awaiting_executor: "Aguardando executor autorizado",
+  paused: "Etapa pausada",
+  waiting: "Execução adiada",
+  awaiting_approval: "Aguardando aprovação",
+  ready: "Etapa pronta para ação do operador",
+  awaiting_review: "Aguardando revisão humana",
+  blocked: "Etapa bloqueada",
+  running: "Trabalhando",
+};
 
 function send(command, value) {
   if (!office?.ready) return;
@@ -24,7 +38,27 @@ function showProfile() {
   const avatar = el("span", `tile-icon ${color}`);
   avatar.innerHTML = icon(symbol);
   profile.append(avatar, el("h3", "", agent.name), el("span", `badge ${color}`, agent.department));
-  root.append(profile, fields([["Especialidade", agent.role], ["Estado", "Sem conexão ao vivo"]]));
+  root.append(profile, fields([["Especialidade", agent.role], ["Estado", activity[selected]?.label ?? "Sem conexão ao vivo"]]));
+}
+
+function showActivity() {
+  if (office) office.card.querySelector("[data-office-activity]").textContent = activityMessage;
+  send("activity", activity);
+  showProfile();
+}
+
+export function setOfficeActivity(snapshot, message = "Atividade do escritório indisponível") {
+  activity = {};
+  activityMessage = message;
+  const observed = new Date(snapshot?.observed_at);
+  if (Array.isArray(snapshot?.agents) && typeof snapshot.observed_at === "string"
+      && Number.isFinite(observed.getTime())) {
+    activity = Object.fromEntries(snapshot.agents.filter(item => typeof item?.id === "string"
+      && Object.hasOwn(activityLabels, item.state)).map(item =>
+      [item.id, {label: activityLabels[item.state], working: item.state === "running"}]));
+    activityMessage = "Fila consultada às " + observed.toLocaleTimeString("pt-BR", {hour: "2-digit", minute: "2-digit"});
+  }
+  showActivity();
 }
 
 export function setOfficeRoster(data) {
@@ -62,6 +96,7 @@ window.addEventListener("message", event => {
     office.message.hidden = true;
     for (const button of office.card.querySelectorAll("[data-office]")) button.disabled = false;
     send("economy", economy);
+    send("activity", activity);
     if (selected !== "coordenador") send("agent", selected);
   }
   if (event.data.command === "selected" && roster.some(agent => agent.id === event.data.value)) {
@@ -135,6 +170,7 @@ export function mountOffice(page) {
   }
   card.querySelector(".office-viewport").prepend(frame);
   root.append(card);
+  showActivity();
 }
 
 export function unmountOffice() {

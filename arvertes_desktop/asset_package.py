@@ -137,7 +137,10 @@ def _outputs(folder, quality, mode):
     if (folder / "reports/deformable-lods.json").is_file():
         read_local(folder / "reports/deformable-lods.json", 64 * 1024)
         files.add("reports/deformable-lods.json")
-    if len(report["texture_variants"]) > 3:
+    if mode == "procedural":
+        read_local(folder / "reports/style.json", 64 * 1024)
+        files.add("reports/style.json")
+    if len(report["texture_variants"]) > (30 if mode == "procedural" else 3):
         raise ValueError("Quantidade de texturas incompatível.")
     for item in report["texture_variants"]:
         path = item["path"]
@@ -201,6 +204,9 @@ def build(args):
         (folder / "references/library.json").write_bytes(json_bytes(pins))
         info = {"schema": 1, "description": description, "reference": ref_path, "image": image,
                 "mode": mode, "quality": args.quality, "max_cost_centavos": 0}
+        if mode == "procedural":
+            from arvertes_studio.core.character_style import validate_style
+            info["design"] = validate_style(args.design)
         if mode == "humanoid":
             info["motion_revision"] = args.motion_revision
             if getattr(args, "deformable_lods", False):
@@ -209,6 +215,9 @@ def build(args):
         if args.requirements:
             info["requirements"] = documented_requirements(args.requirements)
         if args.model:
+            if getattr(args, "adaptation", None) is not None:
+                from arvertes_studio.core.character_style import validate_adaptation
+                info["adaptation"] = validate_adaptation(args.adaptation)
             original = read_source(args.model.absolute())
             info["model_sha256"] = fingerprint(original)
             (folder / "source.glb").write_bytes(original)
@@ -253,6 +262,7 @@ def main(argv=None):
     make.add_argument("--references", type=Path, help="lista JSON de revisões licenciadas")
     make.add_argument("--approved", action="store_true")
     make.add_argument("--deformable-lods", action="store_true")
+    make.add_argument("--design", type=lambda path: json.loads(read_local(Path(path), 8192)))
     make.add_argument("--motion-revision", type=int, choices=(1, 2, 3), default=1)
     make.add_argument("--requirements", type=Path, help="requisitos documentais JSON")
     check = sub.add_parser("verify", help="verificar inventário e hashes sem extrair")

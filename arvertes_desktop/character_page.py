@@ -6,11 +6,12 @@ from tempfile import TemporaryDirectory
 
 from PySide6.QtCore import QProcess, QProcessEnvironment, QUrl
 from PySide6.QtGui import QDesktopServices
-from PySide6.QtWidgets import (QComboBox, QDialog, QFileDialog, QFormLayout, QLabel, QLineEdit, QMessageBox,
+from PySide6.QtWidgets import (QComboBox, QDialog, QFileDialog, QFormLayout, QInputDialog, QLabel, QLineEdit, QMessageBox,
                                QPlainTextEdit, QVBoxLayout)
 
 from .character_production import IDENTIFIER, LocalPackages, _job, _json, publish, review
 from .pages import button
+from arvertes_studio.core.character_style import study_presets, validate_style
 
 
 class CharacterDialog(QDialog):
@@ -30,9 +31,11 @@ class CharacterDialog(QDialog):
         self.process.setProcessEnvironment(environment)
         self.process.finished.connect(self.process_finished)
         self.process.errorOccurred.connect(self.process_error)
+        self.process.readyReadStandardError.connect(self.process_progress)
+        self.stderr = ""
         self.input_directory = None
         self.images = []
-        self.base = None
+        self.base = self.handoff = self.custom = None
 
         layout = QVBoxLayout(self)
         form = QFormLayout()
@@ -47,7 +50,9 @@ class CharacterDialog(QDialog):
         self.source = QComboBox()
         self.source.addItem("GLB fornecido", "base_glb")
         self.source.addItem("Manequim sintético", "synthetic_fixture")
-        self.source.addItem("Imagem → geometria (gerador pendente)", "image_guided")
+        self.source.addItem("Blender procedural", "procedural")
+        self.source.addItem("GLB externo com comprovante", "external_glb")
+        self.source.addItem("Imagem → geometria (verificar disponibilidade)", "image_guided")
         form.addRow("Nome", self.name)
         form.addRow("Características", self.description)
         form.addRow("Perfil", self.quality)
@@ -56,13 +61,25 @@ class CharacterDialog(QDialog):
         self.base_button = button("Escolher GLB base", self.choose_base)
         form.addRow(self.image_button)
         form.addRow(self.base_button)
+        self.handoff_button = button("Selecionar comprovante JSON", self.choose_handoff)
+        form.addRow(self.handoff_button)
+        self.design = QComboBox()
+        for label, value in study_presets().items():
+            self.design.addItem(label.capitalize(), value)
+        self.design.addItem("Personalizado por JSON")
+        form.addRow("Receita", self.design)
+        self.design_button = button("Escolher receita personalizada", self.choose_design)
+        form.addRow(self.design_button)
+        self.source.currentIndexChanged.connect(self.update_controls)
+        self.design.currentIndexChanged.connect(self.update_controls)
+        self.update_controls()
         layout.addLayout(form)
         self.begin = button("Iniciar produção local", self.start)
         self.jobs = QComboBox()
         self.jobs.currentIndexChanged.connect(self.show_job)
         self.open = button("Abrir pasta para inspecionar", self.open_job)
         self.accept_revision = button("Aprovar revisão local", lambda: self.decide("accept"))
-        self.reject_revision = button("Rejeitar revisão", lambda: self.decide("reject"))
+        self.reject_revision = button("Solicitar correções", lambda: self.decide("reject"))
         self.deliver = button("Salvar pacote aprovado", self.save)
         self.status = QLabel()
         self.status.setWordWrap(True)
@@ -84,6 +101,28 @@ class CharacterDialog(QDialog):
             self.base = file
             self.base_button.setText(Path(file).name)
 
+    def update_controls(self):
+        source = self.source.currentData()
+        self.base_button.setEnabled(source in ("base_glb", "external_glb"))
+        self.handoff_button.setEnabled(source == "external_glb")
+        self.design.setEnabled(source == "procedural")
+        self.design_button.setEnabled(source == "procedural" and self.design.currentData() is None)
+
+    def choose_handoff(self):
+        file, _ = QFileDialog.getOpenFileName(self, "Comprovante do executor", "", "JSON (*.json)")
+        if file:
+            self.handoff = file
+            self.handoff_button.setText(Path(file).name)
+
+    def choose_design(self):
+        file, _ = QFileDialog.getOpenFileName(self, "Receita procedural", "", "JSON (*.json)")
+        if file:
+            try:
+                self.custom = validate_style(_json(Path(file), 8192))
+                self.design_button.setText(Path(file).name)
+            except (ValueError, OSError) as error:
+                self.status.setText(str(error))
+
     def start(self):
         source = self.source.currentData()
         description = self.description.toPlainText().strip()
@@ -95,24 +134,47 @@ class CharacterDialog(QDialog):
         if not self.name.text().strip() or not 1 <= len(description) <= 2000 or not self.images:
             self.status.setText("Preencha o nome, a descrição (até 2.000 caracteres) e selecione as imagens.")
             return
-        if source == "base_glb" and not self.base:
+        if source in ("base_glb", "external_glb") and not self.base:
             self.status.setText("Selecione o modelo-base GLB.")
+            return
+        if source == "external_glb" and not self.handoff:
+            self.status.setText("Selecione o comprovante de origem do GLB.")
+            return
+        design = self.design.currentData() or self.custom
+        if source == "procedural" and design is None:
+            self.status.setText("Selecione uma receita procedural.")
             return
         self.input_directory = TemporaryDirectory(prefix="arvertes-character-")
         briefing = Path(self.input_directory.name) / "brief.json"
         briefing.write_text(json.dumps({
             "name": self.name.text().strip(), "description": description, "source": source,
             "quality": self.quality.currentData(), "requirements": ["rig", "animations", "materials", "lods"],
+            **({"design": design, "requirements": ["rig", "animations", "materials", "lods", "pbr_maps"]}
+               if source == "procedural" else {}),
         }), encoding="utf-8")
         args = ["-m", "arvertes_desktop.character_production", "--workspace", str(self.root), "start",
-                "--agents", checkout, "--blender", blender, "--brief", str(briefing), "--approved"]
+                "--agents", checkout, "--blender", blender, "--brief", str(briefing), "--approved", "--progress"]
         for path in self.images:
             args.extend(("--image", path))
-        if source == "base_glb":
+        if source in ("base_glb", "external_glb"):
             args.extend(("--base", self.base))
+        if source == "external_glb":
+            args.extend(("--handoff", self.handoff))
+        self.stderr = ""
         self.begin.setEnabled(False)
         self.status.setText("Planejando ou executando localmente…")
         self.process.start(sys.executable, args)
+
+    def process_progress(self):
+        output = bytes(self.process.readAllStandardError()).decode("utf-8", "replace")
+        self.stderr = (self.stderr + output)[-3000:]
+        labels = {"references": "Validando imagens de referência", "planning": "Atlas está elaborando o plano",
+                  "blender": "Blender local em execução", "checking": "Verificando materiais, malhas e relatórios",
+                  "packaging": "Empacotando a revisão por SHA-256"}
+        for line in reversed(self.stderr.splitlines()):
+            if line.startswith("ARVERTES_STAGE ") and line[15:] in labels:
+                self.status.setText(labels[line[15:]])
+                break
 
     def process_error(self, error):
         if error == QProcess.ProcessError.FailedToStart:
@@ -124,8 +186,8 @@ class CharacterDialog(QDialog):
             self.input_directory = None
         self.begin.setEnabled(True)
         if code:
-            self.status.setText(bytes(self.process.readAllStandardError()).decode("utf-8", "replace")[-1500:]
-                                or "A execução local foi interrompida.")
+            self.process_progress()
+            self.status.setText(self.stderr[-1500:] or "A execução local foi interrompida.")
             return
         try:
             self.refresh(json.loads(bytes(self.process.readAllStandardOutput()))["job"])
@@ -190,7 +252,22 @@ class CharacterDialog(QDialog):
         answer = QMessageBox.question(self, "Revisão humana", "Registrar esta decisão para o pacote exibido?")
         if answer == QMessageBox.StandardButton.Yes:
             try:
-                review(job, _json(job / "status.json")["sha256"], decision)
+                fidelity = None
+                if decision == "accept" and _json(job / "brief.json")["source"] in ("procedural", "external_glb"):
+                    notes, accepted = QInputDialog.getMultiLineText(
+                        self, "Comparação visual", "Após conferir as imagens, descreva silhueta, proporções, "
+                        "cores, materiais, roupa, acessórios, estilo e diferenças ainda presentes.")
+                    if not accepted:
+                        return
+                    fidelity = {"references": _json(job / "plan.json")["references"], "notes": notes,
+                                "verdict": "enough_for_local_review"}
+                if decision == "reject":
+                    notes, accepted = QInputDialog.getMultiLineText(
+                        self, "Solicitar correções", "Descreva o que deve ser revisto na próxima tentativa.")
+                    if not accepted:
+                        return
+                    fidelity = {"notes": notes}
+                review(job, _json(job / "status.json")["sha256"], decision, fidelity)
                 self.show_job()
             except (OSError, ValueError) as error:
                 self.status.setText(str(error))

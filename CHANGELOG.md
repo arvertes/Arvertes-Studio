@@ -2,6 +2,9 @@
 
 ## v0.3 Web em desenvolvimento
 
+- Sprint 7: personagens procedurais modulares com estilo explícito, mapas PBR opacos verificados por canal, LODs medidos por peça e revisão humana de fidelidade.
+- Sprint 7: adaptação de GLBs externos com preservação de origem, ponte opcional TripoSR, comparação do Laboratório e transferência de clipes entre rigs compatíveis.
+
 - Sprint 6: produção local por briefing com Atlas, referências versionadas, reuso de GLB, revisão humana por SHA-256 e recuperação de pacotes em armazenamento substituto.
 - Sprint 6: manequim com proporções ajustáveis, 11 clipes sintéticos e LODs deformáveis com verificação em poses, além de controles de malha e animação na prévia GLB.
 - Sprint 6: processo experimental independente da interface com sessão limitada e invalidação de leases ao revogar a autorização.

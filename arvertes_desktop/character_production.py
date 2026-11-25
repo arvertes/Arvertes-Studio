@@ -15,6 +15,8 @@ from zipfile import BadZipFile, ZIP_STORED, ZipFile
 
 from arvertes_studio.core.asset_package import MAX_FILE, MAX_IMAGE, MAX_PACKAGE, image_info, json_bytes, library_pins
 from arvertes_studio.core.unreal_preflight import preflight
+from arvertes_studio.core.character_style import reference_views, validate_adaptation, validate_style
+from .generation_adapter import validate_handoff
 from . import asset_package
 from .blender_job import checked_digest, read_source
 
@@ -80,14 +82,24 @@ def _atlas(repository, action, **payload):
 def _inputs(args):
     brief = _json(args.brief, 24 * 1024)
     if not isinstance(brief, dict) or set(brief) - {
-            "name", "description", "quality", "source", "traits", "requirements", "proportions", "license", "reference_revisions", "dossier"} or (
+            "name", "description", "quality", "source", "traits", "requirements", "proportions", "license", "reference_revisions", "dossier", "design", "views", "hypotheses", "adaptation"} or (
             {"name", "description", "quality"} - set(brief)):
         raise ValueError("Campos do briefing incompatíveis.")
     brief.setdefault("traits", {})
     brief.setdefault("requirements", [])
     brief.setdefault("source", "base_glb" if args.base else "image_guided")
-    if bool(args.base) != (brief["source"] == "base_glb"):
-        raise ValueError("Informe um GLB local somente para a origem base_glb.")
+    if bool(args.base) != (brief["source"] in ("base_glb", "external_glb")):
+        raise ValueError("Informe um GLB local somente para origem fornecida ou externa.")
+    if bool(args.handoff) != (brief["source"] == "external_glb"):
+        raise ValueError("Um artefato externo exige um handoff com revisão e licença.")
+    if "adaptation" in brief:
+        if not args.base:
+            raise ValueError("A adaptação exige um GLB local.")
+        validate_adaptation(brief["adaptation"])
+    if brief["source"] == "procedural":
+        validate_style(brief.get("design"))
+    elif "design" in brief:
+        raise ValueError("A receita visual só se aplica ao modo procedural.")
     if not 1 <= len(args.image) <= 4:
         raise ValueError("Selecione de uma a quatro imagens de referência.")
     proportions = brief.get("proportions")
@@ -114,7 +126,10 @@ def _inputs(args):
     for path in args.image:
         data = asset_package.read_local(path, MAX_IMAGE)
         images.append((data, image_info(data)))
-    request = {key: value for key, value in brief.items() if key not in {"proportions", "license", "reference_revisions", "dossier"}}
+    if "views" in brief:
+        brief["views"] = reference_views(brief["views"], len(images))
+    request = {key: value for key, value in brief.items()
+               if key not in {"proportions", "license", "reference_revisions", "dossier", "design", "adaptation"}}
     request["references"] = [sha256(data).hexdigest() for data, _ in images]
     return brief, images, request
 
@@ -134,6 +149,8 @@ def _evidence(path):
         components.append("animations")
     if review["glb"]["materials"]:
         components.append("materials")
+    if review["pbr_status"] == "opaque_maps_verified":
+        components.append("pbr_maps")
     if lod_report and lod_report["accepted_count"] and lod_report["accepted_count"] == len(review["lods"]):
         components.append("lods")
     findings = set(review["findings"]) | set(quality["findings"])
@@ -146,6 +163,8 @@ def _delivery(job, brief, plan, evidence, assessment, preflight_report):
              **{f"references/{item.name}": item for item in (job / "references").iterdir()}}
     if (job / "original.glb").is_file():
         files["original.glb"] = job / "original.glb"
+    if (job / "handoff.json").is_file():
+        files["handoff.json"] = job / "handoff.json"
     documented = set(evidence["components"])
     inventory = {
         "scope": "isolated_local_review",
@@ -158,7 +177,10 @@ def _delivery(job, brief, plan, evidence, assessment, preflight_report):
         "original": "preserved_glb" if "original.glb" in files else "synthetic_master_in_asset",
         "license": brief.get("license"),
         "dossier": brief.get("dossier"),
-        "reference_usage": "provenance_and_scaled_copy",
+        "reference_usage": "provenance_and_human_comparison" if brief["source"] in ("procedural", "external_glb")
+        else "provenance_and_scaled_copy",
+        "fidelity_review": plan.get("fidelity_review", "human_required"),
+        "external_handoff": "handoff.json" if "handoff.json" in files else None,
         "visual_analysis": plan["visual_analysis"],
         "assessment": assessment,
         "preflight": preflight_report,
@@ -184,7 +206,13 @@ def _delivery(job, brief, plan, evidence, assessment, preflight_report):
 
 
 def start(args):
+    def stage(name):
+        if getattr(args, "progress", False):
+            print(f"ARVERTES_STAGE {name}", file=sys.stderr, flush=True)
+
+    stage("references")
     brief, images, request = _inputs(args)
+    stage("planning")
     plan = _atlas(args.agents, "plan_character", brief=request)
     selections = brief.get("reference_revisions", [])
     if not isinstance(selections, list) or len(selections) > 12 or (selections and not args.library):
@@ -194,7 +222,8 @@ def start(args):
         pins = library_pins(_atlas(args.agents, "pin_asset_references",
                                    library=_json(args.library, 48 * 1024), selections=selections))
     plan["library_references"] = pins
-    original = read_source(args.base) if args.base else None
+    original = read_source(args.base.absolute()) if args.base else None
+    handoff = validate_handoff(_json(args.handoff, 8192), original, request["references"]) if args.handoff else None
     root = _directory(args.workspace)
     if disk_usage(root).free < 3 * MAX_DELIVERY:
         raise ValueError("Sentinel bloqueou a produção por reserva de armazenamento.")
@@ -212,6 +241,8 @@ def start(args):
     _atomic(source / "library.json", json_bytes(pins))
     if original is not None:
         _atomic(job / "original.glb", original)
+    if handoff is not None:
+        _atomic(job / "handoff.json", json_bytes(handoff))
     status = {"job": identifier, "state": "blocked", "ready_for_production": False, "cost_brl": 0,
               "plan": "plan.json"}
     if not plan["executor"]:
@@ -221,16 +252,22 @@ def start(args):
     else:
         try:
             fixture = brief["source"] == "synthetic_fixture"
+            procedural = brief["source"] == "procedural"
             inner = job / "asset.zip"
+            stage("blender")
             asset_package.build(argparse.Namespace(
                 approved=True, quality=brief["quality"], blender=args.blender, output=inner,
                 description=brief["description"], image=paths[0], references=source / "library.json",
-                model=None if fixture else job / "original.glb", recipe="humanoid",
+                model=job / "original.glb" if original is not None else None,
+                recipe="procedural" if procedural else "humanoid", design=brief.get("design"),
+                adaptation=brief.get("adaptation"),
                 motion_revision=3 if fixture else 1, requirements=None, deformable_lods=fixture,
                 proportions=dict(zip(("width", "depth", "height"), brief["proportions"]))
                 if brief.get("proportions") is not None else None))
+            stage("checking")
             evidence, review = _evidence(inner)
             assessment = _atlas(args.agents, "assess_character_result", plan=plan, evidence=evidence)
+            stage("packaging")
             digest = _delivery(job, brief, plan, evidence, assessment, review)
             status.update(assessment, sha256=digest)
         except (OSError, ValueError, BadZipFile, subprocess.TimeoutExpired) as error:
@@ -239,12 +276,25 @@ def start(args):
     return status
 
 
-def review(job, digest, decision):
+def review(job, digest, decision, fidelity=None):
     state = _json(job / "status.json")
     if (state["state"] != "awaiting_human_review" or not DIGEST.fullmatch(digest)
             or state.get("sha256") != digest or checked_digest(job / "personagem.zip", MAX_DELIVERY) != digest):
         raise ValueError("A decisão exige um pacote apto à revisão e o SHA-256 exato.")
+    brief = _json(job / "brief.json")
+    if fidelity is not None and (not isinstance(fidelity, dict)
+            or not isinstance(fidelity.get("notes"), str) or not 1 <= len(fidelity["notes"].strip()) <= 1500):
+        raise ValueError("Registre uma observação de revisão entre 1 e 1.500 caracteres.")
+    if decision == "accept" and brief["source"] in ("procedural", "external_glb"):
+        reference_hashes = _json(job / "plan.json")["references"]
+        if (not isinstance(fidelity, dict) or set(fidelity) != {"references", "notes", "verdict"}
+                or fidelity["references"] != reference_hashes or fidelity["verdict"] != "enough_for_local_review"):
+            raise ValueError("Confirme a comparação humana para todas as referências desta revisão.")
+    if decision not in ("accept", "reject"):
+        raise ValueError("Decisão fora do contrato.")
     result = {"decision": decision, "sha256": digest, "scope": "local_review", "ready_for_production": False}
+    if fidelity is not None:
+        result["fidelity"] = fidelity
     _atomic(job / "review.json", json_bytes(result))
     return result
 
@@ -318,10 +368,11 @@ def main(argv=None):
     begin = commands.add_parser("start")
     for key in ("agents", "brief", "blender"):
         begin.add_argument("--" + key, required=True, type=Path)
-    for key in ("base", "library"):
+    for key in ("base", "library", "handoff"):
         begin.add_argument("--" + key, type=Path)
     begin.add_argument("--image", required=True, action="append", type=Path)
     begin.add_argument("--approved", action="store_true", help="autoriza a execução local")
+    begin.add_argument("--progress", action="store_true", help="emite etapas observadas em stderr")
     for command in ("status", "review", "publish", "recover"):
         operation = commands.add_parser(command)
         operation.add_argument("job")
@@ -331,6 +382,7 @@ def main(argv=None):
             operation.add_argument("sha256")
         if command == "review":
             operation.add_argument("decision", choices=("accept", "reject"))
+            operation.add_argument("--fidelity-report", type=Path)
     args = parser.parse_args(argv)
     try:
         if args.command == "start":
@@ -340,7 +392,8 @@ def main(argv=None):
         else:
             job = _job(args.workspace, args.job)
             if args.command == "review":
-                result = review(job, args.sha256, args.decision)
+                result = review(job, args.sha256, args.decision,
+                                _json(args.fidelity_report, 8192) if args.fidelity_report else None)
             elif args.command == "publish":
                 result = {"path": str(publish(job, LocalPackages(args.store)))}
             else:

@@ -119,7 +119,7 @@ def skinned_mesh(collection, arm, parts, materials):
     return obj
 
 
-def mannequin(collection, cloth, *, density=1, existing_rig=None, proportions=None, palette=None):
+def mannequin(collection, cloth, *, density=1, existing_rig=None, proportions=None, palette=None, design=None):
     bones = [("Root", (0,0,.94), (0,0,1.06), None),
              ("Spine", (0,0,1.06), (0,0,1.29), "Root"),
              ("Chest", (0,0,1.29), (0,0,1.51), "Spine"),
@@ -146,6 +146,9 @@ def mannequin(collection, cloth, *, density=1, existing_rig=None, proportions=No
             ([hip,knee,ankle,foot],[(.10,.095),(.067,.065),(.039,.045),(.047,.035)],
              [thigh,shin,foot_bone,foot_bone], 26, 18, 0),
         ])
+    if design:
+        from .styled_character import body_shapes
+        parts = body_shapes(parts, design)
     proportions = proportions or {"height": 1, "width": 1, "depth": 1}
 
     def location(point):

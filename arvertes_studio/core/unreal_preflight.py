@@ -4,6 +4,7 @@ import math
 
 from .asset_package import MIB, image_info, open_package
 
+from .character_style import PALETTE, TEXTURE_ROLES, validate_style
 from .imports import inspect_glb_stream
 
 
@@ -35,6 +36,31 @@ def _glb_inventory(archive):
         if not isinstance(doc.get(key, []), list) or any(not isinstance(item, dict) for item in doc.get(key, [])):
             raise ValueError("Inventário glTF incompatível.")
     return doc
+
+
+def _pbr_inventory(document, style, textures):
+    size = validate_style(style["design"])["texture_edge"]
+    expected = {f"textures/pbr-{surface}-{role}-{edge}.png": [edge, edge]
+                for surface in PALETTE for role in TEXTURE_ROLES for edge in (size, size // 2)}
+    names = {item.get("name"): item for item in document["materials"]}
+    texture_count = len(document["textures"])
+
+    def channel(value):
+        index = value.get("index") if isinstance(value, dict) else None
+        return type(index) is int and 0 <= index < texture_count
+
+    if (textures != expected or len(document["materials"]) != len(PALETTE)
+            or set(names) != {"Arvertes_" + surface for surface in PALETTE}):
+        return False
+    for material in names.values():
+        pbr = material.get("pbrMetallicRoughness", {})
+        orm, occlusion = pbr.get("metallicRoughnessTexture"), material.get("occlusionTexture")
+        if (not all(channel(item) for item in (pbr.get("baseColorTexture"), material.get("normalTexture"), orm, occlusion))
+                or orm["index"] != occlusion["index"]
+                or len({pbr["baseColorTexture"]["index"], material["normalTexture"]["index"], orm["index"]}) != 3
+                or material.get("alphaMode", "OPAQUE") != "OPAQUE"):
+            return False
+    return True
 
 
 def preflight(path):
@@ -132,7 +158,12 @@ def preflight(path):
                     decisions.append("texture_signature_invalid")
         if textures.keys() != expected_textures.keys():
             decisions.append("texture_inventory_diverged")
-        return {"schema": 1, "checks": "package_and_metadata_preflight", "unreal_import": "not_tested",
+        pbr = "not_verified"
+        if manifest["mode"] == "procedural":
+            pbr = "opaque_maps_verified" if _pbr_inventory(doc, _item(archive, "reports/style.json"), textures) else "incomplete"
+            if pbr == "incomplete":
+                decisions.append("pbr_maps_incomplete")
+        return {"schema": 1, "pbr_status": pbr, "checks": "package_and_metadata_preflight", "unreal_import": "not_tested",
                 "status": "findings" if decisions else "ready_for_human_review",
                 "findings": sorted(set(decisions)), "mode": manifest["mode"], "quality": manifest["quality"],
                 "uv_meshes": report.get("base", {}).get("uv_meshes"),

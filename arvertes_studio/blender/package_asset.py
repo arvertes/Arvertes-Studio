@@ -66,9 +66,21 @@ def _texture_variants(folder, source, quality):
     return texture, variants
 
 
-def _synthetic(folder, source, quality, recipe, motion_revision, proportions):
+def _synthetic(folder, source, quality, recipe, motion_revision, proportions, design=None):
     collection = bpy.data.collections.new("SyntheticReference")
     bpy.context.scene.collection.children.link(collection)
+    if recipe == "procedural":
+        from . import character_pbr, styled_character
+        materials, variants = character_pbr.build(folder, design)
+        _, members, motion = styled_character.rig_and_motion(collection, materials, design)
+        (folder / "reports/motion.json").write_bytes(json_bytes(motion))
+        style = {"schema": 1, "design": design, "meshes": sorted(members), "texture_origin": "analytic_surface_maps",
+                 "review": ["silhouette", "intersections", "reference_fidelity", "face_style"],
+                 "channels": {"basecolor": "sRGB", "normal": "+Y tangent",
+                              "orm": "linear RGB = occlusion, roughness, metallic",
+                              "emissive": "not_applicable", "opacity": "opaque"}}
+        (folder / "reports/style.json").write_bytes(json_bytes(style))
+        return collection, variants
     if recipe in OTHER_RECIPES:
         from .lab_scene import build as scene_recipe
 
@@ -193,40 +205,53 @@ def _lods(folder, meshes, original, quality, animated, *, retain_small=False):
     return result, "measured"
 
 
-def _skinned_lods(folder, collection, master, rig, proportions):
+def _skinned_lods(folder, collection, masters, rig, proportions, design=None):
     from .deformable_lod import evaluate
     from .lab_assets import mannequin
 
+    body = masters[0] if not design else next(mesh for mesh in masters if mesh.name == "Corpo")
     lods, attempts = [], []
-    previous = _triangles([master])
+    previous = _triangles(masters)
     for density in (.75, .48):
-        _, candidate = mannequin(collection, master.data.materials[0], density=density,
-                                 existing_rig=rig, proportions=proportions, palette=list(master.data.materials))
-        data = candidate.data
+        if design:
+            from .styled_character import meshes
+            _, members = meshes(collection, list(body.data.materials), design, density=density, rig=rig)
+            # Blender appends numeric suffixes to new objects with existing names.
+            pairs = [(next(master for master in masters if master.name == name), mesh)
+                     for name, mesh in members.items()]
+        else:
+            _, candidate = mannequin(collection, body.data.materials[0], density=density,
+                                     existing_rig=rig, proportions=proportions, palette=list(body.data.materials))
+            pairs = [(body, candidate)]
+        candidates = [candidate for _, candidate in pairs]
         try:
-            report = evaluate(master, candidate, rig)
-            triangles = _triangles([candidate])
-            attempts.append({"density": density, "triangles": triangles, **report})
-            if not report["mechanically_accepted"] or triangles >= previous:
+            report = evaluate(pairs, rig)
+            triangles = _triangles(candidates)
+            accepted = report["mechanically_accepted"] and triangles < previous
+            attempts.append({"density": density, "triangles": triangles, **report,
+                             "mechanically_accepted": accepted})
+            if not accepted:
                 continue
             level = len(lods)+1
             fbx = f"models/lod{level}.fbx"
             glb = f"models/lod{level}.glb"
-            _fbx(folder / fbx, [rig,candidate], animated=True)
+            _fbx(folder / fbx, [rig, *candidates], animated=True)
             bpy.ops.object.select_all(action="DESELECT")
-            rig.select_set(True)
-            candidate.select_set(True)
+            for item in [rig, *candidates]:
+                item.select_set(True)
             if "FINISHED" not in bpy.ops.export_scene.gltf(filepath=str(folder / glb),
                                                             export_format="GLB", use_selection=True):
                 raise ValueError("Prévia de LOD deformável interrompida.")
             lods.append({"path": fbx, "preview": glb, "triangles": triangles})
             previous = triangles
         finally:
-            bpy.data.objects.remove(candidate, do_unlink=True)
-            if not data.users:
-                bpy.data.meshes.remove(data)
-    evidence = {"schema": 1, "recipe": "humanoid_retessellation", "attempts": attempts,
-                "accepted_count": len(lods), "unreal": "pending", "visual_review": "pending"}
+            for candidate in candidates:
+                data = candidate.data
+                bpy.data.objects.remove(candidate, do_unlink=True)
+                if not data.users:
+                    bpy.data.meshes.remove(data)
+    evidence = {"schema": 1, "recipe": "modular_humanoid_retessellation" if design else "humanoid_retessellation",
+                "attempts": attempts, "accepted_count": len(lods), "unreal": "pending", "visual_review": "pending"}
     (folder / "reports/deformable-lods.json").write_bytes(json_bytes(evidence))
     return lods, "sampled_with_human_review" if lods else "rejected_by_pose_checks"
 
@@ -240,6 +265,10 @@ def build(folder: Path):
     quality = QUALITY[preset]
     for name in ("models", "textures", "scene", "reports"):
         (folder / name).mkdir()
+    design = adaptation = None
+    if mode == "procedural":
+        from ..core.character_style import validate_style
+        design = validate_style(request.get("design"))
     if mode == "imported_glb":
         reference = bpy.data.images.load(str(folder / request["reference"]), check_existing=False)
         try:
@@ -248,9 +277,12 @@ def build(folder: Path):
         finally:
             bpy.data.images.remove(reference)
         collection = import_asset(bpy.context, folder / "source.glb")
+        if request.get("adaptation"):
+            from .character_adaptation import apply
+            adaptation = apply(collection, request["adaptation"])
         textures = []
     else:
-        collection, textures = _synthetic(folder, folder / request["reference"], quality, mode, request.get("motion_revision", 1), request.get("proportions"))
+        collection, textures = _synthetic(folder, folder / request["reference"], quality, mode, request.get("motion_revision", 1), request.get("proportions"), design)
     bpy.context.scene.unit_settings.system = "METRIC"
     bpy.context.scene.unit_settings.scale_length = 1.0
     objects = asset_objects(collection)
@@ -275,13 +307,15 @@ def build(folder: Path):
     bpy.ops.file.pack_all()
     if "FINISHED" not in bpy.ops.wm.save_as_mainfile(filepath=str(folder / "scene/working.blend")):
         raise ValueError("A cópia Blender não foi gravada.")
-    if request.get("deformable_lods") and mode == "humanoid":
+    if mode == "procedural" or (request.get("deformable_lods") and mode == "humanoid"):
         rig = next(obj for obj in objects if obj.type == "ARMATURE")
-        lods, lod_status = _skinned_lods(folder, collection, meshes[0], rig, request.get("proportions"))
+        lods, lod_status = _skinned_lods(folder, collection, meshes, rig, request.get("proportions"), design)
     else:
         lods, lod_status = _lods(folder, meshes, original, quality, animated, retain_small=mode == "environment")
-    findings = []
+    findings = list(adaptation["findings"]) if adaptation else []
     triangle_target = 10000 if request.get("deformable_lods") and preset == "lite" else quality.triangle_target
+    if design:
+        triangle_target = design["triangle_budget"]
     if original > triangle_target:
         findings.append("triangle_target_exceeded")
     if technical["degenerate_faces"] or technical["overlapping_edges"]:
@@ -296,9 +330,10 @@ def build(folder: Path):
         "fbx_axes": {"forward": "-Y", "up": "Z"}, "gltf_up": "Y", "dimensions_m": dimensions,
         "base": {"triangles": original, "mesh_objects": len(meshes), "uv_meshes": uv_meshes, **technical},
         "lods": lods, "lod_status": lod_status, "texture_variants": textures,
-        "texture_status": "scaled_reference" if textures else (
+        "texture_status": "procedural_pbr" if design else "scaled_reference" if textures else (
             "imported_materials_preserved" if mode == "imported_glb" else "procedural_materials"),
         "actions": sorted(action.name for action in bpy.data.actions),
+        **({"adaptation": adaptation} if adaptation else {}),
         "findings": findings, "unreal_import": "pending", "artistic_review": "pending",
     }
     (folder / "reports/quality.json").write_bytes(json_bytes(report))

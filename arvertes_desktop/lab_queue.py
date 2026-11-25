@@ -42,6 +42,9 @@ CREATE TABLE IF NOT EXISTS jobs (
   peak_rss INTEGER NOT NULL DEFAULT 0, attempts INTEGER NOT NULL DEFAULT 0,
   worker TEXT, lease TEXT, deadline REAL, reason TEXT
 );
+CREATE TABLE IF NOT EXISTS visual_trials (
+  id TEXT PRIMARY KEY, recorded REAL NOT NULL, method TEXT NOT NULL, verdict TEXT NOT NULL, evidence TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS cycles (
   number INTEGER PRIMARY KEY, completed_at REAL NOT NULL, improvements INTEGER NOT NULL
 );
@@ -224,13 +227,7 @@ class Queue:
                 (end,end*(2*width+1),end*2*width,digest,elapsed_us,rss,"done" if done else "running",
                  None if done else now+LEASE_SECONDS,done,done,row["id"]))
             db.execute("UPDATE workers SET seen=?,state=? WHERE id=?", (now,"idle" if done else "busy",row["worker"]))
-            total = settings["elapsed_us"] + elapsed_us
-            cycles = total // SIX_HOURS_US
-            found = settings["cycling_improvements"] + int(done)
-            if cycles > settings["cycles"]:
-                db.execute("INSERT INTO cycles VALUES (?,?,?)", (cycles,now,found))
-                found = 0
-            db.execute("UPDATE control SET elapsed_us=?,cycles=?,cycling_improvements=?", (total,cycles,found))
+            self._accumulate(db, settings, elapsed_us, int(done))
             return not done
 
     def _release(self, db, row, reason):
@@ -249,6 +246,74 @@ class Queue:
             elif row:
                 self._release(db, row, reason)
 
+    def compare_style(self, before, after, method):
+        """Avalia pacotes locais já produzidos, sem alterar os pacotes ou promover resultados."""
+        from arvertes_studio.core.asset_package import MAX_PACKAGE, open_package
+        from arvertes_studio.core.unreal_preflight import compare_motion, preflight
+        from .blender_job import checked_digest
+
+        methods = {"motion", "pbr", "lod"}
+        if method not in methods:
+            raise ValueError("Escolha motion, pbr ou lod.")
+        authorization = self.authorization()
+        if authorization is None or self.read()["control"]["owner_busy"]:
+            raise ValueError("O laboratório precisa de autorização ativa e ociosa.")
+        started = monotonic()
+        hashes = [checked_digest(path, MAX_PACKAGE) for path in (before, after)]
+        if hashes[0] == hashes[1]:
+            raise ValueError("Selecione duas revisões diferentes.")
+        identifier = sha256(("style-v1:"+method+":"+":".join(hashes)).encode()).hexdigest()
+        with self._transaction() as db:
+            existing = db.execute("SELECT * FROM visual_trials WHERE id=?", (identifier,)).fetchone()
+            if existing:
+                return {**dict(existing), "evidence": json.loads(existing["evidence"]), "reused": True}
+        results = [preflight(path) for path in (before, after)]
+        old, new = results
+        if old["mode"] != "procedural" or new["mode"] != "procedural":
+            raise ValueError("Use dois pacotes internos da bancada procedural.")
+        evidence = {"hashes": hashes, "scope": "experimental_local", "auto_integrated": False,
+                    "human_visual_review": "required", "findings": new["findings"]}
+        passed = not new["findings"]
+        if method == "motion":
+            evidence["metrics"] = compare_motion(before, after)
+            passed = passed and not evidence["metrics"]["non_comparable_clips"]
+        elif method == "pbr":
+            evidence["metrics"] = {"before": old["pbr_status"], "after": new["pbr_status"]}
+            passed = passed and new["pbr_status"] == "opaque_maps_verified"
+        else:
+            with open_package(after) as (archive, _):
+                report = json.loads(archive.read("reports/deformable-lods.json"))
+            evidence["metrics"] = {"accepted": report["accepted_count"],
+                                   "rejected": sum(not row["mechanically_accepted"] for row in report["attempts"])}
+            passed = passed and bool(report["accepted_count"])
+        if hashes != [checked_digest(path, MAX_PACKAGE) for path in (before, after)]:
+            raise ValueError("Uma revisão mudou durante a avaliação.")
+        elapsed = min(round((monotonic() - started)*1_000_000), 10_000_000)
+        result = {"id": identifier, "method": method, "verdict": "human_review" if passed else "rejected",
+                  "evidence": evidence, "reused": False}
+        with self._transaction() as db:
+            settings = db.execute("SELECT * FROM control JOIN runtime USING(id)").fetchone()
+            if (not settings["enabled"] or settings["owner_busy"] or settings["authorization"] != authorization):
+                raise LeaseExpired("A autorização mudou antes do registro.")
+            inserted = db.execute("INSERT OR IGNORE INTO visual_trials VALUES (?,?,?,?,?)",
+                                  (identifier,self.clock(),method,result["verdict"],json.dumps(evidence)))
+            if inserted.rowcount:
+                self._accumulate(db, settings, elapsed, 0)
+                db.execute("""DELETE FROM visual_trials WHERE id IN
+                           (SELECT id FROM visual_trials ORDER BY recorded DESC,id LIMIT -1 OFFSET 64)""")
+            else:
+                result["reused"] = True
+        return result
+
+    def _accumulate(self, db, settings, seconds_us, improvements):
+        total = settings["elapsed_us"] + seconds_us
+        cycles = total // SIX_HOURS_US
+        found = settings["cycling_improvements"] + improvements
+        if cycles > settings["cycles"]:
+            db.execute("INSERT INTO cycles VALUES (?,?,?)", (cycles,self.clock(),found))
+            found = 0
+        db.execute("UPDATE control SET elapsed_us=?,cycles=?,cycling_improvements=?", (total,cycles,found))
+
     def read(self):
         with self._transaction() as db:
             return {"control": dict(db.execute("SELECT * FROM control").fetchone()),
@@ -261,6 +326,8 @@ class Queue:
                     "workers": [dict(row) for row in db.execute("""SELECT id,seen,
                                CASE WHEN seen<? THEN 'offline' ELSE state END AS state
                                FROM workers ORDER BY seen DESC""",(self.clock()-LEASE_SECONDS*2,))],
+                    "visual_trials": [{**dict(row), "evidence": json.loads(row["evidence"])}
+                                      for row in db.execute("SELECT * FROM visual_trials ORDER BY recorded DESC LIMIT 12")],
                     "evaluations": [dict(row) for row in db.execute("SELECT * FROM cycles ORDER BY number DESC LIMIT 24")]}
 
 
@@ -348,6 +415,10 @@ def main(argv=None):
         sub.add_parser(command)
     duration = sub.add_parser("serve")
     duration.add_argument("--max-seconds", required=True, type=int)
+    comparison = sub.add_parser("compare-style")
+    comparison.add_argument("before", type=Path)
+    comparison.add_argument("after", type=Path)
+    comparison.add_argument("--method", required=True, choices=("motion","pbr","lod"))
     schedule = sub.add_parser("enqueue")
     schedule.add_argument("triangles", type=int, choices=SIZES)
     schedule.add_argument("--method", choices=METHODS, default=METHODS[0])
@@ -357,6 +428,8 @@ def main(argv=None):
         queue = Queue(args.workspace.absolute())
         if args.command == "enqueue":
             result = {"job":queue.enqueue(args.triangles,args.method,priority=args.priority)}
+        elif args.command == "compare-style":
+            result = queue.compare_style(args.before, args.after, args.method)
         elif args.command == "run":
             result = run_local(queue)
         elif args.command == "serve":

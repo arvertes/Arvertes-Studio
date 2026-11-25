@@ -22,12 +22,16 @@ def _distance(vertices, surface):
     return max(surface.find_nearest(point)[3] for point in vertices)
 
 
-def evaluate(master, candidate, rig):
-    weights = all(abs(sum(group.weight for group in point.groups)-1) <= 1e-5 for point in candidate.data.vertices)
-    same_rig = any(modifier.type == "ARMATURE" and modifier.object == rig for modifier in candidate.modifiers)
-    topology = all(poly.area > 1e-10 for poly in candidate.data.polygons)
-    same_materials = list(master.data.materials) == list(candidate.data.materials)
-    uv = bool(candidate.data.uv_layers) and len(candidate.data.uv_layers[0].data) == len(candidate.data.loops)
+def evaluate(pairs, rig):
+    candidates = [candidate for _, candidate in pairs]
+    weights = all(abs(sum(group.weight for group in point.groups)-1) <= 1e-5
+                  for candidate in candidates for point in candidate.data.vertices)
+    same_rig = all(any(modifier.type == "ARMATURE" and modifier.object == rig for modifier in candidate.modifiers)
+                   for candidate in candidates)
+    topology = all(poly.area > 1e-10 for candidate in candidates for poly in candidate.data.polygons)
+    same_materials = all(list(master.data.materials) == list(candidate.data.materials) for master, candidate in pairs)
+    uv = all(candidate.data.uv_layers and len(candidate.data.uv_layers[0].data) == len(candidate.data.loops)
+             for candidate in candidates)
     scene = bpy.context.scene
     initial = scene.frame_current
     animation = rig.animation_data
@@ -40,10 +44,13 @@ def evaluate(master, candidate, rig):
             for frame in frames:
                 scene.frame_set(frame)
                 graph = bpy.context.evaluated_depsgraph_get()
-                src, src_surface = _sample(master, graph)
-                dst, dst_surface = _sample(candidate, graph)
-                error = max(_distance(src, dst_surface), _distance(dst, src_surface))
-                samples.append({"clip": action, "frame": frame, "max_surface_distance_m": error})
+                distances = {}
+                for master, candidate in pairs:
+                    src, src_surface = _sample(master, graph)
+                    dst, dst_surface = _sample(candidate, graph)
+                    distances[master.name] = max(_distance(src, dst_surface), _distance(dst, src_surface))
+                samples.append({"clip": action, "frame": frame, "max_surface_distance_m": max(distances.values()),
+                                "by_component_m": distances})
     finally:
         animation.action, animation.action_slot = previous
         scene.frame_set(initial)

@@ -38,7 +38,7 @@ def _decode_glb_document(raw: bytes) -> dict:
     return document
 
 
-def inspect_glb_stream(source, size, *, max_json=None):
+def inspect_glb_stream(source, size, *, max_json=None, strict=False):
     """Lê um contêiner sem alocar a seção geométrica. O chamador controla o size."""
     header = source.read(_GLB_HEADER.size)
     if len(header) != _GLB_HEADER.size:
@@ -50,7 +50,12 @@ def inspect_glb_stream(source, size, *, max_json=None):
         raise ImportValidationError("Tamanho inválido no cabeçalho do GLB.")
 
     document = None
+    binary_size = 0
+    chunks = 0
     while source.tell() < size:
+        chunks += 1
+        if strict and chunks > 2:
+            raise ImportValidationError("Use um GLB com JSON e um único bloco BIN.")
         chunk = source.read(_CHUNK_HEADER.size)
         if len(chunk) != _CHUNK_HEADER.size:
             raise ImportValidationError("Cabeçalho de seção GLB incompleto.")
@@ -64,7 +69,13 @@ def inspect_glb_stream(source, size, *, max_json=None):
                 raise ImportValidationError("Metadados GLB acima do limite.")
             document = _decode_glb_document(source.read(length))
         else:
+            if strict and (kind != b"BIN\x00" or not length):
+                raise ImportValidationError("Segundo bloco GLB incompatível.")
+            binary_size = length
             source.seek(length, os.SEEK_CUR)
+    if strict:
+        from .glb_admission import validate_payload
+        validate_payload(document, binary_size)
     return document
 
 

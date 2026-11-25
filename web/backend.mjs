@@ -220,21 +220,29 @@ export function createBackend(origin, accessToken, fetcher = fetch, {
   const productionPath = id => "/productions/" + key(id);
   const observed = new Map();
   const inflight = new Map();
-  const cache = item => { if (item?.id) observed.set(item.id, item.revision); return item; };
-  async function attachment(id, kind, file) {
+  const cache = item => {
+    if (item?.id && (observed.get(item.id) ?? 0) <= item.revision) observed.set(item.id, item.revision);
+    return item;
+  };
+  const hex = bytes => Array.from(bytes, value => value.toString(16).padStart(2, "0")).join("");
+  async function attachment(id, kind, file, revision = observed.get(id)) {
     validateAttachment(kind, file);
-    const path = characterPath(id) + "/media/" + key(kind) + "?revision=" + observed.get(id);
+    if (!Number.isSafeInteger(revision) || revision < 1) throw Error("Abra a revisão da ficha antes de anexar.");
+    const path = characterPath(id) + "/media/" + key(kind) + "?revision=" + revision;
     const bytes = await file.arrayBuffer();
-    const hash = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
-    const signature = path + ":" + file.name + ":" + Array.from(hash).join(",");
-    if (!inflight.has(signature)) {
-      if (inflight.size >= 32) inflight.delete(inflight.keys().next().value);
-      inflight.set(signature, crypto.randomUUID());
+    const digest = hex(new Uint8Array(await crypto.subtle.digest("SHA-256", bytes)));
+    const signature = new TextEncoder().encode(JSON.stringify([path, file.name, digest]));
+    const idem = hex(new Uint8Array(await crypto.subtle.digest("SHA-256", signature))).slice(0, 32);
+    if (inflight.has(idem)) return inflight.get(idem);
+    if (inflight.size >= 4) throw Error("Aguarde as transferências em andamento.");
+    const pending = request(path, { method: "PUT", binary: bytes,
+      headers: { "X-Arvertes-Filename": encodeURIComponent(file.name), "Idempotency-Key": idem } }).then(cache);
+    inflight.set(idem, pending);
+    try {
+      return await pending;
+    } finally {
+      inflight.delete(idem);
     }
-    const result = await request(path, { method: "PUT", binary: bytes,
-      headers: { "X-Arvertes-Filename": encodeURIComponent(file.name), "Idempotency-Key": inflight.get(signature) } });
-    inflight.delete(signature);
-    return cache(result);
   }
   return {
     agents: () => request("/agents"),
@@ -257,8 +265,8 @@ export function createBackend(origin, accessToken, fetcher = fetch, {
       attach: attachment,
       removeAttachment: async (id, kind) => cache(await request(characterPath(id) + "/media/" + key(kind)
         + "?revision=" + observed.get(id), { method: "DELETE" })),
-      media: async (id, kind) => {
-        const path = characterPath(id) + "/media/" + key(kind);
+      media: async (id, kind, revision = observed.get(id)) => {
+        const path = characterPath(id) + "/media/" + key(kind) + (revision === undefined ? "" : "?revision=" + revision);
         try { return { blob: await request(path, { blob: true }) }; }
         catch (error) { if (error.status === 404) return null; throw error; }
       },

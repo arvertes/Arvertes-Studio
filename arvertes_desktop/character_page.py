@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (QCheckBox, QComboBox, QDialog, QFileDialog, QForm
 from .character_production import IDENTIFIER, LocalPackages, _job, _json, publish, review
 from .pages import button
 from .settings import validate_blender_path
+from .setup_check import diagnose
 from arvertes_studio.core.character_style import study_presets, validate_style
 
 
@@ -72,6 +73,7 @@ class CharacterDialog(QDialog):
         form.addRow("Perfil", self.quality)
         form.addRow("Origem", self.source)
         form.addRow(self.tools_label)
+        form.addRow(button("Verificar configuração local", self.check_setup))
         form.addRow(self.vision)
         self.image_button = button("Escolher imagens de referência", self.choose_images)
         self.base_button = button("Escolher GLB base", self.choose_base)
@@ -118,6 +120,8 @@ class CharacterDialog(QDialog):
         if file:
             self.base = file
             self.base_button.setText(Path(file).name)
+            if self.source.currentData() == "image_guided":
+                self.source.setCurrentIndex(self.source.findData("base_glb"))
 
     def update_controls(self):
         source = self.source.currentData()
@@ -125,6 +129,26 @@ class CharacterDialog(QDialog):
         self.handoff_button.setEnabled(source == "external_glb")
         self.design.setEnabled(source == "procedural")
         self.design_button.setEnabled(source == "procedural" and self.design.currentData() is None)
+
+    def check_setup(self):
+        blender = self.production.blender_path()
+        checkout = self.production.bridge.checkout
+        try:
+            report = diagnose(self.root.parent, Path(blender) if blender else None,
+                              Path(checkout) if checkout else None,
+                              self.executor_config if self.executor_config.is_file() else None)
+        except (ValueError, OSError) as error:
+            self.tools_label.setText(str(error))
+            return
+        values = report["components"]
+        labels = {"compatible":"compatível","incompatible":"incompatível","missing":"ausente"}
+        capacity = report["hardware"]
+        self.tools_label.setText(
+            f"Blender · {labels[values['blender']]} | Agents · {labels[values['agents_checkout']]}\n"
+            f"CPU disponível · {capacity['cpu_threads_effective']:g} | RAM acima da reserva · "
+            f"{capacity['ram_available_above_reserve_mib']} MiB\n"
+            + ("Opções locais · Blender procedural e GLB fornecido." if report["admitted_local"] else
+               "Confira os caminhos e recursos antes de iniciar."))
 
     def choose_dossier(self):
         file, _ = QFileDialog.getOpenFileName(self, "Vínculo baixado da ficha do Studio", "", "JSON (*.json)")
@@ -302,7 +326,7 @@ class CharacterDialog(QDialog):
         if answer == QMessageBox.StandardButton.Yes:
             try:
                 fidelity = None
-                if decision == "accept" and _json(job / "brief.json")["source"] in ("procedural", "external_glb", "image_guided"):
+                if decision == "accept" and _json(job / "brief.json")["source"] in ("procedural", "base_glb", "external_glb", "image_guided"):
                     notes, accepted = QInputDialog.getMultiLineText(
                         self, "Comparação visual", "Após conferir as imagens, descreva silhueta, proporções, "
                         "cores, materiais, roupa, acessórios, estilo e diferenças ainda presentes.")

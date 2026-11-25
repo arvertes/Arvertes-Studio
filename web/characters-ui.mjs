@@ -183,7 +183,7 @@ function productionDelivery(record) {
     if (!file) return;
     input.disabled = true;
     try {
-      await repo.attach(record.id, "production", file);
+      await repo.attach(record.id, "production", file, record.revision);
       await refresh();
       status("Pacote arquivado. O status editorial da ficha foi preservado.");
     } catch (error) {
@@ -197,7 +197,7 @@ function productionDelivery(record) {
   if (metadata) panel.append(el("p","character-file-name",metadata.name),
     makeButton("Baixar pacote de produção", async () => {
       try {
-        const media = await repo.media(record.id, "production");
+        const media = await repo.media(record.id, "production", record.revision);
         if (!media?.blob) throw Error("Pacote de produção indisponível.");
         const actual = new Uint8Array(await crypto.subtle.digest("SHA-256", await media.blob.arrayBuffer()));
         const digest = Array.from(actual, value => value.toString(16).padStart(2,"0")).join("");

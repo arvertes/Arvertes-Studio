@@ -2,6 +2,9 @@
 
 ## v0.3 Web em desenvolvimento
 
+- Sprint 9: diagnóstico de configuração, validação estrutural de GLB, retomada segmentada em disco e anexos persistidos por revisão.
+- Sprint 9: evidência de movimento por apoio e transição, adaptação de materiais e decisões de reutilização no laboratório.
+
 - Sprint 8: inventário e seleção de executores com Sentinel, cliente visual Ollama, roteiro Unreal e arquivamento de pacotes vinculados à revisão da ficha.
 - Sprint 8: ajuste de contato dos pés da bancada procedural, comparação visual e fila de experimentos versionada em cinco etapas.
 

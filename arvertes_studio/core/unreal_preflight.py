@@ -43,16 +43,23 @@ def _pbr_inventory(document, style, textures):
     expected = {f"textures/pbr-{surface}-{role}-{edge}.png": [edge, edge]
                 for surface in PALETTE for role in TEXTURE_ROLES for edge in (size, size // 2)}
     names = {item.get("name"): item for item in document["materials"]}
-    texture_count = len(document["textures"])
+    return (textures == expected and len(document["materials"]) == len(PALETTE)
+            and set(names) == {"Arvertes_" + surface for surface in PALETTE} and _opaque_channels(document))
+
+
+def _opaque_channels(document):
+    materials, textures, images = (document.get(key,[]) for key in ("materials","textures","images"))
+    if not materials:
+        return False
 
     def channel(value):
         index = value.get("index") if isinstance(value, dict) else None
-        return type(index) is int and 0 <= index < texture_count
+        if type(index) is not int or not 0 <= index < len(textures):
+            return False
+        source = textures[index].get("source")
+        return type(source) is int and 0 <= source < len(images) and "bufferView" in images[source] and "uri" not in images[source]
 
-    if (textures != expected or len(document["materials"]) != len(PALETTE)
-            or set(names) != {"Arvertes_" + surface for surface in PALETTE}):
-        return False
-    for material in names.values():
+    for material in materials:
         pbr = material.get("pbrMetallicRoughness", {})
         orm, occlusion = pbr.get("metallicRoughnessTexture"), material.get("occlusionTexture")
         if (not all(channel(item) for item in (pbr.get("baseColorTexture"), material.get("normalTexture"), orm, occlusion))
@@ -61,7 +68,6 @@ def _pbr_inventory(document, style, textures):
                 or material.get("alphaMode", "OPAQUE") != "OPAQUE"):
             return False
     return True
-
 
 def preflight(path):
     with open_package(path) as (archive, manifest):
@@ -163,6 +169,8 @@ def preflight(path):
             pbr = "opaque_maps_verified" if _pbr_inventory(doc, _item(archive, "reports/style.json"), textures) else "incomplete"
             if pbr == "incomplete":
                 decisions.append("pbr_maps_incomplete")
+        elif manifest["mode"] == "imported_glb" and _opaque_channels(doc):
+            pbr = "embedded_opaque_maps_verified"
         return {"schema": 1, "pbr_status": pbr, "checks": "package_and_metadata_preflight", "unreal_import": "not_tested",
                 "status": "findings" if decisions else "ready_for_human_review",
                 "findings": sorted(set(decisions)), "mode": manifest["mode"], "quality": manifest["quality"],

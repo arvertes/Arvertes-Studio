@@ -1,5 +1,5 @@
 import {
-  ACESFilmicToneMapping, Box3, Color, DirectionalLight, GridHelper,
+  ACESFilmicToneMapping, AnimationMixer, Box3, Color, DirectionalLight, GridHelper,
   HemisphereLight, LoadingManager, PerspectiveCamera, Scene, Sphere,
   Spherical, Vector3, WebGLRenderer,
 } from "three";
@@ -60,6 +60,7 @@ export function createViewer({ container, onError, onThumbnail }) {
   const center = new Vector3();
   let radius = 1;
   let renderer, controls, observer, intersection, model, scene;
+  let mixer, action, animationFrame, previousTime;
   let visible = true;
   let closed = false;
 
@@ -101,13 +102,52 @@ export function createViewer({ container, onError, onThumbnail }) {
     camera.position.sub(controls.target).multiplyScalar(factor).add(controls.target);
     controls.update();
   }
+  function animate(now) {
+    animationFrame = undefined;
+    if (action && previousTime !== undefined) {
+      mixer.update(Math.min((now - previousTime) / 1000, 0.1));
+      render();
+    }
+    previousTime = now;
+    syncAnimation();
+  }
+  function syncAnimation() {
+    if (!closed && action && visible && !document.hidden) {
+      animationFrame ??= requestAnimationFrame(animate);
+    } else {
+      cancelAnimationFrame(animationFrame);
+      animationFrame = previousTime = undefined;
+    }
+  }
+  function visibilityChanged() {
+    render();
+    syncAnimation();
+  }
+  function play(index) {
+    action?.stop();
+    const clip = model?.animations[index];
+    action = clip && mixer.clipAction(clip).reset().play();
+    visibilityChanged();
+  }
+  function setWireframe(value) {
+    model?.scene.traverse(object => {
+      if (!object.isMesh) return;
+      for (const material of [object.material].flat()) material.wireframe = value;
+    });
+    render();
+  }
   function dispose() {
     if (closed) return;
     closed = true;
     observer?.disconnect();
     intersection?.disconnect();
     controls?.dispose();
-    document.removeEventListener("visibilitychange", render);
+    document.removeEventListener("visibilitychange", visibilityChanged);
+    syncAnimation();
+    if (mixer) {
+      mixer.stopAllAction();
+      mixer.uncacheRoot(model.scene);
+    }
     if (scene || model) disposeScenes([...(model?.scenes ?? []), ...(scene ? [scene] : [])]);
     if (renderer) {
       renderer.domElement.remove();
@@ -158,6 +198,7 @@ export function createViewer({ container, onError, onThumbnail }) {
         onError("A sessão WebGL foi encerrada. Abra a prévia novamente.");
       });
 
+      mixer = new AnimationMixer(model.scene);
       scene = new Scene();
       scene.background = new Color("#151c26");
       scene.add(model.scene, new HemisphereLight(0xf0fbff, 0x51546a, 2));
@@ -176,10 +217,10 @@ export function createViewer({ container, onError, onThumbnail }) {
       observer.observe(container);
       intersection = new IntersectionObserver(([entry]) => {
         visible = entry.isIntersecting;
-        render();
+        visibilityChanged();
       });
       intersection.observe(container);
-      document.addEventListener("visibilitychange", render);
+      document.addEventListener("visibilitychange", visibilityChanged);
       resize();
       frame();
       const thumbnail = document.createElement("canvas");
@@ -200,5 +241,6 @@ export function createViewer({ container, onError, onThumbnail }) {
       onError(error.message || "Não foi possível abrir a cena 3D.");
     }
   }
-  return { load, dispose, frame, orbit, zoom };
+  return { load, dispose, frame, orbit, zoom, play, setWireframe,
+    clips: () => model?.animations.map(clip => clip.name) ?? [] };
 }

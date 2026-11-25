@@ -1,0 +1,9 @@
+{
+  "name": "Nome do personagem",
+  "description": "Descreva somente características fornecidas ou aprovadas pelo proprietário.",
+  "quality": "lite",
+  "source": "base_glb",
+  "traits": {},
+  "requirements": ["model", "master", "rig", "animations", "materials", "lods", "pbr_maps", "unreal_import"],
+  "reference_revisions": []
+}

@@ -15,7 +15,7 @@ MAX_PACKAGE = 96 * MIB
 MAX_IMAGE = 8 * MIB
 SHA = re.compile(r"[0-9a-f]{64}")
 SAFE_ENTRY = re.compile(r"(?:models/(?:asset|lod[1-3])\.fbx|models/preview\.glb|scene/working\.blend|"
-                        r"textures/basecolor-(?:[1-9][0-9]{0,3})x[1-9][0-9]{0,3}\.png|"
+                        r"models/lod[1-3]\.glb|reports/deformable-lods\.json|textures/basecolor-(?:[1-9][0-9]{0,3})x[1-9][0-9]{0,3}\.png|"
                         r"references/concept\.(?:png|jpg)|references/library\.json|"
                         r"reports/(?:quality|motion|environment|audio)\.json|audio/(?:cut|crossfade)\.wav|brief\.json)")
 
@@ -121,7 +121,7 @@ def open_package(path):
         stream.seek(-22, 2)
         magic, disk, start, local, total, directory_size, directory_start, comment = unpack_from(
             "<4s4H2IH", stream.read(22))
-        if (magic != b"PK\x05\x06" or disk or start or comment or local != total or not 1 <= total <= 20
+        if (magic != b"PK\x05\x06" or disk or start or comment or local != total or not 1 <= total <= 40
                 or directory_size > 8192 or directory_start + directory_size != stream.tell() - 22):
             raise ValueError("Diretório ZIP fora dos limites.")
         with ZipFile(stream) as archive:
@@ -136,7 +136,7 @@ def verify_package(path):
 def _verify_archive(archive):
     entries = archive.infolist()
     names = [entry.filename for entry in entries]
-    if (len(entries) > 20 or len(names) != len(set(names)) or
+    if (len(entries) > 40 or len(names) != len(set(names)) or
             any(entry.compress_type != ZIP_STORED or not 0 < entry.file_size <= MAX_FILE or
                 (entry.filename != "manifest.json" and not SAFE_ENTRY.fullmatch(entry.filename))
                 for entry in entries) or sum(entry.file_size for entry in entries) > MAX_PACKAGE):
@@ -149,7 +149,7 @@ def _verify_archive(archive):
             or type(manifest.get("max_cost_centavos")) is not int or manifest["max_cost_centavos"] != 0
             or manifest.get("mode") not in ASSET_MODES
             or not isinstance(manifest.get("quality"), str) or manifest["quality"] not in ACTIVE_QUALITY
-            or not isinstance(manifest.get("files"), list) or len(manifest["files"]) > 19):
+            or not isinstance(manifest.get("files"), list) or len(manifest["files"]) > 39):
         raise ValueError("Manifesto incompatível.")
     declared = {}
     for item in manifest["files"]:

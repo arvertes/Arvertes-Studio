@@ -80,3 +80,38 @@ class WorkerQueueTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             Queue(other)
         self.assertEqual(target.read_bytes(), snapshot)
+
+    def test_new_authorization_fences_previous_service_and_its_results(self):
+        self.queue.control("enable", approved=True)
+        previous = self.queue.authorization()
+        task = self.queue.claim(uuid4().hex, previous)
+        self.queue.checkpoint(task, 0, [geometry_row(39, 0, "oriented_hash")], 2, 1000)
+        self.queue.control("stop")
+        self.queue.control("enable", approved=True)
+        with self.assertRaises(ValueError):
+            self.queue.checkpoint(task, 1, [geometry_row(39, 1, "oriented_hash")], 2, 1000)
+        self.assertIsNone(self.queue.claim(uuid4().hex, previous))
+        new_task = self.queue.claim(uuid4().hex, self.queue.authorization())
+        self.assertEqual(new_task["next_row"], 1)
+
+    def test_service_runs_without_ui_and_stops_after_revocation(self):
+        import json
+        import subprocess
+        import sys
+        from time import monotonic, sleep
+
+        self.queue.control("enable", approved=True)
+        command = [sys.executable, "-m", "arvertes_desktop.lab_queue", "--workspace", str(self.root)]
+        with subprocess.Popen([*command, "serve", "--max-seconds", "12"], stdout=subprocess.PIPE) as process:
+            try:
+                standby = monotonic() + 8
+                while monotonic() < standby and self.queue.read()["jobs"][0]["state"] != "done":
+                    sleep(.1)
+                self.assertEqual(self.queue.read()["jobs"][0]["state"], "done")
+                self.queue.control("stop")
+                self.queue.control("enable", approved=True)
+                output = process.communicate(timeout=4)[0]
+                self.assertEqual(json.loads(output), {"state":"authorization_revoked", "processed":1})
+            finally:
+                if process.poll() is None:
+                    process.terminate()

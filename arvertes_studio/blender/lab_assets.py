@@ -119,7 +119,7 @@ def skinned_mesh(collection, arm, parts, materials):
     return obj
 
 
-def mannequin(collection, cloth):
+def mannequin(collection, cloth, *, density=1, existing_rig=None, proportions=None, palette=None):
     bones = [("Root", (0,0,.94), (0,0,1.06), None),
              ("Spine", (0,0,1.06), (0,0,1.29), "Root"),
              ("Chest", (0,0,1.29), (0,0,1.51), "Spine"),
@@ -146,8 +146,20 @@ def mannequin(collection, cloth):
             ([hip,knee,ankle,foot],[(.10,.095),(.067,.065),(.039,.045),(.047,.035)],
              [thigh,shin,foot_bone,foot_bone], 26, 18, 0),
         ])
-    arm = rig(collection, bones)
-    mesh = skinned_mesh(collection, arm, parts, [cloth, material("NeutralMatte", (.32,.34,.36), .72)])
+    proportions = proportions or {"height": 1, "width": 1, "depth": 1}
+
+    def location(point):
+        return (point[0]*proportions["width"], point[1]*proportions["depth"], point[2]*proportions["height"])
+
+    arm = existing_rig or rig(collection, [(name,location(head),location(tail),parent)
+                                          for name,head,tail,parent in bones])
+    reduced = [(points,radii,joints,max(4,round(rings*density)),max(8,round(sides*density)),slot)
+               for points,radii,joints,rings,sides,slot in parts]
+    materials = palette or [cloth, material("NeutralMatte", (.32,.34,.36), .72)]
+    mesh = skinned_mesh(collection, arm, reduced, materials)
+    for vertex in mesh.data.vertices:
+        vertex.co = location(vertex.co)
+    mesh.data.update()
     return arm, mesh
 
 
@@ -187,6 +199,39 @@ def humanoid_pose(name, phase, revision=1):
     return rotations, height, yaw
 
 
+def character_pose(name, phase):
+    """Revisão experimental. Gesto e reação são corporais e sem captura facial."""
+    if name not in ("Reach", "TalkGesture", "Reaction"):
+        rotations, height, yaw = humanoid_pose(name, phase, 2)
+        wave = sin(2*pi*phase)
+        if name in ("Walk", "Run", "WalkToRun"):
+            rotations["Chest"] = (.045*wave, 0, .032*wave)
+            for side in ("L", "R"):
+                thigh = rotations[f"Thigh.{side}"][0]
+                shin = rotations[f"Shin.{side}"][0]
+                rotations[f"Foot.{side}"] = (-.75*(thigh+shin), 0, 0)
+        if name in ("Jump", "Crouch"):
+            bend = sin(pi*phase)**2
+            rotations["Chest"] = (.18*bend, 0, 0)
+            for side in ("L", "R"):
+                rotations[f"Foot.{side}"] = (.40*bend, 0, 0)
+        if name == "Turn":
+            rotations["Head"] = (0, 0, .15*sin(pi*phase)**2)
+        if name == "Rest":
+            rotations["Head"] = (.018*wave, 0, 0)
+        return rotations, height, yaw
+    amount = sin(pi*phase)**2
+    if name == "Reach":
+        return {"UpperArm.R": (-.49*amount, .60*amount, 0),
+                "Forearm.R": (-.66*amount, 0, 0), "Chest": (.08*amount, 0, 0)}, 0, 0
+    if name == "TalkGesture":
+        beat = amount * sin(4*pi*phase)
+        return {"UpperArm.R": (-.32*amount,.38*amount,0), "Forearm.R": (-.56*amount+.18*beat,0,0),
+                "Head": (.09*beat,0,.12*beat)}, 0, 0
+    return {"Chest": (-.25*amount,0,0), "Head": (-.12*amount,0,0),
+            "UpperArm.L": (-.30*amount,0,0), "UpperArm.R": (-.30*amount,0,0)}, 0, 0
+
+
 def animate(arm, names, evaluator):
     scene = bpy.context.scene
     scene.render.fps = 24
@@ -212,7 +257,7 @@ def animate(arm, names, evaluator):
     scene.frame_set(1)
 
 
-def motion_evidence(arm, mesh, names, stance_names=()):
+def motion_evidence(arm, mesh, names, stance_names=(), *, production_sample=False):
     scene = bpy.context.scene
     weights = [sum(group.weight for group in vertex.groups) for vertex in mesh.data.vertices]
     bone_names = sorted(bone.name for bone in arm.data.bones)
@@ -225,6 +270,7 @@ def motion_evidence(arm, mesh, names, stance_names=()):
         previous = first = None
         step, stance, error = 0.0, [], 0.0
         frames = [1, 9, 17, 25, 33, 41, 49]
+        heights, minimum = [], float("inf")
         for frame in frames:
             scene.frame_set(frame)
             bpy.context.view_layer.update()
@@ -236,12 +282,17 @@ def motion_evidence(arm, mesh, names, stance_names=()):
             previous = sample
             if stance_names:
                 stance.append([(arm.matrix_world @ arm.pose.bones[bone].tail).copy() for bone in stance_names])
+            if production_sample:
+                pelvis = (arm.matrix_world @ arm.pose.bones["Root"].head).z
+                heights.append(pelvis)
             evaluated = mesh.evaluated_get(depsgraph)
             data = evaluated.to_mesh()
             try:
                 if len(data.vertices) != len(mesh.data.vertices):
                     raise ValueError("A deformação alterou a contagem de vértices.")
                 error = max(error, *((a.co - b.co).length for a,b in zip(data.vertices, mesh.data.vertices)))
+                if production_sample:
+                    minimum = min(minimum, min((mesh.matrix_world @ vertex.co).z for vertex in data.vertices))
             finally:
                 evaluated.to_mesh_clear()
         drift = None
@@ -258,6 +309,9 @@ def motion_evidence(arm, mesh, names, stance_names=()):
             "max_sampled_vertex_displacement_m": round(error, 6),
             "indicative_foot_drift_m": None if drift is None else round(drift, 6),
         }
+        if production_sample:
+            measurements[name]["sampled_hip_height_range_m"] = round(max(heights) - min(heights), 6)
+            measurements[name]["sampled_min_mesh_height_m"] = round(minimum, 6)
     animation.action = bpy.data.actions[names[0]]
     animation.action_slot = animation.action.slots[0]
     scene.frame_set(1)

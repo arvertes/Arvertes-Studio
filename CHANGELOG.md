@@ -8,6 +8,8 @@
 - Conversas exibem propostas de Atlas quando disponíveis no servidor e sugerem encaminhamentos no modo local.
 - AutoPipeline apresenta responsáveis, dependências, checkpoints, decisões, erros e recuperação da fila de inspeção.
 - Anotações do navegador registram a origem e a condição de sugestão. Consultas a fichas distinguem nomes ambíguos e versões.
+- Sprint 2: prévia, aprovação e pesquisa da base editorial, com citações no chat e critérios nos perfis.
+- AutoPipeline local com revisão de GLB, checkpoints reaproveitáveis, pausa, retomada, cancelamento e inspeção opcional em dois workers.
 
 ## v0.2.2 dev
 

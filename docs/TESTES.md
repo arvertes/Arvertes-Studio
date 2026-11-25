@@ -69,3 +69,7 @@ A execução 45061809311 recebeu HTTP 403 ao obter a distribuição do Blender. 
 O build Web exercita as regras no navegador, o encaminhamento no chat, o reconhecimento de fichas por nome completo e o estado de dependências bloqueadas. O cenário de `web/tests/backend_browser.py` usa também o backend da sprint com PostgreSQL local descartável. Ele abre e recarrega um briefing estruturado, registra a rejeição de um GLB inválido, recupera a fila com um GLB sintético e valida o histórico, a revisão humana e o pacote.
 
 Na sprint passaram a suíte unitária Python (17 testes), Desktop (37 testes), o autoteste em Qt offscreen, o build Web com Node.js 24 e sete cenários estáticos do Chromium 156. A integração Web autenticada passou com sessão sintética e PostgreSQL 17.12. No Blender 5.3.0 (`02f0899d78e3`), passaram os nove casos headless e os fluxos de cópia/FBX e Desktop/Agents/Blender. Windows, Android físico e importação no Unreal ficaram fora desta verificação.
+
+## Sprint 2
+
+A suíte Web inclui grafos sem ciclos, reaproveitamento de relatórios por versão, cancelamento e rejeição de resultados atrasados. O cenário local do Chromium verifica pausa e recarga no IndexedDB e acompanha a execução dos workers. O cenário autenticado usa uma conta sintética e o PostgreSQL local para testar rascunhos, aprovação, busca e citações. O conteúdo com marcação é verificado como texto. Entradas e arquivos dos dois cenários são sintéticos.

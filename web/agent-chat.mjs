@@ -19,7 +19,7 @@ function status(message, isError = false) {
   root.textContent = message;
   root.classList.toggle("form-error", isError);
 }
-function bubble(role, text, briefing) {
+function bubble(role, text, briefing, knowledge) {
   const msg = el("div", role === "user" ? "chat-bubble chat-user" : "chat-bubble chat-agent");
   const label = el("strong", "", role === "user" ? "Você" : agents.find(a => a.id === active)?.name || "Agente");
   msg.append(label, el("p", "", text));
@@ -43,6 +43,13 @@ function bubble(role, text, briefing) {
     details.append(tasks);
     msg.append(details);
   }
+  if (role === "agent" && knowledge?.length) {
+    const list = el("ol", "production-history");
+    for (const item of knowledge) list.append(el("li", "", item.source + " · revisão " + item.revision + " · trecho " + item.line));
+    const details = el("details", "production-details");
+    details.append(el("summary", "", "Fontes consultadas"), list);
+    msg.append(details);
+  }
   return msg;
 }
 async function render() {
@@ -58,7 +65,7 @@ async function render() {
       log.append(el("p", "muted", "Conversa vazia. Pergunte sobre a especialidade deste agente, suas produções ou use 'Lembre que ...' para salvar uma informação compartilhada."));
     } else {
       for (const entry of data.messages) {
-        if (entry?.role === "user" || entry?.role === "agent") log.append(bubble(entry.role, String(entry.text).slice(0,6000), entry.briefing));
+        if (entry?.role === "user" || entry?.role === "agent") log.append(bubble(entry.role, String(entry.text).slice(0,6000), entry.briefing, entry.knowledge));
       }
     }
     for (const fact of data.facts) {

@@ -231,6 +231,13 @@ function renderAgents() {
       ["Etapas e responsabilidades", steps.map(stage => `${stage.title} · ${stage.description}`).join(" • ")],
       ["Ferramentas", Array.isArray(remote?.tools) && remote.tools.length ? remote.tools.join(" • ")
         : [...new Set(steps.map(stage => stage.tool))].join(" • ")],
+      ...(remote?.intake?.length ? [["Entradas e conhecimentos", remote.intake.join(" • ")]] : []),
+      ...(remote?.completion ? [["Critério de qualidade", remote.completion]] : []),
+      ...(remote?.review?.input?.length ? [
+        ["Evidências da revisão", remote.review.input.join(" • ")],
+        ["Próxima revisão", roster.find(item => item.id === remote.review.next_reviewer)?.name || "Revisão humana"],
+      ] : []),
+      ...(remote?.boundary ? [["Restrição da especialidade", remote.boundary]] : []),
       ["Limite atual", canOperate ? "Ações locais conforme os checkpoints do AutoPipeline." : "A execução depende de uma integração validada."],
     ]), link("Consultar AutoPipeline", "pipeline"));
     const talk = el("button", "button", "Conversar");

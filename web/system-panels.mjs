@@ -3,6 +3,7 @@ import {
   studioLocalModeAction, verifyStudioConnection,
 } from "./backend.mjs";
 import { el, link, fields, icon } from "./ui.mjs";
+import { knowledgePanel } from "./knowledge-ui.mjs";
 import { libraryUsage } from "./library.mjs";
 import { maxGlbBytes, maxLibraryBytes, maxLibraryCount } from "./glb.mjs";
 import { normalize, trellisDemo } from "./production-catalog.mjs";
@@ -262,7 +263,7 @@ function memory(root) {
   b.append(link("Abrir conversas dos agentes", "atlas", "button"));
   b.append(link("Ver dossiês de personagens", "characters", "button"));
   b.append(link("Reabrir produções locais", "tasks", "button"));
-  root.append(a, b);
+  root.append(a, b, knowledgePanel(backend?.knowledge, backend?.agents));
   paint();
 }
 const tools = [

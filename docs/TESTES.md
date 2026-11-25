@@ -77,3 +77,7 @@ A suíte Web inclui grafos sem ciclos, reaproveitamento de relatórios por vers�
 ## Sprint 3
 
 `python tests/integration/check_asset_package.py /caminho/para/blender` usa Blender 5.3.0 (`02f0899d78e3`) e executa o comando público nos três modos. Confere hashes dos arquivos originais, inventário, LODs e texturas, cena empacotada e reimportação de FBX e GLB, incluindo esqueleto e clipe sintético. A importação no Unreal requer ensaio independente.
+
+## Sprint 4
+
+`node --test web/test-laboratory.mjs` cobre integridade e exportação sintética, decisões A/B/C, concorrência, recuperação e dois ciclos com relógio controlado. A suíte Chromium testa o worker real, a autorização, a trava, o encerramento, a prioridade do AutoPipeline, a recarga, a reversão e o isolamento da fila. Para salvar os resultados sintéticos, passe `--lab-artifacts ./diretorio` ao script `web/tests/browser.py`.

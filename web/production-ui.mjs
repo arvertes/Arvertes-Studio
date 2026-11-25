@@ -1,4 +1,5 @@
 import { studioBackend } from "./backend.mjs";
+import { prioritizeProduction } from "./lab-ui.mjs";
 import { activeTasks, previewPlan, serverTaskState, suggestCategory, taskLabels, taskState } from "./coordination.mjs";
 import { availableStages, categories, productionTypes, stages, trellisDemo } from "./production-catalog.mjs";
 import { createProductionRepository } from "./production-store.mjs";
@@ -191,6 +192,7 @@ function status() {
 }
 
 async function dispatch(production, command, trigger, feedback, message) {
+  prioritizeProduction();
   trigger.disabled = true;
   try {
     const result = command.action === "inspect-parallel" ? await repository.inspectParallel(production.id) :
@@ -471,6 +473,7 @@ async function showRemotePlan(root, id, operationError) {
       stages.append(row);
     }
     const run = (label, action) => button(label, async trigger => {
+      prioritizeProduction();
       trigger.disabled = true;
       try { await action(); if (box.isConnected) render(); }
       catch (error) {

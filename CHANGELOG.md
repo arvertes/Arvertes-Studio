@@ -11,6 +11,7 @@
 - Sprint 2: prévia, aprovação e pesquisa da base editorial, com citações no chat e critérios nos perfis.
 - AutoPipeline local com revisão de GLB, checkpoints reaproveitáveis, pausa, retomada, cancelamento e inspeção opcional em dois workers.
 - Sprint 3: produção local de pacotes Blender com referência visual, briefing, FBX, GLB, LODs estáticos, texturas e verificação por manifesto.
+- Sprint 4: laboratório experimental com worker de geometria, política e revisões sintéticas, recuperação e avaliação por seis horas de atividade medida.
 
 ## v0.2.2 dev
 

@@ -16,7 +16,9 @@ from zipfile import BadZipFile, ZIP_STORED, ZipFile
 from arvertes_studio.core.asset_package import MAX_FILE, MAX_IMAGE, MAX_PACKAGE, image_info, json_bytes, library_pins
 from arvertes_studio.core.unreal_preflight import preflight
 from arvertes_studio.core.character_style import reference_views, validate_adaptation, validate_style
-from .generation_adapter import validate_handoff
+from .generation_adapter import run_triposr, validate_handoff
+from .production_tools import inventory, read_config
+from .visual_executor import analyze as analyze_visual
 from . import asset_package
 from .blender_job import checked_digest, read_source
 
@@ -90,7 +92,7 @@ def _inputs(args):
     brief.setdefault("source", "base_glb" if args.base else "image_guided")
     if bool(args.base) != (brief["source"] in ("base_glb", "external_glb")):
         raise ValueError("Informe um GLB local somente para origem fornecida ou externa.")
-    if bool(args.handoff) != (brief["source"] == "external_glb"):
+    if bool(getattr(args, "handoff", None)) != (brief["source"] == "external_glb"):
         raise ValueError("Um artefato externo exige um handoff com revisão e licença.")
     if "adaptation" in brief:
         if not args.base:
@@ -163,9 +165,17 @@ def _delivery(job, brief, plan, evidence, assessment, preflight_report):
              **{f"references/{item.name}": item for item in (job / "references").iterdir()}}
     if (job / "original.glb").is_file():
         files["original.glb"] = job / "original.glb"
+    if (job / "visual.json").is_file():
+        files["visual.json"] = job / "visual.json"
     if (job / "handoff.json").is_file():
         files["handoff.json"] = job / "handoff.json"
     documented = set(evidence["components"])
+    visual_status = plan["visual_analysis"]
+    if "visual.json" in files:
+        measured = _json(files["visual.json"])
+        confirmed = sum(row["state"] == "observations_pending_human_confirmation" for row in measured["analyses"])
+        visual_status = {"state":"observations_pending_human_confirmation" if confirmed else "blocked",
+                         "images_observed":confirmed, "report":"visual.json"}
     inventory = {
         "scope": "isolated_local_review",
         "state": assessment["state"],
@@ -177,11 +187,11 @@ def _delivery(job, brief, plan, evidence, assessment, preflight_report):
         "original": "preserved_glb" if "original.glb" in files else "synthetic_master_in_asset",
         "license": brief.get("license"),
         "dossier": brief.get("dossier"),
-        "reference_usage": "provenance_and_human_comparison" if brief["source"] in ("procedural", "external_glb")
+        "reference_usage": "provenance_and_human_comparison" if brief["source"] in ("procedural", "external_glb", "image_guided")
         else "provenance_and_scaled_copy",
         "fidelity_review": plan.get("fidelity_review", "human_required"),
         "external_handoff": "handoff.json" if "handoff.json" in files else None,
-        "visual_analysis": plan["visual_analysis"],
+        "visual_analysis": visual_status,
         "assessment": assessment,
         "preflight": preflight_report,
     }
@@ -222,6 +232,37 @@ def start(args):
         pins = library_pins(_atlas(args.agents, "pin_asset_references",
                                    library=_json(args.library, 48 * 1024), selections=selections))
     plan["library_references"] = pins
+    config = read_config(getattr(args, "executor_config", None))
+    mode = brief["source"]
+    wants_vision = getattr(args, "analyze_visual", False)
+    reports, probe_details = inventory(args.blender, config, approved=args.approved,
+                                       wants_generation=mode == "image_guided", wants_vision=wants_vision)
+    task, input_format, output_format = {
+        "image_guided": ("image_3d", images[0][1]["extension"], "glb"),
+        "base_glb": ("reuse", "glb", "zip"), "external_glb": ("reuse", "glb", "zip"),
+        "synthetic_fixture": ("procedural", "json", "zip"), "procedural": ("procedural", "json", "zip"),
+    }[mode]
+    choice = _atlas(args.agents, "select_production_executor", demand={
+        "task": task, "quality": brief["quality"], "input": input_format, "output": output_format,
+        "views": len(images), "complexity": getattr(args, "complexity", "simple")}, reports=reports)
+    plan["tool_selection"] = choice
+    plan["executor_inventory"] = probe_details
+    if wants_vision:
+        visual_choice = _atlas(args.agents, "select_production_executor", demand={
+            "task":"vision", "quality":brief["quality"], "input":images[0][1]["extension"], "output":"json",
+            "views":len(images), "complexity":"simple"}, reports=reports)
+        plan["visual_analysis"] = {"state":"planned" if visual_choice["executor"] else "blocked",
+                                   "selection":visual_choice, "details":probe_details["ollama"]}
+    fatal_plan = next((step["reason"] for step in plan["steps"]
+                       if step["id"] == "mesh" and step["state"] == "blocked"), None)
+    if fatal_plan == "image_guided_generator_unavailable" and choice["executor"] == "triposr" and (
+            brief["quality"] in ("lite", "low", "medium")):
+        fatal_plan = None
+        for step in plan["steps"]:
+            if step["state"] == "blocked":
+                step["state"] = "planned"
+                step.pop("reason", None)
+        plan["executor"] = "triposr"
     original = read_source(args.base.absolute()) if args.base else None
     handoff = validate_handoff(_json(args.handoff, 8192), original, request["references"]) if args.handoff else None
     root = _directory(args.workspace)
@@ -245,12 +286,36 @@ def start(args):
         _atomic(job / "handoff.json", json_bytes(handoff))
     status = {"job": identifier, "state": "blocked", "ready_for_production": False, "cost_brl": 0,
               "plan": "plan.json"}
-    if not plan["executor"]:
-        status["reason"] = next(step["reason"] for step in plan["steps"] if step["state"] == "blocked")
+    if fatal_plan:
+        status["reason"] = fatal_plan
     elif not args.approved:
         status["reason"] = "local_execution_requires_operator"
+    elif not choice["executor"] or not probe_details["blender_reuse"]["available"]:
+        status["reason"] = "executor_or_sentinel_blocked"
     else:
         try:
+            if wants_vision:
+                stage("vision")
+                vision = config.get("ollama")
+                visual = [analyze_visual(path, vision["model"], vision["port"], approved=True,
+                                         license_reviewed=vision["license_reviewed"]) for path in paths] if (
+                                             vision and plan["visual_analysis"]["selection"]["executor"] == "ollama") else []
+                _atomic(job / "visual.json", json_bytes({
+                    "analyses": visual, "probe": probe_details["ollama"], "review": "human_required",
+                    "operator_traits": plan["traits"], "operator_hypotheses": plan["hypotheses"]}))
+            if choice["executor"] == "triposr":
+                stage("generation")
+                entry = config["triposr"]
+                target = job / "original.glb"
+                result = run_triposr(argparse.Namespace(**{
+                    key: Path(entry[key]) for key in ("checkout", "weights", "python")},
+                    license_reviewed=entry["license_reviewed"], approved=True, version=entry["version"],
+                    image=paths[0], output=target))
+                original = read_source(target)
+                receipt = _json(target.with_suffix(".handoff.json"), 8192)
+                proof = validate_handoff(receipt, original, request["references"])
+                _atomic(job / "handoff.json", json_bytes({**proof, "inference_verified_by_studio": True,
+                                                         "artifact_generated": result["artifact_generated"]}))
             fixture = brief["source"] == "synthetic_fixture"
             procedural = brief["source"] == "procedural"
             inner = job / "asset.zip"
@@ -276,6 +341,27 @@ def start(args):
     return status
 
 
+def _confirm_visual(job, value):
+    if not isinstance(value, list) or len(value) > 32:
+        raise ValueError("Lista de observações confirmadas fora do limite.")
+    if not value:
+        return []
+    evidence = _json(job / "visual.json")
+    eligible = {(row["reference_sha256"], trait): row["model_sha256"]
+                for row in evidence["analyses"] if row.get("state") == "observations_pending_human_confirmation"
+                for trait, data in row["traits"].items() if data["state"] == "observed"}
+    confirmed = []
+    for row in value:
+        if (not isinstance(row, dict) or row.keys() != {"reference", "trait"}
+                or not all(isinstance(row[key], str) for key in row)
+                or (row["reference"], row["trait"]) not in eligible):
+            raise ValueError("Confirme apenas observações vinculadas ao modelo e à imagem analisada.")
+        selected = {**row, "model_sha256":eligible.pop((row["reference"],row["trait"])),
+                    "origin":"operator_confirmation"}
+        confirmed.append(selected)
+    return confirmed
+
+
 def review(job, digest, decision, fidelity=None):
     state = _json(job / "status.json")
     if (state["state"] != "awaiting_human_review" or not DIGEST.fullmatch(digest)
@@ -285,11 +371,16 @@ def review(job, digest, decision, fidelity=None):
     if fidelity is not None and (not isinstance(fidelity, dict)
             or not isinstance(fidelity.get("notes"), str) or not 1 <= len(fidelity["notes"].strip()) <= 1500):
         raise ValueError("Registre uma observação de revisão entre 1 e 1.500 caracteres.")
-    if decision == "accept" and brief["source"] in ("procedural", "external_glb"):
+    if decision == "accept" and brief["source"] in ("procedural", "external_glb", "image_guided"):
         reference_hashes = _json(job / "plan.json")["references"]
-        if (not isinstance(fidelity, dict) or set(fidelity) != {"references", "notes", "verdict"}
+        required = {"references", "notes", "verdict"}
+        if (not isinstance(fidelity, dict) or not required <= fidelity.keys()
+                or fidelity.keys() - required - {"confirmed_observations"}
                 or fidelity["references"] != reference_hashes or fidelity["verdict"] != "enough_for_local_review"):
             raise ValueError("Confirme a comparação humana para todas as referências desta revisão.")
+        if "confirmed_observations" in fidelity:
+            fidelity = {**fidelity, "confirmed_observations":
+                        _confirm_visual(job, fidelity["confirmed_observations"])}
     if decision not in ("accept", "reject"):
         raise ValueError("Decisão fora do contrato.")
     result = {"decision": decision, "sha256": digest, "scope": "local_review", "ready_for_production": False}
@@ -368,10 +459,12 @@ def main(argv=None):
     begin = commands.add_parser("start")
     for key in ("agents", "brief", "blender"):
         begin.add_argument("--" + key, required=True, type=Path)
-    for key in ("base", "library", "handoff"):
-        begin.add_argument("--" + key, type=Path)
+    for key in ("base", "library", "handoff", "executor_config"):
+        begin.add_argument("--" + key.replace("_", "-"), type=Path)
     begin.add_argument("--image", required=True, action="append", type=Path)
     begin.add_argument("--approved", action="store_true", help="autoriza a execução local")
+    begin.add_argument("--analyze-visual", action="store_true")
+    begin.add_argument("--complexity", choices=("simple","detailed"), default="simple")
     begin.add_argument("--progress", action="store_true", help="emite etapas observadas em stderr")
     for command in ("status", "review", "publish", "recover"):
         operation = commands.add_parser(command)

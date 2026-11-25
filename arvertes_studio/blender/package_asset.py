@@ -66,7 +66,7 @@ def _texture_variants(folder, source, quality):
     return texture, variants
 
 
-def _synthetic(folder, source, quality, recipe, motion_revision):
+def _synthetic(folder, source, quality, recipe, motion_revision, proportions):
     collection = bpy.data.collections.new("SyntheticReference")
     bpy.context.scene.collection.children.link(collection)
     if recipe in OTHER_RECIPES:
@@ -87,14 +87,20 @@ def _synthetic(folder, source, quality, recipe, motion_revision):
         from . import lab_assets
 
         if recipe == "humanoid":
-            arm, obj = lab_assets.mannequin(collection, material)
-            clips = lab_assets.CLIPS
-            lab_assets.animate(arm, clips, lambda name, phase: lab_assets.humanoid_pose(name, phase, motion_revision))
+            arm, obj = lab_assets.mannequin(collection, material, proportions=proportions)
+            if motion_revision == 3:
+                clips = (*lab_assets.CLIPS, "Reach", "TalkGesture", "Reaction")
+                lab_assets.animate(arm, clips, lab_assets.character_pose)
+            else:
+                clips = lab_assets.CLIPS
+                lab_assets.animate(arm, clips, lambda name, phase: lab_assets.humanoid_pose(name, phase, motion_revision))
             stance = ("Foot.L", "Foot.R")
         else:
             arm, obj, clips = lab_assets.creature(collection, material, recipe)
             stance = ("FrontLower.L", "FrontLower.R")
-        evidence = lab_assets.motion_evidence(arm, obj, clips, stance)
+        evidence = lab_assets.motion_evidence(arm, obj, clips, stance, production_sample=motion_revision == 3)
+        if motion_revision == 3:
+            evidence["manual_review"] = ["balance", "intersections", "naturalness", "transition", "foot_plant"]
         (folder / "reports/motion.json").write_bytes(json_bytes(evidence))
         return collection, variants
     bpy.ops.mesh.primitive_uv_sphere_add(segments=24, ring_count=16, radius=0.6)
@@ -187,6 +193,44 @@ def _lods(folder, meshes, original, quality, animated, *, retain_small=False):
     return result, "measured"
 
 
+def _skinned_lods(folder, collection, master, rig, proportions):
+    from .deformable_lod import evaluate
+    from .lab_assets import mannequin
+
+    lods, attempts = [], []
+    previous = _triangles([master])
+    for density in (.75, .48):
+        _, candidate = mannequin(collection, master.data.materials[0], density=density,
+                                 existing_rig=rig, proportions=proportions, palette=list(master.data.materials))
+        data = candidate.data
+        try:
+            report = evaluate(master, candidate, rig)
+            triangles = _triangles([candidate])
+            attempts.append({"density": density, "triangles": triangles, **report})
+            if not report["mechanically_accepted"] or triangles >= previous:
+                continue
+            level = len(lods)+1
+            fbx = f"models/lod{level}.fbx"
+            glb = f"models/lod{level}.glb"
+            _fbx(folder / fbx, [rig,candidate], animated=True)
+            bpy.ops.object.select_all(action="DESELECT")
+            rig.select_set(True)
+            candidate.select_set(True)
+            if "FINISHED" not in bpy.ops.export_scene.gltf(filepath=str(folder / glb),
+                                                            export_format="GLB", use_selection=True):
+                raise ValueError("Prévia de LOD deformável interrompida.")
+            lods.append({"path": fbx, "preview": glb, "triangles": triangles})
+            previous = triangles
+        finally:
+            bpy.data.objects.remove(candidate, do_unlink=True)
+            if not data.users:
+                bpy.data.meshes.remove(data)
+    evidence = {"schema": 1, "recipe": "humanoid_retessellation", "attempts": attempts,
+                "accepted_count": len(lods), "unreal": "pending", "visual_review": "pending"}
+    (folder / "reports/deformable-lods.json").write_bytes(json_bytes(evidence))
+    return lods, "sampled_with_human_review" if lods else "rejected_by_pose_checks"
+
+
 def build(folder: Path):
     request = json.loads((folder / "brief.json").read_text(encoding="utf-8"))
     preset = request["quality"]
@@ -206,7 +250,7 @@ def build(folder: Path):
         collection = import_asset(bpy.context, folder / "source.glb")
         textures = []
     else:
-        collection, textures = _synthetic(folder, folder / request["reference"], quality, mode, request.get("motion_revision", 1))
+        collection, textures = _synthetic(folder, folder / request["reference"], quality, mode, request.get("motion_revision", 1), request.get("proportions"))
     bpy.context.scene.unit_settings.system = "METRIC"
     bpy.context.scene.unit_settings.scale_length = 1.0
     objects = asset_objects(collection)
@@ -231,9 +275,14 @@ def build(folder: Path):
     bpy.ops.file.pack_all()
     if "FINISHED" not in bpy.ops.wm.save_as_mainfile(filepath=str(folder / "scene/working.blend")):
         raise ValueError("A cópia Blender não foi gravada.")
-    lods, lod_status = _lods(folder, meshes, original, quality, animated, retain_small=mode == "environment")
+    if request.get("deformable_lods") and mode == "humanoid":
+        rig = next(obj for obj in objects if obj.type == "ARMATURE")
+        lods, lod_status = _skinned_lods(folder, collection, meshes[0], rig, request.get("proportions"))
+    else:
+        lods, lod_status = _lods(folder, meshes, original, quality, animated, retain_small=mode == "environment")
     findings = []
-    if original > quality.triangle_target:
+    triangle_target = 10000 if request.get("deformable_lods") and preset == "lite" else quality.triangle_target
+    if original > triangle_target:
         findings.append("triangle_target_exceeded")
     if technical["degenerate_faces"] or technical["overlapping_edges"]:
         findings.append("topology_findings")

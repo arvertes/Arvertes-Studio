@@ -128,6 +128,15 @@ def _outputs(folder, quality, mode):
             raise ValueError("Um LOD não reduziu a geometria medida.")
         triangles = lod["triangles"]
         files.add(path)
+        if "preview" in lod:
+            preview = f"models/lod{level}.glb"
+            if lod["preview"] != preview:
+                raise ValueError("Nome de prévia LOD incompatível.")
+            read_source(folder / preview)
+            files.add(preview)
+    if (folder / "reports/deformable-lods.json").is_file():
+        read_local(folder / "reports/deformable-lods.json", 64 * 1024)
+        files.add("reports/deformable-lods.json")
     if len(report["texture_variants"]) > 3:
         raise ValueError("Quantidade de texturas incompatível.")
     for item in report["texture_variants"]:
@@ -194,6 +203,9 @@ def build(args):
                 "mode": mode, "quality": args.quality, "max_cost_centavos": 0}
         if mode == "humanoid":
             info["motion_revision"] = args.motion_revision
+            if getattr(args, "deformable_lods", False):
+                info["deformable_lods"] = True
+                info["proportions"] = getattr(args, "proportions", None)
         if args.requirements:
             info["requirements"] = documented_requirements(args.requirements)
         if args.model:
@@ -240,7 +252,8 @@ def main(argv=None):
     sources.add_argument("--model", type=Path, help="GLB local escolhido pelo operador")
     make.add_argument("--references", type=Path, help="lista JSON de revisões licenciadas")
     make.add_argument("--approved", action="store_true")
-    make.add_argument("--motion-revision", type=int, choices=(1,2), default=1)
+    make.add_argument("--deformable-lods", action="store_true")
+    make.add_argument("--motion-revision", type=int, choices=(1, 2, 3), default=1)
     make.add_argument("--requirements", type=Path, help="requisitos documentais JSON")
     check = sub.add_parser("verify", help="verificar inventário e hashes sem extrair")
     check.add_argument("package", type=Path)

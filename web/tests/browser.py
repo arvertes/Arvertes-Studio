@@ -312,6 +312,8 @@ def character_bundle_flow(page, origin, directory):
     page.locator("#character-animationDirection").fill("Andar e pular.")
     page.locator(".character-form").get_by_role("button", name="Salvar ficha").click()
     expect(page.locator("#characters-status")).to_contain_text("Ficha salva")
+    expect(page.locator("#character-editor")).to_contain_text("Versão da ficha: 2")
+    expect(page.get_by_label("Anexar Capa 2D")).to_be_enabled()
 
     cover = directory / "capa.png"
     cover.write_bytes(base64.b64decode(

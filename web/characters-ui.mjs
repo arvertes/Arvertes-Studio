@@ -146,16 +146,16 @@ function renderEditor(record) {
   form.append(controls);
   form.addEventListener("submit",async event=>{
     event.preventDefault();
-    save.disabled=true;
+    const actions=root.querySelectorAll("button:enabled, input[type=file]:enabled");
+    for(const action of actions)action.disabled=true;
     try {
       const payload=Object.fromEntries(new FormData(form).entries());
       payload.id=record.id;payload.revision=record.revision;
-      const updated=await repo.save(payload);
-      status(studioBackend() ? "Ficha salva na sua conta." : "Ficha salva neste navegador.");
+      Object.assign(record, await repo.save(payload));
       await refresh();
-      selected=updated.id;
+      status(studioBackend() ? "Ficha salva na sua conta." : "Ficha salva neste navegador.");
     }catch(error){status(error.message,true);}
-    finally{save.disabled=false;}
+    finally{for(const action of actions)action.disabled=false;}
   });
   const cover=mediaCard(record,"cover");
   cover.classList.add("character-cover-card");

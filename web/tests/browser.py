@@ -441,11 +441,30 @@ def laboratory_flow(page, origin, artifacts):
             download.value.save_as(artifacts / name)
 
 
+def character_mesh_preview(page, origin, path, capture):
+    page.goto(origin + "#library")
+    page.get_by_label("Importar GLB", exact=True).set_input_files(path)
+    page.get_by_role("button", name="Abrir visualização 3D").click()
+    expect(page.locator(".viewer canvas")).to_be_visible()
+    clips = page.get_by_label("Animação", exact=True)
+    expect(clips.locator("option")).to_have_count(12)
+    clips.select_option(label="Walk")
+    page.get_by_role("button", name="Malha", exact=True).click()
+    expect(page.get_by_role("button", name="Malha", exact=True)).to_have_attribute("aria-pressed", "true")
+    capture(page, "sprint6-malha")
+    page.get_by_role("button", name="Malha", exact=True).click()
+    clips.select_option(label="Parada")
+    capture(page, "sprint6-manequim")
+    page.get_by_role("button", name="Fechar", exact=True).click()
+    expect(page.locator(".viewer canvas")).to_have_count(0)
+
+
 def main():
     args = argparse.ArgumentParser(description=__doc__)
     args.add_argument("--chromium", help="Caminho do Chromium instalado, quando não fornecido pelo Playwright")
     args.add_argument("--screenshots", type=Path, help="Diretório opcional para capturas")
     args.add_argument("--lab-artifacts", type=Path, help="Salvar exemplos sintéticos da suíte de laboratório")
+    args.add_argument("--character-preview", type=Path, help="GLB animado produzido pelo Blender")
     options = args.parse_args()
     if options.lab_artifacts:
         options.lab_artifacts.mkdir(parents=True, exist_ok=True)
@@ -462,7 +481,7 @@ def main():
         with sync_playwright() as playwright, tempfile.TemporaryDirectory() as scratch:
             browser = playwright.chromium.launch(executable_path=options.chromium, args=["--use-angle=swiftshader"])
             try:
-                for scenario, viewport in [
+                scenarios = [
                     (settings_and_panels, {"width": 1280, "height": 900}),
                     (production_flow, {"width": 1280, "height": 900}),
                     (office_and_mobile, {"width": 375, "height": 812}),
@@ -471,13 +490,17 @@ def main():
                     (agent_memory_flow, {"width": 1280, "height": 900}),
                     (character_bundle_flow, {"width": 1280, "height": 900}),
                     (laboratory_flow, {"width": 375, "height": 812}),
-                ]:
+                ]
+                if options.character_preview:
+                    scenarios.append((character_mesh_preview, {"width": 1280, "height": 900}))
+                for scenario, viewport in scenarios:
                     page = browser.new_page(viewport=viewport, accept_downloads=True)
                     errors = []
                     page.on("pageerror", lambda error: errors.append(str(error)))
                     arguments = {
                         production_flow: (Path(scratch), capture), character_bundle_flow: (Path(scratch),),
                         office_and_mobile: (capture,), laboratory_flow: (options.lab_artifacts,),
+                        character_mesh_preview: (options.character_preview, capture),
                     }
                     extra = arguments.get(scenario, ())
                     scenario(page, origin, *extra)

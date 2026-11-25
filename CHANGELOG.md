@@ -2,6 +2,10 @@
 
 ## v0.3 Web em desenvolvimento
 
+- Sprint 6: produção local por briefing com Atlas, referências versionadas, reuso de GLB, revisão humana por SHA-256 e recuperação de pacotes em armazenamento substituto.
+- Sprint 6: manequim com proporções ajustáveis, 11 clipes sintéticos e LODs deformáveis com verificação em poses, além de controles de malha e animação na prévia GLB.
+- Sprint 6: processo experimental independente da interface com sessão limitada e invalidação de leases ao revogar a autorização.
+
 - Verificação de saúde e do catálogo autenticado do Arvertes Agents com diagnóstico do início lento do Render, da sessão e das falhas de rede.
 - Conversas, dossiês e produções da conta separados dos dados locais. Configurações permite alternar para os dados deste navegador e voltar ao servidor.
 - Escritório virtual exibe o estado observado na fila real do usuário e o horário da última consulta.

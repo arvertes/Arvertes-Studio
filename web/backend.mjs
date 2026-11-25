@@ -238,6 +238,7 @@ export function createBackend(origin, accessToken, fetcher = fetch, {
   }
   return {
     agents: () => request("/agents"),
+    departments: () => request("/production-departments"),
     activity: () => request("/agents/activity"),
     resources: () => request("/resources"),
     chat: (agent, message, remember) => request(agentPath(agent), {

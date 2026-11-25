@@ -1,4 +1,4 @@
-import { abandon, authorize, block, claim, complete, initLab, recover, rollback, sixHours, stop, technique,
+import { abandon, authorize, block, claim, complete, initLab, recover, rollback, sixHours, stop, technique, techniques,
   validateResult } from "./lab-engine.mjs";
 import { fixtureAudio, fixtures } from "./lab-fixtures.mjs";
 import { exportGlb } from "./lab-geometry.mjs";
@@ -58,7 +58,7 @@ function execute(lease, signal) {
     worker.onmessage = event => finish(resolve, event.data);
     worker.onerror = worker.onmessageerror = () => finish(reject, Error("Executor de geometria indisponível."));
     if (signal.aborted) cancel();
-    else worker.postMessage({ fixture: lease.fixture, token: lease.token });
+    else worker.postMessage({ fixture: lease.fixture, token: lease.token, method: lease.method });
   });
 }
 
@@ -81,6 +81,8 @@ export function mountLaboratory(root) {
   feedback.setAttribute("role", "status");
   const select = el("select");
   for (const [id, fixture] of Object.entries(fixtures)) select.add(new Option(fixture.title, id));
+  const method = el("select");
+  for (const [id, name] of Object.entries(techniques)) method.add(new Option(name, id));
   const policy = el("input");
   policy.type = "checkbox";
   const timeout = el("select");
@@ -121,7 +123,7 @@ export function mountLaboratory(root) {
     if (closing) return;
     const fixture = fixtures[state.lease?.fixture || select.value];
     const runs = Object.values(state.runs);
-    const run = state.runs[select.value + ":" + technique];
+    const run = state.runs[select.value + ":" + method.value];
     const lane = state.lane[select.value];
     const remaining = sixHours - state.activeMs % sixHours;
     summary.replaceChildren(fields([
@@ -141,6 +143,7 @@ export function mountLaboratory(root) {
     stopButton.disabled = !storage || (!state.enabled && !state.lease && !controller);
     select.disabled = Boolean(controller || stopping);
     policy.disabled = select.disabled;
+    method.disabled = select.disabled;
     timeout.disabled = select.disabled;
     detail.replaceChildren();
     if (!available) detail.append(el("p", "muted", "Worker, trava entre abas ou armazenamento local indisponível."));
@@ -225,7 +228,7 @@ export function mountLaboratory(root) {
         if (run.signal.aborted || closing) return;
         state = await update(record => {
           recover(record, Date.now());
-          authorize(record, select.value, policy.checked, Date.now());
+          authorize(record, select.value, policy.checked, Date.now(), method.value);
         });
         paint();
         if (run.signal.aborted || closing) {
@@ -261,7 +264,8 @@ export function mountLaboratory(root) {
   }
 
   select.addEventListener("change", paint);
-  panel.append(el("h2", "", "Laboratório Experimental"), control("Asset sintético", select),
+  method.addEventListener("change", paint);
+  panel.append(el("h2", "", "Laboratório Experimental"), control("Asset sintético", select), control("Técnica experimental", method),
     control("Tempo máximo da tarefa", timeout),
     control("Autorizar Classe A apenas na produção sintética", policy),
     startButton, stopButton, feedback, summary, detail,
@@ -278,6 +282,7 @@ export function mountLaboratory(root) {
     if (controller || closing) return;
     state = saved;
     select.value = saved.fixture;
+    method.value = saved.method || technique;
     paint();
   }).catch(error => { feedback.textContent = error.message; });
   mounted = {

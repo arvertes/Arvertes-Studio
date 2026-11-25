@@ -29,9 +29,14 @@ function inspect(mesh) {
   return { unique, invalid, duplicates: mesh.faces.length - invalid - unique.size };
 }
 
-export function optimize(mesh) {
+export function optimize(mesh, method = "duplicate_faces_v1") {
   const before = inspect(mesh);
   if (before.invalid) throw Error("Faces inválidas exigem revisão humana.");
+  if (method === "duplicate_faces_sort_v1") {
+    const ordered = mesh.faces.map(face => [faceKey(face), face]).sort(([a], [b]) => a.localeCompare(b));
+    return { vertices: mesh.vertices, faces: ordered.filter(([key], i) => !i || ordered[i-1][0] !== key).map(([,face]) => face) };
+  }
+  if (method !== "duplicate_faces_v1") throw Error("Técnica experimental desconhecida.");
   return { vertices: mesh.vertices, faces: [...before.unique.values()] };
 }
 

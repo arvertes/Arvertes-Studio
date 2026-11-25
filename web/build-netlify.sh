@@ -31,7 +31,7 @@ cp "$temp/upstream/LICENSE" "$output/HABBLAUD-LICENSE.txt"
 cp web/index.html web/studio.css web/{studio,ui,office,library,pipeline,glb,system-panels,coordination,production-catalog,production-store,production-ui,agent-dialogue,agent-memory,agent-chat,character-model,character-store,characters-ui,package-zip,backend}.mjs office_habblaud/roster.json "$output/"
 mkdir -p "$output/fonts" "$output/licenses"
 cp web/{inspection-worker,knowledge-ui}.mjs "$output/"
-cp web/lab-{engine,fixtures,geometry,store,ui,worker}.mjs "$output/"
+cp web/departments-ui.mjs web/lab-{engine,fixtures,geometry,store,ui,worker}.mjs "$output/"
 modules=web/node_modules
 python3 web/write-backend-config.py "$output/backend-config.mjs"
 "$modules/.bin/esbuild" web/backend-auth.mjs --bundle --minify --format=esm --outfile="$output/backend-auth.mjs"

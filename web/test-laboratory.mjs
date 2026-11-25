@@ -120,3 +120,19 @@ test("superfície de controle sem ganho gera evidência e nenhuma revisão", asy
   assert.equal(state.runs[lease.id].promotion, "no_improvement");
   assert.deepEqual(state.lane, {});
 });
+
+test("técnica alternativa preserva métricas e fica para revisão sem substituir a revisão sintética", async () => {
+  const state = initLab();
+  const method = "duplicate_faces_sort_v1";
+  authorize(state, "mannequin", true, 0, method);
+  const lease = claim(state, "alternate", 1, 1000);
+  const original = fixtureMesh(lease.fixture);
+  const candidate = optimize(original, method);
+  const measured = await validateResult(lease, { token:lease.token, elapsed:2, candidate,
+    sourceSha:await meshDigest(original), candidateSha:await meshDigest(candidate), metrics:compare(original,candidate) });
+  complete(state, lease.token, measured, 10);
+  assert.equal(state.runs[lease.id].promotion, "human_review");
+  assert.equal(state.runs[lease.id].method, method);
+  assert.ok(verifiedImprovement(state.runs[lease.id].metrics));
+  assert.deepEqual(state.lane, {});
+});

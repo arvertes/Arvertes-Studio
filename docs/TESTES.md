@@ -81,3 +81,7 @@ A suíte Web inclui grafos sem ciclos, reaproveitamento de relatórios por vers�
 ## Sprint 4
 
 `node --test web/test-laboratory.mjs` cobre integridade e exportação sintética, decisões A/B/C, concorrência, recuperação e dois ciclos com relógio controlado. A suíte Chromium testa o worker real, a autorização, a trava, o encerramento, a prioridade do AutoPipeline, a recarga, a reversão e o isolamento da fila. Para salvar os resultados sintéticos, passe `--lab-artifacts ./diretorio` ao script `web/tests/browser.py`.
+
+## Sprint 5
+
+`python tests/integration/check_lab_production.py /caminho/para/blender --artifacts ./exemplos` testa as receitas reais do Blender 5.3.0, reimportações, WAVs e comparação das revisões. A fila SQLite é coberta pela suíte Desktop. O [relatório da Sprint 5](SPRINT_5.md) reúne os procedimentos e os limites.

@@ -6,11 +6,12 @@ from tempfile import TemporaryDirectory
 
 from PySide6.QtCore import QProcess, QProcessEnvironment, QUrl
 from PySide6.QtGui import QDesktopServices
-from PySide6.QtWidgets import (QComboBox, QDialog, QFileDialog, QFormLayout, QInputDialog, QLabel, QLineEdit, QMessageBox,
+from PySide6.QtWidgets import (QCheckBox, QComboBox, QDialog, QFileDialog, QFormLayout, QInputDialog, QLabel, QLineEdit, QMessageBox,
                                QPlainTextEdit, QVBoxLayout)
 
 from .character_production import IDENTIFIER, LocalPackages, _job, _json, publish, review
 from .pages import button
+from .settings import validate_blender_path
 from arvertes_studio.core.character_style import study_presets, validate_style
 
 
@@ -21,6 +22,7 @@ class CharacterDialog(QDialog):
         self.resize(580, 500)
         self.production = production
         self.root = production.root.parent / "character-experiments"
+        self.executor_config = production.root.parent / "production-executors.json"
         self.process = QProcess(self)
         self.process.setWorkingDirectory(str(Path(__file__).resolve().parents[1]))
         inherited = QProcessEnvironment.systemEnvironment()
@@ -35,7 +37,7 @@ class CharacterDialog(QDialog):
         self.stderr = ""
         self.input_directory = None
         self.images = []
-        self.base = self.handoff = self.custom = None
+        self.base = self.handoff = self.custom = self.dossier = None
 
         layout = QVBoxLayout(self)
         form = QFormLayout()
@@ -48,19 +50,35 @@ class CharacterDialog(QDialog):
                                 ("Lite", "Baixa", "Média", "Alta", "Ultra", "Cinematográfica")):
             self.quality.addItem(caption, key)
         self.source = QComboBox()
+        self.source.addItem("Imagens → geometria", "image_guided")
         self.source.addItem("GLB fornecido", "base_glb")
         self.source.addItem("Manequim sintético", "synthetic_fixture")
         self.source.addItem("Blender procedural", "procedural")
         self.source.addItem("GLB externo com comprovante", "external_glb")
-        self.source.addItem("Imagem → geometria (verificar disponibilidade)", "image_guided")
+        self.vision = QCheckBox("Solicitar análise visual local")
+        self.vision.setEnabled(self.executor_config.is_file())
+        self.tools_label = QLabel()
+        self.tools_label.setWordWrap(True)
+        try:
+            validate_blender_path(production.blender_path())
+            self.tools_label.setText("Blender configurado. A disponibilidade é medida ao iniciar.")
+        except (OSError, ValueError):
+            self.tools_label.setText("Blender pendente. Configure o caminho uma vez no Studio.")
+        if not self.executor_config.is_file():
+            self.tools_label.setText(self.tools_label.text() + "\nTripoSR e Ollama aguardam configuração local. "
+                                     "Use um GLB fornecido ou selecione Blender procedural.")
         form.addRow("Nome", self.name)
         form.addRow("Características", self.description)
         form.addRow("Perfil", self.quality)
         form.addRow("Origem", self.source)
+        form.addRow(self.tools_label)
+        form.addRow(self.vision)
         self.image_button = button("Escolher imagens de referência", self.choose_images)
         self.base_button = button("Escolher GLB base", self.choose_base)
         form.addRow(self.image_button)
         form.addRow(self.base_button)
+        self.dossier_button = button("Selecionar vínculo da ficha", self.choose_dossier)
+        form.addRow(self.dossier_button)
         self.handoff_button = button("Selecionar comprovante JSON", self.choose_handoff)
         form.addRow(self.handoff_button)
         self.design = QComboBox()
@@ -108,6 +126,18 @@ class CharacterDialog(QDialog):
         self.design.setEnabled(source == "procedural")
         self.design_button.setEnabled(source == "procedural" and self.design.currentData() is None)
 
+    def choose_dossier(self):
+        file, _ = QFileDialog.getOpenFileName(self, "Vínculo baixado da ficha do Studio", "", "JSON (*.json)")
+        if file:
+            try:
+                data = _json(Path(file), 1024)
+                if not isinstance(data, dict) or data.keys() != {"id", "revision"}:
+                    raise ValueError("Selecione um vínculo exportado da ficha.")
+                self.dossier = data
+                self.dossier_button.setText(f"Ficha vinculada · revisão {data['revision']}")
+            except (OSError, ValueError) as error:
+                self.status.setText(str(error))
+
     def choose_handoff(self):
         file, _ = QFileDialog.getOpenFileName(self, "Comprovante do executor", "", "JSON (*.json)")
         if file:
@@ -148,7 +178,7 @@ class CharacterDialog(QDialog):
         briefing = Path(self.input_directory.name) / "brief.json"
         briefing.write_text(json.dumps({
             "name": self.name.text().strip(), "description": description, "source": source,
-            "quality": self.quality.currentData(), "requirements": ["rig", "animations", "materials", "lods"],
+            "quality": self.quality.currentData(), "dossier":self.dossier, "requirements": ["rig", "animations", "materials", "lods"],
             **({"design": design, "requirements": ["rig", "animations", "materials", "lods", "pbr_maps"]}
                if source == "procedural" else {}),
         }), encoding="utf-8")
@@ -160,6 +190,10 @@ class CharacterDialog(QDialog):
             args.extend(("--base", self.base))
         if source == "external_glb":
             args.extend(("--handoff", self.handoff))
+        if self.executor_config.is_file():
+            args.extend(("--executor-config", str(self.executor_config)))
+            if self.vision.isChecked():
+                args.append("--analyze-visual")
         self.stderr = ""
         self.begin.setEnabled(False)
         self.status.setText("Planejando ou executando localmente…")
@@ -169,6 +203,7 @@ class CharacterDialog(QDialog):
         output = bytes(self.process.readAllStandardError()).decode("utf-8", "replace")
         self.stderr = (self.stderr + output)[-3000:]
         labels = {"references": "Validando imagens de referência", "planning": "Atlas está elaborando o plano",
+                  "vision": "Consultando o analisador visual local", "generation": "Gerador local em execução",
                   "blender": "Blender local em execução", "checking": "Verificando materiais, malhas e relatórios",
                   "packaging": "Empacotando a revisão por SHA-256"}
         for line in reversed(self.stderr.splitlines()):
@@ -223,10 +258,24 @@ class CharacterDialog(QDialog):
         try:
             job = _job(self.root, identifier)
             state = _json(job / "status.json")
+            plan = _json(job / "plan.json")
+            selected = plan.get("tool_selection", {}).get("executor")
+            readiness = plan.get("executor_inventory", {})
+            choices = {"blender_procedural":"Blender procedural", "blender_reuse":"Reuso de GLB",
+                       "triposr":"TripoSR", "ollama":"Ollama", "sf3d":"Stable Fast 3D",
+                       "trellis":"TRELLIS", "trellis2":"TRELLIS.2", "hunyuan21":"Hunyuan3D", "unirig":"UniRig"}
+            if readiness:
+                active = [choices[name] for name in choices if readiness.get(name, {}).get("available")]
+                blocked = [choices[name] for name in choices if name in readiness and not readiness[name]["available"]]
+                self.tools_label.setText("Escolha de Atlas · " + (choices.get(selected) or "aguardando executor")
+                                         + "\nDisponíveis · " + (", ".join(active) or "nenhum")
+                                         + "\nBloqueados · " + ", ".join(blocked))
             self.open.setEnabled(True)
             if state["state"] != "awaiting_human_review":
                 reason = state.get("reason")
-                reason = {"image_guided_generator_unavailable": "Gerador de geometria por imagens indisponível.",
+                reason = {"image_guided_generator_unavailable": "Gerador de geometria por imagens indisponível. "
+                          "Forneça um GLB ou escolha uma receita Blender.",
+                          "executor_or_sentinel_blocked": "Sentinel ou executor bloqueou o início. Confira o plano salvo.",
                           "quality_profile_requires_executor_validation": "Perfil fora da faixa validada para execução."}.get(
                               reason, reason)
                 missing = ", ".join(state.get("missing_required", []))
@@ -253,7 +302,7 @@ class CharacterDialog(QDialog):
         if answer == QMessageBox.StandardButton.Yes:
             try:
                 fidelity = None
-                if decision == "accept" and _json(job / "brief.json")["source"] in ("procedural", "external_glb"):
+                if decision == "accept" and _json(job / "brief.json")["source"] in ("procedural", "external_glb", "image_guided"):
                     notes, accepted = QInputDialog.getMultiLineText(
                         self, "Comparação visual", "Após conferir as imagens, descreva silhueta, proporções, "
                         "cores, materiais, roupa, acessórios, estilo e diferenças ainda presentes.")

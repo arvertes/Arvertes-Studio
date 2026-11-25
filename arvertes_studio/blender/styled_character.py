@@ -61,6 +61,11 @@ def pieces(design):
     if design["hair"] == "braid":
         result["Trança"] = [tube([(0,.104,1.79),(.022,.149,1.67),(.050,.173,1.52),(.08,.196,1.43)],
                                 [(.042,.035),(.037,.032),(.026,.025),(.011,.013)],["Head"]*4,3)]
+        result["Trança"].append(tube([(.047,.170,1.548),(.055,.177,1.515)],[(.031,.032),(.028,.028)],
+                                      ["Head"]*2,4,4,10))
+    if design["hair"] == "crest":
+        result["Costeletas"] = [tube([(sign*.084,.019,1.771),(sign*.086,.025,1.730)],
+                                      [(.023,.030),(.012,.028)],["Head"]*2,3,5,10) for sign in (-1, 1)]
     if design["beard"] == "short":
         result["Barba"] = [tube([(0,-.045,1.585),(0,-.072,1.625),(0,-.071,1.679)],
                                [(.022,.028),(.072,.044),(.073,.030)],["Head"]*3,3)]
@@ -71,6 +76,9 @@ def pieces(design):
     else:
         result["Mochila"] = [tube([(0,.159,1.04),(0,.201,1.14),(0,.194,1.38)],
                                   [(.099,.058),(.135,.088),(.106,.063)],["Root","Spine","Chest"],contrast)]
+        result["Alças"] = [tube([(sign*.155,.109,1.459),(sign*.141,-.028,1.486),(sign*.139,-.114,1.37),
+                                  (sign*.136,-.145,1.206)],[(.024,.014),(.025,.015),(.021,.013),(.017,.012)],
+                                 ["Chest","Chest","Chest","Spine"],2,8,10) for sign in (-1,1)]
         result["Fivela"] = [tube([(0,-.155,1.014),(0,-.162,1.044),(0,-.157,1.074)],
                                  [(.025,.016),(.057,.022),(.025,.016)],["Root"]*3,4,5,10)]
     # Analytic details are evaluated with the same Head or Hand transforms as the underlying mesh.
@@ -81,8 +89,18 @@ def pieces(design):
                  ["Head"]*2,3,4,10),
             tube([(sign*.56,-.043,.958),(sign*.588,-.071,.937)],[(.025,.021),(.013,.012)],
                  [hand]*2,0,4,10)])
-    result["Rosto e mãos"].append(tube([(0,-.071,1.65),(0,-.118,1.667)],[(.024,.020),(.012,.013)],
-                                      ["Head"]*2,0,4,10))
+    result["Rosto e mãos"].extend([
+        tube([(0,-.071,1.65),(0,-.111,1.665)],[(.021,.020),(.012,.013)],["Head"]*2,0,4,10),
+        tube([(-.022,-.085,1.633), (0,-.096,1.630), (.022,-.086,1.633)],
+             [(.004,.005),(.005,.006),(.004,.005)],["Head"]*3,3,4,10),
+    ])
+    result["Gola"] = [tube([(0,0,1.497),(0,0,1.524),(0,0,1.56)],
+                           [(.101,.09),(.095,.076),(.071,.068)],["Chest","Chest","Head"],1,5,16)]
+    for sign, side in ((-1,"R"), (1,"L")):
+        result.setdefault("Botas", []).append(tube(
+            [(sign*.116,0,.185),(sign*.116,-.018,.107),(sign*.116,-.15,.059)],
+            [(.050,.056),(.055,.059),(.061,.031)],
+            [f"Shin.{side}",f"Foot.{side}",f"Foot.{side}"],2,7,14))
     return result
 
 
@@ -112,6 +130,11 @@ def pose(name, phase):
         for side, offset in (("L",0),("R",.5)):
             rotation[f"Foot.{side}"] = (rotation[f"Foot.{side}"][0] * .82, 0, 0)
             rotation[f"Hand.{side}"] = (0, .077*sin(2*pi*(phase+offset)), 0)
+        if name == "WalkToRun":
+            factor = (.42 + .34 * (phase*phase*(3-2*phase))) / (.42 + .34*phase)
+            for bone, value in rotation.items():
+                rotation[bone] = tuple(component * factor for component in value)
+            height *= factor
     elif name in ("Reach", "TalkGesture"):
         rotation["Hand.R"] = (0, 0, .18*sin(pi*phase)**2)
     return rotation, height, yaw
@@ -119,8 +142,13 @@ def pose(name, phase):
 
 def rig_and_motion(collection, materials, design):
     rig, members = meshes(collection, materials, design)
+    from .gait_contact import correct
+
     animate(rig, CLIPS, pose)
+    baseline = motion_evidence(rig, members["Corpo"], ("Walk","Run"), ("Foot.L","Foot.R"), production_sample=True)
+    contact = correct(rig, members["Corpo"])
     report = motion_evidence(rig, members["Corpo"], CLIPS, ("Foot.L", "Foot.R"), production_sample=True)
+    report["contact"] = {**contact, "same_geometry_before": baseline["clips"]}
     report["manual_review"] = ["foot_plant", "balance", "intersections", "cloth_motion", "naturalness"]
     for mesh in members.values():
         if any(abs(sum(group.weight for group in point.groups)-1) > 1e-5 for point in mesh.data.vertices):

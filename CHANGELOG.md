@@ -2,6 +2,9 @@
 
 ## v0.3 Web em desenvolvimento
 
+- Sprint 8: inventário e seleção de executores com Sentinel, cliente visual Ollama, roteiro Unreal e arquivamento de pacotes vinculados à revisão da ficha.
+- Sprint 8: ajuste de contato dos pés da bancada procedural, comparação visual e fila de experimentos versionada em cinco etapas.
+
 - Sprint 7: personagens procedurais modulares com estilo explícito, mapas PBR opacos verificados por canal, LODs medidos por peça e revisão humana de fidelidade.
 - Sprint 7: adaptação de GLBs externos com preservação de origem, ponte opcional TripoSR, comparação do Laboratório e transferência de clipes entre rigs compatíveis.
 

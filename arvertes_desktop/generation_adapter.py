@@ -16,10 +16,11 @@ import psutil
 from arvertes_studio.core.asset_package import MAX_IMAGE, image_info
 from .asset_package import package_slot, read_local
 from .blender_job import read_source
-from .resources import MIB, reading, reserve
+from .resources import MIB, reading, reserve, stop_children
 
-PROVIDERS = {"triposr": "MIT", "trellis2": "MIT", "hunyuan21": "restricted_review",
-             "local_authored": "operator_declared"}
+PROVIDERS = {"triposr": "MIT", "trellis": "MIT", "trellis2": "MIT", "hunyuan21": "restricted_review",
+             "sf3d": "restricted_review", "unirig": "restricted_review", "local_authored": "operator_declared"}
+SINGLE_VIEW = {"triposr", "sf3d", "trellis2", "hunyuan21"}
 GPU_MIN_MIB = 6144
 
 
@@ -36,8 +37,8 @@ def validate_handoff(value, model, references):
             or not all(isinstance(item, str) and item in references for item in value["references"])
             or len(set(value["references"])) != len(value["references"])):
         raise ValueError("O handoff deve vincular a revisão GLB, as imagens e a licença declarada.")
-    if value["provider"] == "triposr" and len(value["references"]) != 1:
-        raise ValueError("TripoSR reconstrói uma imagem por execução.")
+    if value["provider"] in SINGLE_VIEW and len(value["references"]) != 1:
+        raise ValueError("O perfil deste gerador aceita uma imagem por execução.")
     return {**value, "evidence": "operator_supplied_artifact_hashes",
             "license_policy": PROVIDERS[value["provider"]], "inference_verified_by_studio": False}
 
@@ -93,6 +94,8 @@ def run_triposr(args):
     status = probe(args.checkout, args.weights, args.python, approved=args.approved)
     if status["state"] != "eligible_to_attempt":
         raise ValueError("Executor indisponível. " + ", ".join(status["reasons"]))
+    if getattr(args, "license_reviewed", False) is not True:
+        raise ValueError("Revisão da licença do executor necessária.")
     sample = reading(cpu_interval=.25)
     if sample.cpu >= 85 or sample.available < reserve(sample) + 3072:
         raise ValueError("Sentinel manteve os recursos locais reservados.")
@@ -127,15 +130,21 @@ def run_triposr(args):
             deadline = monotonic() + 120
             try:
                 while process.poll() is None:
+                    try:
+                        tree = psutil.Process(process.pid)
+                        used = sum(child.memory_info().rss for child in (tree, *tree.children(recursive=True)))
+                    except psutil.NoSuchProcess:
+                        used = 0
                     if monotonic() >= deadline or log.stat().st_size > MIB or (
                             psutil.virtual_memory().available < reserve(sample)*MIB
-                            or disk_usage(work).free < 128*MIB):
+                            or disk_usage(work).free < 128*MIB or used > 3072*MIB):
                         raise ValueError("Sentinel encerrou a tarefa por tempo, log, RAM ou armazenamento.")
                     sleep(.25)
                 if process.returncode:
                     raise ValueError("O TripoSR local falhou. Confira runtime, pesos e GPU autorizados.")
             finally:
                 if process.poll() is None:
+                    stop_children(process.pid)
                     try:
                         os.killpg(process.pid, signal.SIGKILL)
                     except ProcessLookupError:
@@ -164,6 +173,7 @@ def main():
     for option in ("checkout","weights","python"):
         cli.add_argument("--" + option, type=Path, required=True)
     cli.add_argument("--approved", action="store_true")
+    cli.add_argument("--license-reviewed", action="store_true")
     cli.add_argument("--image", type=Path)
     cli.add_argument("--output", type=Path)
     cli.add_argument("--version")

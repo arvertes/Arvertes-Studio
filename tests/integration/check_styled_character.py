@@ -103,6 +103,7 @@ def exercise(blender, agents, artifacts, baseline):
                     payload = outer.read(filename)
                     assert entry == {"bytes": len(payload), "sha256": sha256(payload).hexdigest()}
                 plan = read_zip(outer, "plan.json")
+                assert plan["tool_selection"]["executor"] == "blender_procedural"
                 assert plan["traits"]["clothes"]["origin"] == "operator"
                 assert plan["hypotheses"][0]["origin"] == "unverified_hypothesis"
                 assert plan["reference_views"] == [{"sha256":digest,"view":"front","origin":"operator"}]
@@ -119,6 +120,10 @@ def exercise(blender, agents, artifacts, baseline):
                 assert 3000 <= quality["base"]["triangles"] <= design["triangle_budget"]
                 assert not quality["findings"] and lod["accepted_count"]
                 assert len(quality["texture_variants"]) == 30 and len(motion["clips"]) == 11
+                for clip in ("Walk", "Run"):
+                    before = motion["contact"]["same_geometry_before"][clip]["indicative_foot_drift_m"]
+                    after = motion["clips"][clip]["indicative_foot_drift_m"]
+                    assert after < before * .15 and motion["clips"][clip]["closure_error_m"] < .01
                 assert set(style["meshes"]) >= {"Corpo", "Vestuário", "Cabelo"}
                 assert len(lod["attempts"][0]["poses"][0]["by_component_m"]) == len(style["meshes"])
                 for rel, count in (("models/preview.glb", quality["base"]["triangles"]),

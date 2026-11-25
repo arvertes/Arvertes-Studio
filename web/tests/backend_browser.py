@@ -26,6 +26,15 @@ from arvertes_cloud.web import SupabaseAuth, create_api
 from arvertes_cloud.workspace import Workspace
 
 studio = Path(__file__).resolve().parents[2]
+acceptance = os.getenv("ARVERTES_TEST_CHARACTER_ACCEPTANCE")
+drive = None
+if acceptance:
+    acceptance = json.loads(acceptance)
+    fixtures = runpy.run_path(Path(acceptance["agents"]) / "tests/test_studio_api.py")
+    service = fixtures["DriveDouble"]()
+    def drive():
+        return fixtures["DriveWarehouse"](service, "characters", lambda stream, **_: stream.read(),
+                                          fixtures["Download"], parents=(("root","Arvertes"),))
 write_glb = runpy.run_path(studio / "tests/integration/fixture_glb.py")["write_fixture"]
 
 
@@ -64,7 +73,7 @@ else:
 with ThreadingHTTPServer(("127.0.0.1", 0), partial(Quiet, directory=studio / "web/dist")) as server:
     Thread(target=server.serve_forever, daemon=True).start()
     origin = f"http://127.0.0.1:{server.server_port}"
-    api = TestClient(create_api(Workspace(db), authenticate=authenticate, origins=(origin,)))
+    api = TestClient(create_api(Workspace(db, drive=drive), authenticate=authenticate, origins=(origin,)))
     if gotrue:
         wrong_user = signup_fixture()
         denied = api.get("/api/v1/agents", headers={"Authorization": "Bearer " + wrong_user["access_token"]})
@@ -126,6 +135,16 @@ with ThreadingHTTPServer(("127.0.0.1", 0), partial(Quiet, directory=studio / "we
         expect(page.locator(".connection")).to_contain_text("Arvertes Agents conectado")
         if gotrue:
             assert "/token" in auth_requests, "O SDK não renovou a sessão com o Supabase Auth local."
+        if acceptance:
+            from acceptance_character import exercise
+            page.goto(origin + "/#characters")
+            page.locator("#character-new-name").fill("Fixture remota")
+            page.locator("#character-create button").click()
+            expect(page.get_by_role("heading", name="Fixture remota")).to_be_visible()
+            exercise(page, Path(tmp), studio, acceptance)
+            assert not errors, errors
+            browser.close()
+            raise SystemExit(0)
         expect(page.locator("#chat-agent")).to_have_value("coordenador")
         expect(page.locator("#chat-connection")).to_contain_text("Servidor")
         page.goto(origin + "/#agents")

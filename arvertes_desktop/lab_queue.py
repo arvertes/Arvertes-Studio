@@ -6,10 +6,11 @@ from itertools import groupby
 from pathlib import Path
 from shutil import disk_usage
 from struct import pack
-from time import time, monotonic
+from time import time, monotonic, sleep
 from uuid import uuid4
 import json
 import re
+import signal
 import sqlite3
 
 import psutil
@@ -27,6 +28,10 @@ CREATE TABLE IF NOT EXISTS control (
   elapsed_us INTEGER NOT NULL, cycles INTEGER NOT NULL, cycling_improvements INTEGER NOT NULL
 );
 INSERT OR IGNORE INTO control VALUES (1,0,0,0,0,0);
+CREATE TABLE IF NOT EXISTS runtime (
+  id INTEGER PRIMARY KEY CHECK(id=1), authorization INTEGER NOT NULL
+);
+INSERT OR IGNORE INTO runtime VALUES (1,0);
 CREATE TABLE IF NOT EXISTS workers (
   id TEXT PRIMARY KEY, seen REAL NOT NULL, state TEXT NOT NULL
 );
@@ -107,6 +112,9 @@ class Queue:
             raise ValueError("A ativação exige autorização explícita do operador.")
         field, value = operations[option]
         with self._transaction() as db:
+            if field == "enabled":
+                db.execute("""UPDATE runtime SET authorization=authorization+1 WHERE id=1
+                    AND (SELECT enabled FROM control WHERE id=1)<>?""", (value,))
             db.execute(f"UPDATE control SET {field}=? WHERE id=1", (value,))
             if option in ("stop", "owner-busy"):
                 for row in db.execute("SELECT * FROM jobs WHERE state='running'").fetchall():
@@ -123,11 +131,24 @@ class Queue:
                 db.execute("UPDATE jobs SET priority=1 WHERE id=? AND state='queued'", (job,))
         return job
 
-    def claim(self, worker):
+    def authorization(self):
+        with closing(sqlite3.connect(self.path, timeout=5)) as db:
+            enabled, version = db.execute(
+                "SELECT enabled,authorization FROM control JOIN runtime USING(id)").fetchone()
+        return version if enabled else None
+
+    def offline(self, worker):
+        with self._transaction() as db:
+            db.execute("DELETE FROM workers WHERE id=? AND state='idle'", (worker,))
+
+    def claim(self, worker, authorization=None):
         if not isinstance(worker, str) or not re.fullmatch(r"[a-f0-9]{32}", worker):
             raise ValueError("Identificador de worker inválido.")
         with self._transaction() as db:
             now = self.clock()
+            settings = db.execute("SELECT enabled,owner_busy,authorization FROM control JOIN runtime USING(id)").fetchone()
+            if not settings["enabled"] or (authorization is not None and authorization != settings["authorization"]):
+                return None
             db.execute("DELETE FROM workers WHERE seen<?", (now - 600,))
             db.execute("""UPDATE jobs SET state=CASE WHEN attempts>=3 THEN 'blocked' ELSE 'queued' END,
                 worker=NULL,lease=NULL,deadline=NULL,reason='expired' WHERE state='running' AND deadline<=?""", (now,))
@@ -137,8 +158,7 @@ class Queue:
                 SELECT 1 FROM jobs WHERE worker=workers.id AND state='running')""")
             db.execute("""INSERT INTO workers VALUES (?,?,'idle') ON CONFLICT(id)
                 DO UPDATE SET seen=excluded.seen""", (worker,now))
-            settings = db.execute("SELECT enabled,owner_busy FROM control").fetchone()
-            if not settings["enabled"] or settings["owner_busy"] or db.execute(
+            if settings["owner_busy"] or db.execute(
                     "SELECT 1 FROM jobs WHERE state='running' LIMIT 1").fetchone():
                 return None
             # Progressão por método. Uma etapa grande espera o menor patamar precedente.
@@ -244,17 +264,17 @@ class Queue:
                     "evaluations": [dict(row) for row in db.execute("SELECT * FROM cycles ORDER BY number DESC LIMIT 24")]}
 
 
-def run_local(queue):
+def run_local(queue, *, worker=None, authorization=None, stop_at=None):
     sample = reading(cpu_interval=.2)
     if sample.available < reserve(sample) + 128 or sample.cpu >= 90 or disk_usage(queue.root).free < 16*MIB:
         return {"state":"blocked", "reason":"Capacidade local insuficiente para a reserva experimental."}
-    task = queue.claim(uuid4().hex)
+    task = queue.claim(worker or uuid4().hex, authorization)
     if task is None:
         return {"state":"waiting", "reason":"Sem tarefa autorizada e disponível."}
     width = SIZES[task["size"]]
     row = task["next_row"]
     process = psutil.Process()
-    deadline = monotonic()+20
+    deadline = min(monotonic()+20, stop_at) if stop_at is not None else monotonic()+20
     next_sample = monotonic()+.25
     try:
         while row < width:
@@ -280,11 +300,42 @@ def run_local(queue):
         pass  # O operador ou outra reserva já encerrou este token.
     except KeyboardInterrupt:
         queue.release(task, "operator_interrupted")
+        if authorization is not None:
+            raise
         return {"state":"paused", "job":task["id"]}
     except BaseException:
         queue.release(task, "worker_interrupted", failed=True)
         raise
     return next(job for job in queue.read()["jobs"] if job["id"] == task["id"])
+
+
+def serve(queue, seconds):
+    if type(seconds) is not int or not 1 <= seconds <= 3600:
+        raise ValueError("O tempo máximo da sessão deve ficar entre 1 e 3.600 segundos.")
+    authorization = queue.authorization()
+    if authorization is None:
+        return {"state": "disabled", "processed": 0}
+    worker = uuid4().hex
+    stop_at = monotonic() + seconds
+    processed = 0
+    try:
+        while monotonic() < stop_at:
+            if queue.authorization() != authorization:
+                return {"state": "authorization_revoked", "processed": processed}
+            result = run_local(queue, worker=worker, authorization=authorization, stop_at=stop_at)
+            if result["state"] == "done":
+                processed += 1
+            else:
+                sleep(min(.35, max(0, stop_at - monotonic())))
+    except KeyboardInterrupt:
+        return {"state": "stopped", "processed": processed}
+    finally:
+        queue.offline(worker)
+    return {"state": "session_limit", "processed": processed}
+
+
+def stop_service(_signal, _frame):
+    raise KeyboardInterrupt
 
 
 def main(argv=None):
@@ -295,6 +346,8 @@ def main(argv=None):
     enable.add_argument("--approved", action="store_true")
     for command in ("stop","owner-busy","owner-idle","run","status"):
         sub.add_parser(command)
+    duration = sub.add_parser("serve")
+    duration.add_argument("--max-seconds", required=True, type=int)
     schedule = sub.add_parser("enqueue")
     schedule.add_argument("triangles", type=int, choices=SIZES)
     schedule.add_argument("--method", choices=METHODS, default=METHODS[0])
@@ -306,6 +359,12 @@ def main(argv=None):
             result = {"job":queue.enqueue(args.triangles,args.method,priority=args.priority)}
         elif args.command == "run":
             result = run_local(queue)
+        elif args.command == "serve":
+            previous = signal.signal(signal.SIGTERM, stop_service)
+            try:
+                result = serve(queue, args.max_seconds)
+            finally:
+                signal.signal(signal.SIGTERM, previous)
         elif args.command == "status":
             result = queue.read()
         else:

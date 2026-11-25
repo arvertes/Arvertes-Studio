@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="referrer" content="no-referrer">
+  <title>Política de privacidade · Arvertes Studio</title>
+  <link rel="stylesheet" href="./studio.css">
+  <style>
+    .privacy-document { max-width: 72ch; margin: 0 auto; padding: 2rem 1rem 4rem; line-height: 1.65; }
+    .privacy-document section { margin-top: 2rem; }
+    .privacy-document a { text-decoration: underline; text-underline-offset: .15em; }
+  </style>
+</head>
+<body>
+  <main class="privacy-document">
+    <a href="./">Voltar ao Arvertes Studio</a>
+    <h1>Política de privacidade do Arvertes Studio</h1>
+    <p>Esta política descreve como o Studio Web trata os dados da conta, os dados salvos no navegador e os arquivos usados pela integração opcional com o Google Drive.</p>
+
+    <section aria-labelledby="dados">
+      <h2 id="dados">Conta e dados do Studio</h2>
+      <p>O login do Studio usa GitHub via Supabase Auth. O backend usa o identificador da conta para autenticar as solicitações e separar seus registros dos registros de outras contas. No modo autenticado, conversas, memória, dossiês textuais, revisões e informações de produção são armazenados no PostgreSQL do Supabase. O frontend é hospedado na Vercel e a API, no Render.</p>
+      <p>O modo local mantém seus registros no armazenamento do navegador. A troca entre os modos conserva os dados onde foram gravados.</p>
+    </section>
+
+    <section aria-labelledby="drive">
+      <h2 id="drive">Integração com o Google Drive</h2>
+      <p>Quando a integração é ativada, o operador autoriza o escopo <code>drive.file</code> e seleciona, com o Google Picker, as pastas privadas Arvertes e Personagens. O escopo limita o acesso do aplicativo aos arquivos e pastas que ele cria ou que são selecionados para uso com ele.</p>
+      <p>O Studio usa o acesso para conferir as pastas autorizadas, gravar e recuperar anexos de personagens e arquivar pacotes ZIP quando solicitado. O backend usa identificadores, tamanho e SHA-256 para localizar os arquivos e verificar a integridade. Os arquivos ficam no Drive. O banco guarda referências aos arquivos e informações necessárias para apresentá-los no Studio.</p>
+      <p>As credenciais do Drive são mantidas na configuração protegida do servidor quando a integração está ativa. A API processa o conteúdo necessário à operação solicitada, como recuperar um anexo ou montar um ZIP. O uso dos dados do Google é limitado às funções descritas nesta seção.</p>
+    </section>
+
+    <section aria-labelledby="controle">
+      <h2 id="controle">Acesso, retenção e remoção</h2>
+      <p>É possível exportar seus dossiês pelo Studio. A remoção de um anexo no Studio desvincula o arquivo da revisão atual. A exclusão de um dossiê remove o conteúdo de suas revisões do Studio. Os arquivos correspondentes permanecem no Drive até que seu proprietário os remova naquele serviço.</p>
+      <p>O proprietário pode revogar a autorização na página de <a href="https://myaccount.google.com/connections">conexões da conta Google</a>. A revogação encerra o acesso concedido ao aplicativo. Os arquivos no Drive e os registros do Studio podem ser gerenciados separadamente.</p>
+    </section>
+
+    <section aria-labelledby="contato">
+      <h2 id="contato">Contato sobre privacidade</h2>
+      <p>Para dúvidas sobre a integração ou pedidos sobre seus dados, use o e-mail de suporte exibido na tela de consentimento do Arvertes Studio no Google.</p>
+    </section>
+  </main>
+</body>
+</html>

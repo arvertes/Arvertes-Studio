@@ -8,6 +8,7 @@
 - Sprint 6: produção local por briefing com Atlas, referências versionadas, reuso de GLB, revisão humana por SHA-256 e recuperação de pacotes em armazenamento substituto.
 - Sprint 6: manequim com proporções ajustáveis, 11 clipes sintéticos e LODs deformáveis com verificação em poses, além de controles de malha e animação na prévia GLB.
 - Sprint 6: processo experimental independente da interface com sessão limitada e invalidação de leases ao revogar a autorização.
+- Dossiês deixam o estado de carregamento ao falhar, oferecem nova tentativa e preservam o rascunho na aba. Falhas de mídia aparecem junto do anexo sem interromper a edição de texto.
 
 - Verificação de saúde e do catálogo autenticado do Arvertes Agents com diagnóstico do início lento do Render, da sessão e das falhas de rede.
 - Conversas, dossiês e produções da conta separados dos dados locais. Configurações permite alternar para os dados deste navegador e voltar ao servidor.

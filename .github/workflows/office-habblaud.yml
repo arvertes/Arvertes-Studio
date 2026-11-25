@@ -1,0 +1,40 @@
+name: Habblaud visual prototype
+on:
+  pull_request:
+    paths:
+      - 'office_habblaud/**'
+      - '.github/workflows/office-habblaud.yml'
+permissions:
+  contents: read
+jobs:
+  preview:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: marmottajr/habblaud
+          ref: faa1a012b5fbf632c66dc6801c5383e53a542406
+          path: upstream
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Prepare adapter
+        run: python office_habblaud/prepare.py upstream
+      - name: Build original visual client only
+        working-directory: upstream
+        run: |
+          npm ci --ignore-scripts
+          npm run build:client
+          cp LICENSE dist/client/HABBLAUD-LICENSE.txt
+          printf '%s\n' 'Habblaud / Márcio Junior / MIT / faa1a012b5fbf632c66dc6801c5383e53a542406' > dist/client/HABBLAUD-SOURCE.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: arvertes-habblaud-visual-experimental
+          path: upstream/dist/client
+          if-no-files-found: error
+          retention-days: 14

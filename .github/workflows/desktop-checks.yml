@@ -1,0 +1,118 @@
+name: Desktop checks
+on:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-2025
+    timeout-minutes: 30
+    env:
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/checkout@v4
+        with:
+          repository: marmottajr/habblaud
+          ref: faa1a012b5fbf632c66dc6801c5383e53a542406
+          path: upstream
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          architecture: 'x64'
+      - run: python -m pip install -r requirements-windows-build.txt
+      - run: python -m unittest discover -s tests/unit -v
+      - run: python -m unittest discover -s tests/desktop -v
+      - name: Smoke test source
+        run: python -m arvertes_desktop --self-test
+      - name: Build Habblaud visual bundle
+        shell: pwsh
+        run: |
+          python office_habblaud/prepare.py upstream
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Push-Location upstream
+          npm ci --ignore-scripts
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm run build:client
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Copy-Item LICENSE dist/client/HABBLAUD-LICENSE.txt
+          Set-Content -Encoding ascii dist/client/HABBLAUD-SOURCE.txt 'Habblaud / Márcio Junior / MIT / faa1a012b5fbf632c66dc6801c5383e53a542406'
+          Pop-Location
+      - name: Build diagnostic portable
+        shell: pwsh
+        run: |
+          $revision = (git rev-parse HEAD).Trim()
+          $revision | Set-Content -Encoding ascii arvertes_desktop/build_revision.txt
+          $version = python -c "from arvertes_desktop.update_check import VERSION; print(VERSION)"
+          @{platform='windows-x64'; version=$version; revision=$revision} | ConvertTo-Json -Compress | Set-Content -Encoding ascii arvertes_desktop/portable-version.json
+          python -m PyInstaller --noconfirm --clean --onedir --windowed --name ArvertesStudio --add-data "arvertes_desktop/build_revision.txt:arvertes_desktop" --add-data "arvertes_desktop/portable-version.json:arvertes_desktop" --add-data "arvertes_desktop/blender_worker.py:arvertes_desktop" --add-data "arvertes_studio:arvertes_studio" --add-data "upstream/dist/client:arvertes_desktop/habblaud_client" desktop_launcher.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Smoke test executable
+        shell: pwsh
+        run: |
+          $p = Start-Process -FilePath "dist/ArvertesStudio/ArvertesStudio.exe" -ArgumentList "--self-test" -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "Executable smoke test failed: $($p.ExitCode)" }
+      - name: Smoke Habblaud on Windows
+        env:
+          QTWEBENGINE_CHROMIUM_FLAGS: --disable-gpu
+          QT_QUICK_BACKEND: software
+        shell: pwsh
+        run: |
+          $p = Start-Process -FilePath "dist/ArvertesStudio/ArvertesStudio.exe" -ArgumentList "--self-test-habblaud" -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "Habblaud smoke test failed: $($p.ExitCode)" }
+      - name: Package
+        shell: pwsh
+        run: |
+          Copy-Item docs/WINDOWS.md dist/ArvertesStudio/LEIA-ME.md
+          Copy-Item docs/ATUALIZACAO.md dist/ArvertesStudio/ATUALIZACAO.md
+          Compress-Archive -Path dist/ArvertesStudio -DestinationPath dist/ArvertesStudio-Windows-x64-diagnostico.zip
+          $hash = Get-FileHash dist/ArvertesStudio-Windows-x64-diagnostico.zip -Algorithm SHA256
+          $hash | Format-List | Out-File dist/SHA256.txt
+          $manifest = Get-Content arvertes_desktop/portable-version.json -Raw | ConvertFrom-Json -AsHashtable
+          $manifest.sha256 = $hash.Hash.ToLowerInvariant()
+          $manifest | ConvertTo-Json -Compress | Set-Content -Encoding ascii dist/UpdateManifest.json
+          python -c "from arvertes_desktop.update_check import verify; print(verify('dist/ArvertesStudio-Windows-x64-diagnostico.zip','dist/UpdateManifest.json'))"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ArvertesStudio-Windows-x64-diagnostico
+          path: |
+            dist/ArvertesStudio-Windows-x64-diagnostico.zip
+            dist/SHA256.txt
+            dist/UpdateManifest.json
+          if-no-files-found: error
+          retention-days: 14
+  blender:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Blender 5.3.0 oficial
+        run: |
+          cd "$RUNNER_TEMP"
+          archive=blender-5.3.0-linux-x64.tar.xz
+          checksum=dacb8264197a3f7fda6001285a5a506fc97ee943881261c2c3bd63c882f22e05
+          for base in https://download.blender.org/release https://mirrors.ocf.berkeley.edu/blender/release https://mirror.clarkson.edu/blender/release; do
+            if curl -fsSL --max-time 180 --retry 1 --retry-all-errors "$base/Blender5.3/$archive" -o "$archive" \
+              && printf '%s  %s\n' "$checksum" "$archive" | sha256sum -c; then
+              tar -xJf "$archive"
+              exit 0
+            fi
+          done
+          exit 1
+      - name: Add-on e executor de cópia local
+        run: |
+          blender="$RUNNER_TEMP/blender-5.3.0-linux-x64/blender"
+          "$blender" --version
+          "$blender" --background --factory-startup --offline-mode --python-exit-code 1 --python tests/integration/test_blender.py
+          python tests/integration/check_blender_worker.py "$blender"

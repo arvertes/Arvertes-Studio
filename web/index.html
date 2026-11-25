@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="referrer" content="no-referrer">
+  <title>Arvertes Studio</title>
+  <link rel="stylesheet" href="./studio.css">
+</head>
+<body>
+  <a class="skip" href="#content">Pular para o conteúdo</a>
+  <div class="app-shell">
+    <aside id="sidebar" class="sidebar" aria-label="Menu do Studio">
+      <a class="brand" href="#overview">
+        <span class="brand-mark" data-icon="logo"></span>
+        <span class="brand-copy"><strong>ARVERTES</strong><small>STUDIO</small></span>
+      </a>
+      <nav id="navigation" aria-label="Áreas do Studio"></nav>
+      <div class="sidebar-footer">
+        <span class="build-letter" aria-hidden="true">A</span>
+        <div><strong data-workspace-mode>Workspace local</strong><small>Studio Web · v0.3</small></div>
+      </div>
+    </aside>
+    <button id="scrim" class="scrim" aria-label="Fechar navegação" hidden></button>
+    <div class="workspace">
+      <header class="topbar">
+        <button id="sidebar-toggle" type="button" class="icon-button" data-icon="sidebar" aria-controls="sidebar" aria-label="Recolher navegação"></button>
+        <div class="breadcrumb"><span id="group-name">Central</span><span data-icon="chevron-right"></span><strong id="page-name">Visão geral</strong></div>
+        <a class="connection" href="#security"><span class="dot"></span><span data-connection-label>Modo local</span></a>
+      </header>
+      <main id="content" tabindex="-1">
+        <div class="page-heading">
+          <div><p class="eyebrow" id="page-kicker"></p><h1 id="page-title">Visão geral</h1><p id="page-description"></p></div>
+          <a id="new-production" class="button primary" href="#production"><span data-icon="plus"></span>Nova produção</a>
+        </div>
+
+        <section id="view-overview" aria-labelledby="page-title">
+          <div class="operation-grid">
+            <div id="overview-office"></div>
+            <aside class="operation-rail" aria-label="Resumo operacional">
+              <article class="panel rail-panel">
+                <div class="panel-heading"><span class="tile-icon cyan" data-icon="activity"></span><div><h2>Fila de produção</h2><p>Planos salvos neste navegador</p></div></div>
+                <div class="queue-count"><strong id="draft-count">0</strong><span id="draft-label">Produções</span></div>
+                <p id="queue-summary">Carregando fila local…</p>
+                <a class="text-link" href="#tasks">Abrir tarefas <span data-icon="arrow-right"></span></a>
+              </article>
+              <article class="panel rail-panel">
+                <div class="panel-heading"><span class="tile-icon violet" data-icon="plug"></span><div><h2>Integrações</h2><p>Disponibilidade nesta versão</p></div></div>
+                <ul class="status-list">
+                  <li><span>Arvertes Agents</span><span class="status"><i></i>Desconectado</span></li>
+                  <li><span>Google Drive</span><span class="status"><i></i>Planejado</span></li>
+                  <li><span>Sentinel</span><span class="status amber"><i></i>Execução remota bloqueada</span></li>
+                </ul>
+                <a class="text-link" href="#security">Ver segurança <span data-icon="arrow-right"></span></a>
+              </article>
+              <article class="panel rail-panel">
+                <div class="panel-heading"><span class="tile-icon teal" data-icon="disk"></span><div><h2>Armazenamento</h2><p>Arquivos e orçamento</p></div></div>
+                <ul class="status-list">
+                  <li><span>Importações</span><span class="status"><i></i>Nesta aba</span></li>
+                  <li><span>Orçamento adicional</span><span class="status teal"><i></i>R$ 0</span></li>
+                </ul>
+                <a class="text-link" href="#storage">Ver armazenamento <span data-icon="arrow-right"></span></a>
+              </article>
+            </aside>
+          </div>
+          <div class="section-heading"><h2>Atalhos de produção</h2></div>
+          <div class="shortcut-grid">
+            <a class="panel shortcut" href="#production"><span class="tile-icon cyan" data-icon="plus"></span><span><strong>Preparar produção</strong><small>Planeje etapas com Atlas</small></span><span data-icon="arrow-up-right"></span></a>
+            <a class="panel shortcut" href="#pipeline"><span class="tile-icon violet" data-icon="pipeline"></span><span><strong>AutoPipeline</strong><small>Consulte as etapas e dependências</small></span><span data-icon="arrow-up-right"></span></a>
+            <a class="panel shortcut" href="#library"><span class="tile-icon teal" data-icon="cube"></span><span><strong>Biblioteca de assets</strong><small>Inspecione um modelo GLB</small></span><span data-icon="arrow-up-right"></span></a>
+          </div>
+          <div class="section-heading"><h2>Atividade recente</h2><a class="text-link" href="#tasks">Ver tarefas <span data-icon="arrow-right"></span></a></div>
+          <div id="recent" class="panel activity-list"></div>
+        </section>
+
+        <section id="view-office" aria-labelledby="page-title" hidden>
+          <div class="operation-grid office-layout">
+            <div id="office-stage"></div>
+            <aside class="panel inspector" aria-label="Inspetor de agente">
+              <div class="panel-heading"><span class="tile-icon violet" data-icon="user"></span><div><h2>Inspetor de agente</h2><p>Cadastro do Studio</p></div></div>
+              <label for="office-agent">Agente cadastrado</label>
+              <select id="office-agent" disabled><option>Carregando cadastro…</option></select>
+              <div id="office-profile" role="status"></div>
+              <a class="text-link" href="#agents">Ver todos os agentes <span data-icon="arrow-right"></span></a>
+            </aside>
+          </div>
+          <div id="office-departments" class="department-strip" aria-label="Departamentos"></div>
+          <p class="legal">Movimentação ambiente decorativa · Habblaud por Márcio Junior · <a href="./HABBLAUD-LICENSE.txt">Licença MIT</a> · <a href="./HABBLAUD-SOURCE.txt">Revisão do renderizador</a></p>
+        </section>
+
+        <section id="view-production" aria-labelledby="page-title" hidden>
+          <div class="split-layout">
+            <form id="draft" class="panel content-panel">
+              <div class="panel-heading"><span class="tile-icon cyan" data-icon="plus"></span><div><h2>Briefing de produção</h2><p>Planejamento por regras locais do Atlas</p></div></div>
+              <label for="name">Nome da produção</label>
+              <input id="name" required maxlength="100" placeholder="Ex.: Guardião da floresta">
+              <label for="instruction">Instruções</label>
+              <textarea id="instruction" required maxlength="2000" rows="6" placeholder="Ex.: Criar o personagem GVS em GLB, estilo estilizado, para importar no Unreal."></textarea>
+              <label for="production-type">Tipo de produção</label>
+              <select id="production-type"></select>
+              <label for="reference">Imagem de referência <span class="muted">(opcional)</span></label>
+              <input id="reference" type="file" accept="image/png,image/jpeg,image/webp" aria-describedby="reference-help">
+              <p id="reference-help" class="muted">PNG, JPEG ou WebP, até 8 MiB. Prévia local.</p>
+              <img id="reference-preview" hidden alt="Imagem de referência selecionada">
+              <p class="muted">Use somente informações de produção que podem ficar neste navegador. A referência visual é temporária.</p>
+              <p id="draft-error" class="form-error" role="alert" hidden></p>
+              <button class="button primary" type="submit"><span data-icon="check"></span>Propor plano</button>
+            </form>
+            <aside class="panel content-panel">
+              <div class="panel-heading"><span class="tile-icon violet" data-icon="cube"></span><div><h2>TRELLIS.2</h2><p>Motor 3D candidato</p></div></div>
+              <p>O teste manual está disponível na demonstração oficial, conforme as cotas e regras do provedor. A imagem selecionada fica nesta aba.</p>
+              <a class="button" href="https://huggingface.co/spaces/microsoft/TRELLIS.2" target="_blank" rel="noopener noreferrer">Abrir demonstração oficial <span data-icon="arrow-up-right"></span></a>
+              <a class="button" href="#library">Importar GLB gerado <span data-icon="arrow-right"></span></a>
+              <button class="button" disabled>Gerar no Studio</button>
+              <p class="muted">Executor remoto indisponível.</p>
+            </aside>
+          </div>
+          <div id="plan-preview" class="production-section"></div>
+        </section>
+
+        <section id="view-library" aria-labelledby="page-title" hidden>
+          <div id="library-production" class="production-section" hidden></div>
+          <div class="panel library-tools">
+            <label class="button primary import-button" for="glb"><span data-icon="upload"></span>Importar GLB<input id="glb" type="file" accept=".glb,model/gltf-binary" multiple aria-label="Importar GLB"></label>
+            <label class="filter-field">Buscar<input id="asset-search" type="search" placeholder="Nome do arquivo"></label>
+            <label class="filter-field">Categoria<select id="asset-category"></select></label>
+            <label class="filter-field">Estrutura<select id="asset-feature"><option value="">Todas</option><option value="uv">Com UVs</option><option value="skins">Com skins declaradas</option><option value="animations">Com animações</option></select></label>
+          </div>
+          <p id="asset-status" class="muted library-status" role="status">Arquivos GLB de até 16 MiB · leitura local nesta aba.</p>
+          <div class="split-layout library-layout">
+            <div id="asset-gallery" class="asset-gallery" aria-label="Galeria local"></div>
+            <aside id="asset-inspector" class="panel inspector" aria-label="Ficha técnica" hidden></aside>
+          </div>
+        </section>
+
+        <section id="view-pipeline" aria-labelledby="page-title" hidden>
+          <div id="pipeline-production" class="production-section"></div>
+          <details class="panel pipeline-panel pipeline-reference">
+            <summary>Mapa de referência das etapas externas</summary>
+            <div id="pipeline-grid" class="pipeline-grid" aria-label="Etapas e dependências"></div>
+            <div id="stage-details" class="content-panel stage-details"></div>
+          </details>
+        </section>
+
+        <section id="view-agents" aria-labelledby="page-title" hidden>
+          <div class="panel library-tools">
+            <label class="filter-field">Buscar agente<input id="agent-search" type="search" placeholder="Nome ou especialidade"></label>
+            <label class="filter-field">Departamento<select id="agent-department"><option value="">Todos</option></select></label>
+          </div>
+          <div id="roster" class="roster" aria-live="polite"></div>
+        </section>
+
+        <section id="view-characters" aria-labelledby="page-title" hidden>
+          <div class="character-intro panel content-panel">
+            <div class="panel-heading"><span class="tile-icon cyan" data-icon="users"></span><div><h2>Catálogo de personagens</h2><p>Dossiê autoral, memória de produção e arquivos do personagem</p></div></div>
+            <p>Organize cada personagem como um pacote completo: capa 2D, nome, história, personalidade, vestuário, modelo 3D, animações e voz. Tudo permanece local até você exportar o ZIP. Uma ficha não publicada é apenas um rascunho.</p>
+            <form id="character-create" class="character-create-form">
+              <label class="character-field" for="character-new-name">Nome do novo personagem
+                <input id="character-new-name" type="text" required maxlength="100" placeholder="Ex.: GVS">
+              </label>
+              <button class="button primary" type="submit">Criar dossiê</button>
+            </form>
+            <p id="characters-status" class="muted" role="status" aria-live="polite"></p>
+          </div>
+          <div class="character-workspace">
+            <aside class="character-sidebar">
+              <h2>Personagens cadastrados</h2>
+              <div id="characters-list" class="character-list"></div>
+            </aside>
+            <div id="character-editor" class="panel content-panel character-editor" aria-live="polite">
+              <p class="muted">Selecione um personagem ou crie uma ficha.</p>
+            </div>
+          </div>
+        </section>
+
+        <section id="view-atlas" aria-labelledby="page-title" hidden>
+          <article class="panel content-panel">
+            <div class="panel-heading"><span class="tile-icon cyan" data-icon="spark"></span><div><h2>Planejador local</h2><p>Atlas · Coordenador geral</p></div></div>
+            <p>Atlas usa termos do briefing para sugerir o tipo de produção, distribuir etapas e apontar dependências. Quando houver dúvida, escolha o tipo de entrega.</p>
+            <a class="button primary" href="#production">Preparar briefing <span data-icon="arrow-right"></span></a>
+          </article>
+          <article class="panel content-panel agent-chat-panel" aria-labelledby="chat-title">
+            <div class="panel-heading">
+              <span class="tile-icon cyan" data-icon="users"></span>
+              <div><h2 id="chat-title">Conversar com os agentes</h2><p id="chat-connection">Modo local · respostas por regras</p></div>
+            </div>
+            <p class="muted">Escolha um dos 26 agentes. As conversas são separadas, e informações salvas com “Lembre que ...” são compartilhadas no modo atual.</p>
+            <label class="production-field" for="chat-agent">Agente
+              <select id="chat-agent" aria-describedby="chat-specialty"></select>
+            </label>
+            <p id="chat-specialty" class="muted">Carregando cadastro dos agentes…</p>
+            <div id="chat-messages" class="chat-log" role="log" aria-label="Mensagens da conversa" aria-live="polite" aria-relevant="additions text"></div>
+            <form id="chat-form" class="production-form">
+              <label class="production-field" for="chat-message">Mensagem
+                <textarea id="chat-message" required maxlength="600" rows="3" placeholder="Ex.: O que você faz? Ou: Lembre que o GVS usa um amuleto vermelho."></textarea>
+              </label>
+              <button id="chat-send" class="button primary" type="submit">Enviar mensagem</button>
+            </form>
+            <p id="chat-status" class="muted" role="status" aria-live="polite"></p>
+            <details class="production-details">
+              <summary>Memória compartilhada dos agentes <span id="chat-count">0/24</span></summary>
+              <p class="muted">Salva no IndexedDB deste navegador, sem criptografia própria e sem sincronização. Não coloque senhas, tokens ou informações privadas. A exclusão é permanente neste navegador.</p>
+              <div id="chat-facts" class="chat-facts"></div>
+            </details>
+            <button id="chat-clear" type="button" class="button">Apagar histórico de conversa deste agente</button>
+          </article>
+          <div id="atlas-drafts" class="production-section"></div>
+        </section>
+
+        <section id="view-tasks" aria-labelledby="page-title" hidden><div id="tasks-list" class="task-list"></div></section>
+        <section id="system-page" aria-labelledby="page-title" hidden><div id="system-content"></div></section>
+
+        <template id="office-template">
+          <article class="panel office-card">
+            <div class="office-toolbar">
+              <div class="panel-heading"><span class="tile-icon cyan" data-icon="office"></span><div><h2>Arvertes HQ</h2><p>Habblaud · Escritório interativo</p></div></div>
+              <div class="office-controls" aria-label="Controles do escritório">
+                <button class="icon-button" type="button" data-office="out" data-icon="minus" title="Diminuir zoom" aria-label="Diminuir zoom"></button>
+                <button class="icon-button" type="button" data-office="in" data-icon="plus" title="Aumentar zoom" aria-label="Aumentar zoom"></button>
+                <button class="icon-button" type="button" data-office="fit" data-icon="focus" title="Enquadrar escritório" aria-label="Enquadrar escritório"></button>
+                <button class="icon-button" type="button" data-office="economy" data-icon="leaf" title="Modo econômico" aria-label="Modo econômico" aria-pressed="true"></button>
+                <button class="icon-button" type="button" data-office="full" data-icon="expand" title="Tela cheia" aria-label="Tela cheia" aria-pressed="false"></button>
+              </div>
+            </div>
+            <div class="office-viewport"><p class="office-message" role="status">Carregando escritório…</p></div>
+            <div class="office-footer"><span><span class="dot"></span> <span data-office-activity>Estado ao vivo indisponível</span></span><a class="text-link office-open" href="#office">Abrir escritório <span data-icon="arrow-right"></span></a><span class="office-hint">Arraste para navegar · selecione um agente</span></div>
+          </article>
+        </template>
+      </main>
+      <footer class="workspace-footer"><span>Arvertes Studio Web</span><a href="https://github.com/gui-gvs" rel="noopener noreferrer" target="_blank">Criado por @gui-gvs <span data-icon="arrow-up-right"></span></a></footer>
+    </div>
+  </div>
+  <script type="module" src="./studio.mjs"></script>
+</body>
+</html>

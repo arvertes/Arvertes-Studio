@@ -1,0 +1,83 @@
+name: Android Mobile
+on:
+  pull_request:
+    paths:
+      - 'mobile/**'
+      - 'arvertes_desktop/network.py'
+      - 'arvertes_desktop/remote_work.py'
+      - '.github/workflows/android-mobile.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  debug-apk:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Test local readiness rules
+        run: |
+          mkdir -p /tmp/arvertes-mobile-test
+          javac --release 17 -encoding UTF-8 -d /tmp/arvertes-mobile-test mobile/app/src/main/java/com/arvertes/mobile/Readiness.java mobile/tests/ReadinessTest.java
+          java -cp /tmp/arvertes-mobile-test com.arvertes.mobile.ReadinessTest
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Studio test server
+        run: python -m pip install "cryptography>=44,<51" "psutil>=6,<8" "zeroconf>=0.146,<1"
+      - name: Android SDK
+        run: |
+          : "${ANDROID_HOME:?Android SDK unavailable}"
+          test -f "$ANDROID_HOME/platforms/android-35/android.jar"
+          test -x "$ANDROID_HOME/build-tools/34.0.0/apksigner"
+      - name: Review source manifest
+        run: python mobile/tests/check_manifest.py mobile/app/src/main/AndroidManifest.xml
+      - name: Build debug APK
+        run: gradle -p mobile --no-daemon :app:lintDebug :app:assembleDebug :app:assembleDebugAndroidTest
+      - name: Verify debug APK signature and merged permissions
+        run: |
+          apk=mobile/app/build/outputs/apk/debug/app-debug.apk
+          "$ANDROID_HOME/build-tools/34.0.0/apksigner" verify --verbose "$apk"
+          "$ANDROID_HOME/build-tools/34.0.0/aapt" dump permissions "$apk" > /tmp/arvertes-permissions.txt
+          cat /tmp/arvertes-permissions.txt
+          diff -u <(printf "%s\n" "uses-permission: name='android.permission.INTERNET'") <(grep '^uses-permission' /tmp/arvertes-permissions.txt)
+          sha256sum "$apk" | tee mobile/app/build/outputs/apk/debug/SHA256.txt
+      - name: Prepare APKs for upgrade or parallel installation
+        run: |
+          mkdir -p "$RUNNER_TEMP/arvertes-apks"
+          cp mobile/app/build/outputs/apk/debug/app-debug.apk "$RUNNER_TEMP/arvertes-apks/app-debug.apk"
+          gradle -p mobile --no-daemon -PparallelInstall :app:lintDebug :app:assembleDebug
+          cp mobile/app/build/outputs/apk/debug/app-debug.apk "$RUNNER_TEMP/arvertes-apks/app-stage3-debug.apk"
+          cd "$RUNNER_TEMP/arvertes-apks"
+          "$ANDROID_HOME/build-tools/34.0.0/apksigner" verify --verbose app-stage3-debug.apk
+          "$ANDROID_HOME/build-tools/34.0.0/aapt" dump badging app-stage3-debug.apk | grep "name='com.arvertes.mobile.stage3'"
+          sha256sum app-debug.apk app-stage3-debug.apk > SHA256.txt
+      - name: Enable KVM for emulator
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          script: bash mobile/tests/emulator.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: arvertes-mobile-debug
+          path: |
+            ${{ runner.temp }}/arvertes-apks/app-debug.apk
+            ${{ runner.temp }}/arvertes-apks/app-stage3-debug.apk
+            ${{ runner.temp }}/arvertes-apks/SHA256.txt
+          if-no-files-found: error
+          retention-days: 14

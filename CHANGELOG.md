@@ -1,5 +1,17 @@
 # Histórico de alterações
 
+## v0.3 Web em desenvolvimento
+
+- Verificação de saúde e do catálogo autenticado do Arvertes Agents com diagnóstico do início lento do Render, da sessão e das falhas de rede.
+- Conversas, dossiês e produções da conta separados dos dados locais. Configurações permite alternar para os dados deste navegador e voltar ao servidor.
+- Escritório virtual exibe o estado observado na fila real do usuário e o horário da última consulta.
+
+## v0.2.2 dev
+
+- Sessões TLS locais com pareamento, revogação, descoberta, telemetria e troca autenticada de mensagens entre Studio e Mobile.
+- Ponte opcional para Agents com Atlas, Nexus, Argus e Aegis, monitoramento do Sentinel e estados reais no escritório Qt e na integração Habblaud.
+- Testes de transporte local, pacote Windows x64 e APK de desenvolvimento pela CI.
+
 ## v0.1.0
 
 - Interface em português brasileiro na barra lateral da Vista 3D, com pacote local de desenvolvimento para Blender 5.3.0.

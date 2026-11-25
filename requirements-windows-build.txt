@@ -1,0 +1,6 @@
+# Qt WebEngine hospeda o Habblaud local.
+PySide6==6.11.3
+pyinstaller==6.16.0
+cryptography>=44,<51
+psutil>=6,<8
+zeroconf>=0.146,<1

@@ -1,0 +1,43 @@
+name: Publish Studio Web preview
+# Publication requires a deliberate marker commit after the owner enables Pages.
+on:
+  push:
+    branches: [feat/v0.3-web]
+    paths: ['web/publish-preview.txt']
+permissions:
+  contents: read
+concurrency:
+  group: studio-pages-preview
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Prepare and compile
+        run: |
+          bash web/build-netlify.sh
+          touch web/dist/.nojekyll
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web/dist
+  deploy:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy preview
+        id: deployment
+        uses: actions/deploy-pages@v4

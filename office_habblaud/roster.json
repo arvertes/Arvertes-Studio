@@ -1,0 +1,158 @@
+[
+  {
+    "id": "coordenador",
+    "name": "Atlas",
+    "role": "Coordenador geral",
+    "department": "Fundação"
+  },
+  {
+    "id": "catalogador",
+    "name": "Nexus",
+    "role": "Catalogador",
+    "department": "Fundação"
+  },
+  {
+    "id": "documentador",
+    "name": "Scribe",
+    "role": "Documentador",
+    "department": "Fundação"
+  },
+  {
+    "id": "licencas",
+    "name": "Lex",
+    "role": "Especialista em licenças",
+    "department": "Fundação"
+  },
+  {
+    "id": "designer",
+    "name": "Iris",
+    "role": "Designer",
+    "department": "Visual"
+  },
+  {
+    "id": "modelador",
+    "name": "Forge",
+    "role": "Modelador",
+    "department": "Visual"
+  },
+  {
+    "id": "texturizador",
+    "name": "Chroma",
+    "role": "Texturizador",
+    "department": "Visual"
+  },
+  {
+    "id": "figurinista",
+    "name": "Vela",
+    "role": "Figurinista",
+    "department": "Visual"
+  },
+  {
+    "id": "arquiteto",
+    "name": "Arkos",
+    "role": "Arquiteto",
+    "department": "Visual"
+  },
+  {
+    "id": "paisagista",
+    "name": "Gaia",
+    "role": "Paisagista",
+    "department": "Visual"
+  },
+  {
+    "id": "estruturador",
+    "name": "Axis",
+    "role": "Estruturador",
+    "department": "Movimento"
+  },
+  {
+    "id": "animador",
+    "name": "Kairo",
+    "role": "Animador",
+    "department": "Movimento"
+  },
+  {
+    "id": "fisica",
+    "name": "Flux",
+    "role": "Física",
+    "department": "Movimento"
+  },
+  {
+    "id": "vfx",
+    "name": "Nova",
+    "role": "Efeitos visuais",
+    "department": "Movimento"
+  },
+  {
+    "id": "cinematografia",
+    "name": "Lumen",
+    "role": "Diretor cinematográfico",
+    "department": "Movimento"
+  },
+  {
+    "id": "otimizador",
+    "name": "Vector",
+    "role": "Otimizador",
+    "department": "Movimento"
+  },
+  {
+    "id": "som",
+    "name": "Echo",
+    "role": "Designer de som",
+    "department": "Áudio"
+  },
+  {
+    "id": "dublador",
+    "name": "Vox",
+    "role": "Dublador",
+    "department": "Áudio"
+  },
+  {
+    "id": "compositor",
+    "name": "Lyra",
+    "role": "Compositor",
+    "department": "Áudio"
+  },
+  {
+    "id": "engenheiro_audio",
+    "name": "Pulse",
+    "role": "Engenheiro de áudio",
+    "department": "Áudio"
+  },
+  {
+    "id": "sincronizacao_labial",
+    "name": "Sync",
+    "role": "Sincronização labial",
+    "department": "Áudio"
+  },
+  {
+    "id": "inspetor",
+    "name": "Argus",
+    "role": "Inspetor técnico",
+    "department": "Qualidade"
+  },
+  {
+    "id": "auditor",
+    "name": "Aegis",
+    "role": "Auditor final",
+    "department": "Qualidade"
+  },
+  {
+    "id": "continuidade",
+    "name": "Lore",
+    "role": "Especialista em continuidade",
+    "department": "Qualidade"
+  },
+  {
+    "id": "integrador_unreal",
+    "name": "Bridge",
+    "role": "Integrador Unreal",
+    "department": "Qualidade"
+  },
+  {
+    "id": "seguranca",
+    "name": "Sentinel",
+    "role": "Segurança e validação de testes",
+    "department": "Qualidade"
+  }
+]

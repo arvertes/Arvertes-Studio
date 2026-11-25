@@ -4,6 +4,10 @@ Ferramenta de produção de modelos e assets 3D para jogos, integrada ao Blender
 
 O Arvertes Studio faz parte do universo Arvertes e tem como objetivo facilitar a criação de personagens, criaturas, construções, vegetação, objetos e acessórios para [Arvertes 3D](https://github.com/arvertes/Arvertes-3D).
 
+## Studio Web
+
+A produção Web usa a branch `main` na Vercel, com o Arvertes Agents no Render e PostgreSQL e autenticação no Supabase. A publicação anterior no Netlify está suspensa. Consulte o [manual do Studio Web](web/README.md) e as [instruções de publicação](web/VERCEL.md).
+
 ## Estado do projeto
 
 ### v0.1.0
@@ -16,6 +20,10 @@ O Arvertes Studio faz parte do universo Arvertes e tem como objetivo facilitar a
 A interface está em português brasileiro na aba **Arvertes Studio** da barra lateral da Vista 3D. O fluxo é local e usa recursos nativos do Blender 5.3.0, sem instalação de dependências Python ou modelos de IA.
 
 Para gerar e instalar o pacote de desenvolvimento ou ativar a partir do código-fonte, siga o [manual de instalação](docs/INSTALACAO.md). Consulte também a [arquitetura](docs/ARQUITETURA.md), o [manual de testes](docs/TESTES.md) e o [histórico de alterações](CHANGELOG.md).
+
+## Nova direção desktop (v0.2.0 em desenvolvimento)
+
+A interface independente está em desenvolvimento no pacote `arvertes_desktop`, separado do add-on. Consulte o [manual desktop](docs/DESKTOP.md) para instalação, limites e testes. O roadmap abaixo registra as capacidades inicialmente planejadas para o add-on; a evolução desktop reorganiza as etapas de entrega, preservando essas metas. A integração de agentes locais e a biblioteca de projetos ainda são etapas futuras.
 
 ## Tecnologias
 

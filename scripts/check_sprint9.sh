@@ -19,8 +19,10 @@ export QT_QPA_PLATFORM=offscreen
   bash web/build-netlify.sh
   "$studio_python" tests/integration/check_styled_character.py "$blender" --agents "$agents"
   if [[ -n "${ARVERTES_TEST_POSTGRES:-}" && -n "${ARVERTES_TEST_CHROMIUM:-}" ]]; then
-    export PYTHONPATH="$agents"
+    playwright_package="$("$studio_python" -c 'import pathlib,playwright; print(pathlib.Path(playwright.__file__).parent.parent)')"
+    export PYTHONPATH="$agents:$playwright_package${PYTHONPATH:+:$PYTHONPATH}"
     "$agents_python" web/tests/backend_browser.py
     ARVERTES_TEST_CHARACTER_ACCEPTANCE="$("$studio_python" -c       'import json,sys; print(json.dumps(dict(zip(("agents","blender","python"),sys.argv[1:])),ensure_ascii=False))'       "$agents" "$blender" "$studio_python")" "$agents_python" web/tests/backend_browser.py
+    "$studio_python" web/tests/browser.py --chromium "$ARVERTES_TEST_CHROMIUM"
   fi
 )

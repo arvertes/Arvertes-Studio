@@ -7,7 +7,7 @@ import { byId, el, empty, fields, link } from "./ui.mjs";
 
 const date = new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" });
 const formatDate = value => date.format(new Date(value));
-const historyLabels = { plan: "Plano", checkpoint: "Checkpoint", note: "Decisão", error: "Erro" };
+const historyLabels = { plan: "Plano", checkpoint: "Checkpoint", decision: "Decisão da fila", note: "Decisão", error: "Erro" };
 
 let indexedDB;
 try { indexedDB = window.indexedDB; } catch { /* acesso pode ser bloqueado pelo navegador */ }
@@ -63,6 +63,7 @@ function demo() {
 
 function productionStatus(production) {
   if (!production.approvedAt) return "Aguardando aprovação";
+  if (production.queueState) return taskLabels[production.queueState];
   const tasks = activeTasks(production);
   if (!tasks.length) return "Etapas validadas";
   if (tasks.every(task => taskState(production, task) === "executor")) return "Aguardando executor";
@@ -128,6 +129,7 @@ function taskEvidence(task) {
     default:
       content.append(el("p", "", "Confirmação registrada pela pessoa responsável."));
   }
+  if (evidence.reusedFrom) content.append(el("p", "muted", "Resultado reaproveitado da revisão " + evidence.reusedFrom + "."));
   return details(`Evidência · ${formatDate(evidence.at)}`, content, task.id === "review");
 }
 
@@ -191,7 +193,8 @@ function status() {
 async function dispatch(production, command, trigger, feedback, message) {
   trigger.disabled = true;
   try {
-    const result = await repository.dispatch(production.id, command);
+    const result = command.action === "inspect-parallel" ? await repository.inspectParallel(production.id) :
+      await repository.dispatch(production.id, command);
     const index = records.findIndex(record => record.id === production.id);
     if (index >= 0) records[index] = result.production;
     updates?.postMessage("changed");
@@ -213,7 +216,9 @@ function renderPlan(production) {
   const feedback = status();
   feedback.id = "pipeline-feedback";
   feedback.dataset.production = production.id;
-  card.append(el("p", "draft-copy", production.instruction), el("span", "badge cyan", productionStatus(production)), feedback);
+  const completed = production.tasks.filter(task => task.evidence).length;
+  card.append(el("p", "draft-copy", production.instruction), el("span", "badge cyan", productionStatus(production)),
+    el("p", "muted", completed + " de " + production.tasks.length + " checkpoints registrados"), feedback);
   if (!production.approvedAt) {
     card.append(el("p", "", "Revise as etapas, os responsáveis e as ferramentas. Sua aprovação libera a fila de tarefas."),
       button("Aprovar plano e liberar tarefas", trigger =>
@@ -247,6 +252,21 @@ function renderPlan(production) {
 
 function actions(production, feedback) {
   const card = panel("Continuar produção");
+  if (!production.queueState && activeTasks(production).length) {
+    card.append(button("Pausar produção local", trigger =>
+      dispatch(production, { action: "pause" }, trigger, feedback, "Produção pausada.")));
+  } else if (production.queueState === "paused") {
+    card.append(button("Retomar produção local", trigger =>
+      dispatch(production, { action: "resume" }, trigger, feedback, "Produção retomada."), true));
+  }
+  if (production.queueState !== "cancelled" && production.tasks.some(task => !task.evidence)) {
+    card.append(button("Cancelar produção local", trigger => {
+      if (confirm("Cancelar as etapas pendentes desta produção local?")) {
+        void dispatch(production, { action: "cancel" }, trigger, feedback, "Etapas pendentes canceladas.");
+      }
+    }));
+  }
+  if (production.queueState) return card;
   const ready = activeTasks(production);
   const latest = production.history.findLast(event => event.type === "checkpoint");
   if (latest) card.append(el("p", "", `Último checkpoint · ${latest.message}`));
@@ -272,12 +292,28 @@ function actions(production, feedback) {
     else card.append(el("p", "muted", "Nenhum GLB disponível para associar nesta aba."));
   }
   const model = production.tasks.find(task => task.id === "model")?.evidence?.asset;
+  if (model) {
+    const versions = el("ul", "inspection-list");
+    for (const version of [...(production.assetHistory || []), { revision: production.assetRevision || 1, asset: model }]) {
+      versions.append(el("li", "", "Revisão " + version.revision + " · " + version.asset.name + " · SHA-256 " + version.asset.digest));
+    }
+    const alternatives = localAssets().filter(asset => asset.digest && asset.digest !== model.digest && asset.data.primitives);
+    const content = el("div");
+    content.append(versions);
+    if (alternatives.length) content.append(attachmentForm(production, alternatives, feedback, "revise"));
+    else content.append(link("Importar GLB para uma revisão", `library/${production.id}`, "button"));
+    card.append(details("Revisões do GLB", content));
+  }
   if (model && !localAssets().some(asset => asset.digest === model.digest)) {
     card.append(el("p", "muted", `As inspeções usam os metadados salvos de ${model.name}. Para abrir a visualização 3D, importe o mesmo arquivo na biblioteca.`));
   }
   if (ready.some(task => task.kind === "inspection")) {
     card.append(button("Executar inspeções locais", trigger =>
       dispatch(production, { action: "inspect-ready" }, trigger, feedback, "Inspeções e parecer preliminar registrados."), true));
+    if (typeof Worker === "function" && navigator.locks && navigator.hardwareConcurrency > 1 && ready.filter(task => task.kind === "inspection").length > 1) {
+      card.append(button("Inspecionar com dois workers", trigger =>
+        dispatch(production, { action: "inspect-parallel" }, trigger, feedback, "Inspeções em workers e parecer registrados.")));
+    }
   }
   if (ready.some(task => task.id === "validation")) {
     card.append(el("p", "", "Confira a evidência de Argus nas etapas abaixo e registre seu aceite do parecer preliminar."),
@@ -306,7 +342,7 @@ function actions(production, feedback) {
   return card;
 }
 
-function attachmentForm(production, assets, feedback) {
+function attachmentForm(production, assets, feedback, action = "attach") {
   const form = el("form", "production-form");
   const picker = el("select");
   assets.forEach((asset, index) => picker.add(new Option(`${asset.name} · ${asset.digest.slice(0, 8)}`, String(index))));
@@ -321,14 +357,15 @@ function attachmentForm(production, assets, feedback) {
   }
   picker.addEventListener("change", suggest);
   suggest();
-  const save = button("Associar e catalogar GLB", null, true);
+  const save = button(action === "revise" ? "Registrar nova revisão do GLB" : "Associar e catalogar GLB", null, true);
   save.type = "submit";
   form.append(label("GLB importado", picker), label("Categoria na produção", category), suggestion, save);
   form.addEventListener("submit", event => {
     event.preventDefault();
     const asset = assets[picker.selectedIndex];
-    void dispatch(production, { action: "attach", asset, category: category.value }, save, feedback,
-      "GLB associado a Forge e catalogado por Nexus.");
+    void dispatch(production, { action, asset, category: category.value }, save, feedback,
+      action === "revise" ? "Nova revisão registrada. O aceite anterior fica no histórico." :
+        "GLB associado a Forge e catalogado por Nexus.");
   });
   return form;
 }
@@ -568,7 +605,8 @@ export function initProduction() {
   form.addEventListener("submit", event => {
     event.preventDefault();
     const feedback = byId("draft-error");
-    const brief = { name: byId("name").value, instruction: byId("instruction").value, type: type.value };
+    const brief = { name: byId("name").value, instruction: byId("instruction").value, type: type.value,
+      fullPipeline: byId("full-pipeline").checked };
     if (form.dataset.characterId && byId("name").value.trim() === form.dataset.characterName) brief.characterId = form.dataset.characterId;
     const showMessage = message => {
       feedback.textContent = message;

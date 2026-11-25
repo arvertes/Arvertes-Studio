@@ -39,6 +39,7 @@ export const stages = {
   architecture: stage("arquiteto", "Arkos", "Arquitetura modular", blender, "Planejar módulos, escala e encaixes do cenário", "external", [], /\b(arquitetura|modular)\b/),
   landscape: stage("paisagista", "Gaia", "Paisagismo", blender, "Planejar vegetação, distribuição e composição do ambiente", "external", [], /\b(paisagismo|bioma)\b/),
   optimize: stage("otimizador", "Vector", "Otimizar malha", blender, "Planejar redução de geometria, LODs e orçamento de triângulos", "external", [], /\b(otimi[sz]\w*|lods?)\b/),
+  retopology: stage("modelador", "Forge", "Retopologia", blender, "Planejar uma malha revisada e comparar a organização dos polígonos", "external", [], /\b(retopologia|retopologizar)\b/),
   texture: stage("texturizador", "Chroma", "Texturizar asset", blender, "Planejar mapas PBR e correções de UV", "external", [], /\b(texturizar|bake|pbr|texturizacao)\b/),
   rig: stage("estruturador", "Axis", "Criar ou ajustar rig", blender, "Planejar esqueleto, pesos e deformações", "external", [], /\b(rig|rigging|armadura)\b/),
   animate: stage("animador", "Kairo", "Criar animações", blender, "Planejar clipes e sua validação", "external", ["rig"], /\b(animacao|animacoes|animar|animado)\b/),

@@ -264,6 +264,15 @@ export function createBackend(origin, accessToken, fetcher = fetch, {
       remove: id => request(characterPath(id) + "?revision=" + observed.get(id), { method: "DELETE" }),
       exportZip: (id, revision = observed.get(id)) => request(characterPath(id) + "/package?revision=" + revision, { blob: true }),
     },
+    knowledge: {
+      list: () => request("/knowledge"),
+      stage: json => request("/knowledge", { method: "POST", json }),
+      get: (id, revision) => request("/knowledge/" + key(id) + "?revision=" + encodeURIComponent(revision)),
+      approve: (id, revision, approvalDigest) => request("/knowledge/" + key(id) + "/approve",
+        { method: "POST", json: { revision, approvalDigest } }),
+      search: (q, agent, scope) => request("/knowledge/search?" +
+        new URLSearchParams({ q, agent, ...(scope ? { kind: scope.kind, scope: scope.id } : {}) })),
+    },
     productions: {
       list: () => request("/productions"),
       get: id => request(productionPath(id)),

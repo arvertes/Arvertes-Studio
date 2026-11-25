@@ -111,12 +111,19 @@ def production_flow(page, origin, directory, capture):
     page.get_by_role("button", name="Associar e catalogar GLB").click()
     expect(page.get_by_role("button", name="Executar inspeções locais")).to_be_visible()
 
-    # A fila continua a partir do GLB vinculado mesmo quando os bytes não estão mais na biblioteca.
+    page.get_by_role("button", name="Pausar produção local").click()
+    expect(page.get_by_role("button", name="Retomar produção local")).to_be_visible()
     page.reload()
+    expect(page.get_by_role("button", name="Executar inspeções locais")).to_have_count(0)
+    page.get_by_role("button", name="Retomar produção local").click()
+    # O executor usa o checkpoint de metadados, mesmo após recarregar sem o arquivo na biblioteca.
     expect(page.get_by_text("As inspeções usam os metadados salvos", exact=False)).to_be_visible()
-    page.get_by_role("button", name="Executar inspeções locais").click()
+    workers = []
+    page.on("worker", lambda worker: workers.append(worker.url))
+    page.get_by_role("button", name="Inspecionar com dois workers").click()
     review = page.locator(".production-task").filter(has=page.get_by_role("heading", name="Parecer técnico preliminar"))
     expect(review.get_by_text("Inventário confirmado · 4 malhas", exact=False)).to_be_visible()
+    assert len([url for url in workers if url.endswith("/inspection-worker.mjs")]) == 3
     expect(review.get_by_text("Verificar no Unreal", exact=False)).to_be_visible()
     page.get_by_role("button", name="Validar parecer preliminar").click()
     expect(page.get_by_text("Sentinel mantém as etapas externas aguardando executor e permissões.")).to_be_visible()

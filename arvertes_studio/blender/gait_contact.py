@@ -36,13 +36,22 @@ def correct(arm, mesh):
         left, right = positions[0][2][0], positions[len(frames)//2][2][1]
         horizontal = []
         vertical = []
+        raw = []
         for frame, (z, minimum, feet) in zip(frames, positions):
             phase = (frame-1) / 48
             # Peso de apoio transita suavemente nas duas trocas por ciclo.
-            blend = _smooth(.5 + sin(2*pi*phase) * 2.5)
+            blend = _smooth(.5 + sin(2*pi*phase) * (1.95 if name == "WalkToRun" else 2.5))
             y = (left - feet[0])*blend + (right - feet[1])*(1-blend)
             # O teto de correção protege a pose quando dobrar o joelho eleva toda a sola.
             floor = max(-.095, min(.095, z_reference - minimum))
+            raw.append((frame,z,y,floor))
+        for index, (frame, z, y, floor) in enumerate(raw):
+            # Average cyclic neighbours to soften the root impulse at stance changes.
+            left_sample = raw[(index-1) % (len(raw)-1)]
+            right_sample = raw[(index+1) % (len(raw)-1)]
+            if name == "WalkToRun":
+                y = .80*y + .10*(left_sample[2]+right_sample[2])
+            floor = .80*floor + .10*(left_sample[3]+right_sample[3])
             scene.frame_set(frame)
             arm.location.y = y
             arm.location.z = z + floor
@@ -55,5 +64,5 @@ def correct(arm, mesh):
     animation.action = bpy.data.actions["Rest"]
     animation.action_slot = animation.action.slots[0]
     scene.frame_set(1)
-    return {"method": "phase_blended_root_contact", "clips": records,
+    return {"method": "phase_blended_root_contact_smoothed", "clips": records,
             "scope": "procedural_world_space_sample", "ik": False}

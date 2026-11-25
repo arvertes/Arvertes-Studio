@@ -136,7 +136,7 @@ def run_triposr(args):
                     except psutil.NoSuchProcess:
                         used = 0
                     if monotonic() >= deadline or log.stat().st_size > MIB or (
-                            psutil.virtual_memory().available < reserve(sample)*MIB
+                            reading().available < reserve(sample)
                             or disk_usage(work).free < 128*MIB or used > 3072*MIB):
                         raise ValueError("Sentinel encerrou a tarefa por tempo, log, RAM ou armazenamento.")
                     sleep(.25)

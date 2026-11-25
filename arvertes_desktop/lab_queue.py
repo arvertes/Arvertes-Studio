@@ -47,6 +47,10 @@ CREATE TABLE IF NOT EXISTS jobs (
 CREATE TABLE IF NOT EXISTS visual_trials (
   id TEXT PRIMARY KEY, recorded REAL NOT NULL, method TEXT NOT NULL, verdict TEXT NOT NULL, evidence TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS technique_reviews (
+  trial TEXT PRIMARY KEY, method TEXT NOT NULL, decided REAL NOT NULL,
+  disposition TEXT NOT NULL, notes TEXT NOT NULL, evidence TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS style_batches (
   id TEXT PRIMARY KEY, fingerprint TEXT NOT NULL UNIQUE, next_method INTEGER NOT NULL DEFAULT 0,
   state TEXT NOT NULL DEFAULT 'queued', failures INTEGER NOT NULL DEFAULT 0, reason TEXT
@@ -413,6 +417,39 @@ class Queue:
                 result["reused"] = True
         return result
 
+    def record_technique(self, identifier, disposition, notes, *, approved=False):
+        if not approved or not isinstance(identifier,str) or not re.fullmatch("[a-f0-9]{64}",identifier) or (
+                disposition not in ("reuse_after_review","avoid") or not isinstance(notes,str)
+                or not 1 <= len(notes.strip()) <= 400 or any(ord(char)<32 for char in notes)):
+            raise ValueError("Registre uma decisão humana explícita com observações.")
+        with self._transaction() as db:
+            settings = db.execute("SELECT enabled,owner_busy FROM control").fetchone()
+            if not settings["enabled"] or settings["owner_busy"]:
+                raise ValueError("O laboratório está indisponível para revisar técnicas.")
+            trial = db.execute("SELECT method,verdict,evidence FROM visual_trials WHERE id=?", (identifier,)).fetchone()
+            if not trial or disposition == "reuse_after_review" and trial["verdict"] != "human_review":
+                raise ValueError("A avaliação técnica precisa estar disponível e apta à revisão.")
+            previous = db.execute("SELECT disposition,notes FROM technique_reviews WHERE trial=?", (identifier,)).fetchone()
+            if previous:
+                if tuple(previous) != (disposition,notes):
+                    raise ValueError("A decisão registrada é imutável. Avalie uma nova revisão.")
+            else:
+                total = db.execute("SELECT count(*) FROM technique_reviews").fetchone()[0]
+                if total >= 64:
+                    raise ValueError("Banco de decisões experimentais atingiu sua cota.")
+                db.execute("INSERT INTO technique_reviews VALUES (?,?,?,?,?,?)",
+                           (identifier,trial["method"],self.clock(),disposition,notes,trial["evidence"]))
+        return {"trial":identifier,"method":trial["method"],"disposition":disposition,
+                "scope":"experimental_reference_only"}
+
+    def techniques(self, method=None):
+        if method is not None and method not in STYLE_METHODS:
+            raise ValueError("Método de laboratório desconhecido.")
+        with self._transaction() as db:
+            return [{**dict(row), "evidence":json.loads(row["evidence"])}
+                    for row in db.execute("""SELECT * FROM technique_reviews WHERE (? IS NULL OR method=?)
+                                             ORDER BY decided DESC, trial""",(method,method))]
+
     def _accumulate(self, db, settings, seconds_us, improvements):
         total = settings["elapsed_us"] + seconds_us
         cycles = total // SIX_HOURS_US
@@ -461,7 +498,7 @@ def run_local(queue, *, worker=None, authorization=None, stop_at=None):
                 next_sample = monotonic()+.25
                 if not queue.heartbeat(task):
                     break
-            if (psutil.virtual_memory().available < (reserve(sample)+128)*MIB or sample.cpu >= 95
+            if (reading().available < reserve(sample)+128 or sample.cpu >= 95
                     or monotonic() >= deadline or rss > 128*MIB):
                 queue.release(task, "sentinel_resource_limit")
                 return {"state":"paused", "job":task["id"]}
@@ -534,6 +571,13 @@ def main(argv=None):
     batch = sub.add_parser("enqueue-style")
     batch.add_argument("before", type=Path)
     batch.add_argument("after", type=Path)
+    review = sub.add_parser("review-technique")
+    review.add_argument("trial")
+    review.add_argument("disposition", choices=("reuse_after_review","avoid"))
+    review.add_argument("--notes", required=True)
+    review.add_argument("--approved", action="store_true")
+    techniques = sub.add_parser("techniques")
+    techniques.add_argument("--method", choices=STYLE_METHODS)
     schedule = sub.add_parser("enqueue")
     schedule.add_argument("triangles", type=int, choices=SIZES)
     schedule.add_argument("--method", choices=METHODS, default=METHODS[0])
@@ -545,6 +589,10 @@ def main(argv=None):
             result = {"job":queue.enqueue(args.triangles,args.method,priority=args.priority)}
         elif args.command == "enqueue-style":
             result = {"batch":queue.enqueue_style(args.before, args.after)}
+        elif args.command == "review-technique":
+            result = queue.record_technique(args.trial,args.disposition,args.notes,approved=args.approved)
+        elif args.command == "techniques":
+            result = {"techniques":queue.techniques(args.method)}
         elif args.command == "compare-style":
             result = queue.compare_style(args.before, args.after, args.method)
         elif args.command == "run":

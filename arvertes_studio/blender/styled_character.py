@@ -94,6 +94,9 @@ def pieces(design):
         tube([(-.022,-.085,1.633), (0,-.096,1.630), (.022,-.086,1.633)],
              [(.004,.005),(.005,.006),(.004,.005)],["Head"]*3,3,4,10),
     ])
+    result["Sobrancelhas"] = [tube(
+        [(sign*.024,-.088,1.721),(sign*.041,-.099,1.727),(sign*.058,-.085,1.722)],
+        [(.005,.004),(.007,.004),(.004,.003)],["Head"]*3,3,4,10) for sign in (-1,1)]
     result["Gola"] = [tube([(0,0,1.497),(0,0,1.524),(0,0,1.56)],
                            [(.101,.09),(.095,.076),(.071,.068)],["Chest","Chest","Head"],1,5,16)]
     for sign, side in ((-1,"R"), (1,"L")):
@@ -101,6 +104,9 @@ def pieces(design):
             [(sign*.116,0,.185),(sign*.116,-.018,.107),(sign*.116,-.15,.059)],
             [(.050,.056),(.055,.059),(.061,.031)],
             [f"Shin.{side}",f"Foot.{side}",f"Foot.{side}"],2,7,14))
+        result["Botas"].append(tube(
+            [(sign*.116,.001,.165),(sign*.116,-.004,.179)],
+            [(.053,.058),(.051,.056)],[f"Shin.{side}"]*2,4,4,12))
     return result
 
 
@@ -143,12 +149,18 @@ def pose(name, phase):
 def rig_and_motion(collection, materials, design):
     rig, members = meshes(collection, materials, design)
     from .gait_contact import correct
+    from .motion_quality import sample
 
     animate(rig, CLIPS, pose)
     baseline = motion_evidence(rig, members["Corpo"], ("Walk","Run"), ("Foot.L","Foot.R"), production_sample=True)
+    quality_before = sample(rig, members["Botas"])
     contact = correct(rig, members["Corpo"])
+    quality_after = sample(rig, members["Botas"])
     report = motion_evidence(rig, members["Corpo"], CLIPS, ("Foot.L", "Foot.R"), production_sample=True)
     report["contact"] = {**contact, "same_geometry_before": baseline["clips"]}
+    report["motion_quality"] = {"before": quality_before, "after": quality_after,
+                                "scope": "sampled_boot_vertices_and_pelvis",
+                                "manual": ["equilíbrio dinâmico", "contato da bota", "naturalidade", "transições"]}
     report["manual_review"] = ["foot_plant", "balance", "intersections", "cloth_motion", "naturalness"]
     for mesh in members.values():
         if any(abs(sum(group.weight for group in point.groups)-1) > 1e-5 for point in mesh.data.vertices):

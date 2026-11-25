@@ -39,15 +39,15 @@ Os tipos em `integration-contracts.d.ts` descrevem interfaces futuras para `getC
 
 O Studio usa o backend quando o build tem configuração pública e o operador entra na conta em **Configurações**. O início de sessão utiliza Supabase Auth com GitHub e PKCE. O backend verifica o usuário autorizado antes de atender cada requisição. O botão **Usar dados deste navegador** ativa o modo local na aba mesmo com sessão existente. A troca de modo não migra, apaga ou envia dados do IndexedDB. Use **Voltar ao modo servidor** para consultar a conta novamente.
 
-| Variável do Netlify | Valor |
+| Variável da Vercel | Valor |
 | --- | --- |
 | `ARVERTES_WEB_API_ORIGIN` | `https://arvertes-agents.onrender.com`, sem `/api/v1` |
 | `ARVERTES_WEB_SUPABASE_URL` | Origem HTTPS do projeto Supabase |
 | `ARVERTES_WEB_SUPABASE_PUBLISHABLE_KEY` | Chave publicável com prefixo `sb_publishable_` |
 
-O build produz `backend-config.mjs` apenas com essas três informações públicas. Com apenas a origem da API, **Configurações** verifica a saúde e indica autenticação pendente. Sem variáveis, o Studio inicia em modo local. Depois de definir as variáveis no Netlify, um novo build autorizado é necessário para enviá-las ao navegador. Tokens de sessão são específicos da aba. DSN, OAuth do Drive, IDs de pastas e chaves privadas pertencem ao backend.
+O build produz `backend-config.mjs` apenas com essas três informações públicas. Com apenas a origem da API, **Configurações** verifica a saúde e indica autenticação pendente. Sem variáveis, o Studio inicia em modo local. Depois de definir as variáveis na Vercel, um novo build autorizado é necessário para enviá-las ao navegador. Tokens de sessão são específicos da aba. DSN, OAuth do Drive, IDs de pastas e chaves privadas pertencem ao backend.
 
-No Supabase Auth, habilite o GitHub e inclua `https://arvertes-studio.netlify.app/` nas URLs de redirecionamento. Use o mesmo projeto Supabase dos dois lados. A conta precisa estar em `ARVERTES_SUPABASE_SUBJECTS` e a origem do Studio em `ARVERTES_STUDIO_ORIGINS` no Render. Na produção atual, o CORS já aceita a origem do Netlify.
+No Supabase Auth, mantenha o GitHub habilitado e siga as [instruções de publicação](VERCEL.md) para a Site URL e a lista de redirecionamentos. Use o mesmo projeto Supabase dos dois lados. A conta precisa estar em `ARVERTES_SUPABASE_SUBJECTS` e a origem do Studio em `ARVERTES_STUDIO_ORIGINS` no Render.
 
 **Verificar conexão** consulta `/health` sem token e confirma a sessão com `/api/v1/agents`. O primeiro health check aguarda até 65 segundos para acomodar o início lento. Requisições autenticadas usam prazo próprio e erros de gravação são mostrados sem repetição automática. Em caso de timeout, verifique o histórico ou a fila antes de refazer a ação. O servidor conectado pode responder por regras. Geração externa continua sujeita aos bloqueios do Sentinel.
 

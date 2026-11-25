@@ -21,9 +21,9 @@ O Atlas usa palavras-chave explícitas, regras por tipo e uma lista de etapas. O
 | Aprovações, decisões e erros da produção | Histórico por plano no IndexedDB, até 250 registros recentes |
 | Preferências de interface e até 12 notas pessoais | Armazenamento local do navegador, com os formatos v1 existentes |
 | Arquivos GLB, miniaturas e imagem de referência | Sessão da aba. Reimporte o original para reabrir a visualização |
-| Memória dos agentes, cotas e artefatos remotos | Aguardam integração autenticada |
+| Conversas, memória, dossiês e fila de inspeção da conta autenticada | PostgreSQL, acessado pela API do Arvertes Agents |
 
-Reabra um plano em **Tarefas**, **Projetos** ou **AutoPipeline**. A interface indica o último checkpoint e as ações que dependem de você. Se a aba recarregar após a associação, os metadados salvos permitem retomar a inspeção. O Studio guarda o hash do GLB e nunca grava no arquivo de origem. A biblioteca e o catálogo da sessão são locais. Guarde os originais à parte. Use o briefing e as notas somente para conteúdo que possa permanecer no navegador. O Studio não coleta credenciais e não sincroniza dados entre dispositivos.
+Reabra um plano em **Tarefas**, **Projetos** ou **AutoPipeline**. A interface indica o último checkpoint e as ações que dependem de você. Se a aba recarregar após a associação, os metadados salvos permitem retomar a inspeção. O Studio guarda o hash do GLB e nunca grava no arquivo de origem. A biblioteca e o catálogo da sessão são locais. Guarde os originais à parte. Use o briefing e as notas somente para conteúdo que possa permanecer no navegador. Os dados locais ficam na origem do navegador. Para os fluxos da conta, consulte a [integração autenticada](INTEGRACAO.md#ativação-da-api-v1).
 
 ## Recursos e limites
 
@@ -52,7 +52,7 @@ python3 web/tests/browser.py
 
 O teste sobe um servidor estático local, usa [a fixture sintética](../docs/TESTES.md#teste-visual-com-o-glb-sintético) e aceita `--screenshots DIRETÓRIO`. A execução cobre controles de sistema, aprovação do plano, vínculo e integridade do GLB, pareceres, retomada após recarregar, falhas de armazenamento, navegação móvel e escritório Habblaud.
 
-O build distribui as licenças do Habblaud e Three.js (MIT) e das fontes Inter, Space Grotesk e JetBrains Mono (OFL-1.1). O visualizador é empacotado com esbuild (MIT). Consulte os [contratos de integração](INTEGRACAO.md) e a [configuração da prévia Web](NETLIFY.md).
+O build distribui as licenças do Habblaud e Three.js (MIT) e das fontes Inter, Space Grotesk e JetBrains Mono (OFL-1.1). O visualizador é empacotado com esbuild (MIT). Consulte os [contratos de integração](INTEGRACAO.md) e as [instruções de publicação](VERCEL.md). O bundle de autenticação inclui os avisos de licença de suas dependências em `licenses/`.
 
 ## Verificações desta revisão
 
@@ -87,4 +87,4 @@ A ficha aceita até quatro anexos por personagem:
 
 As mídias são verificadas por tipo, formato e SHA-256 e persistem, enquanto o navegador permitir, em IndexedDB separado (`arvertes-character-dossiers`). No máximo 40 personagens e 50 MiB por personagem. Um dossiê pode gerar um briefing para Atlas, com as descrições autorais. Os agentes consultam as fichas salvas por nome; anotações de chat não alteram o status editorial.
 
-**Exportar pacote ZIP** produz `manifesto.json` com metadados, status e hashes, um `LEIA-ME.txt` e os arquivos anexados em `midia/`. ZIP usa STORE (sem compressão), limitado a 64 MiB, sem bibliotecas externas, e pode ficar maior que os arquivos compactados comuns. Nenhum arquivo é enviado à nuvem; o pacote exportado é a cópia de segurança recomendada. Limpar dados do navegador ou trocar de dispositivo pode apagar as fichas e os anexos locais. O Google Drive e a produção automática aguardam backend autenticado e consentimento.
+**Exportar pacote ZIP** produz `manifesto.json` com metadados, status e hashes, um `LEIA-ME.txt` e os arquivos anexados em `midia/`. ZIP usa STORE (sem compressão), limitado a 64 MiB, sem bibliotecas externas, e pode ficar maior que os arquivos compactados comuns. Nenhum arquivo é enviado à nuvem; o pacote exportado é a cópia de segurança recomendada. Limpar dados do navegador ou trocar de dispositivo pode apagar as fichas e os anexos locais. No modo servidor, o [arquivamento no Drive](INTEGRACAO.md#ativação-da-api-v1) depende da configuração do backend e de uma ação explícita.

@@ -34,6 +34,12 @@ python3 web/write-backend-config.py "$output/backend-config.mjs"
 "$modules/.bin/esbuild" web/backend-auth.mjs --bundle --minify --format=esm --outfile="$output/backend-auth.mjs"
 "$modules/.bin/esbuild" web/viewer.mjs --bundle --minify --format=esm --outfile="$output/viewer.mjs"
 cp "$modules/three/LICENSE" "$output/licenses/three-MIT.txt"
+for package in auth-js functions-js postgrest-js realtime-js storage-js supabase-js; do
+  cp "$modules/@supabase/$package/LICENSE" "$output/licenses/supabase-$package-MIT.txt"
+done
+cp "$modules/@supabase/phoenix/LICENSE.md" "$output/licenses/supabase-phoenix-MIT.txt"
+cp "$modules/iceberg-js/LICENSE" "$output/licenses/iceberg-js-MIT.txt"
+cp "$modules/tslib/LICENSE.txt" "$output/licenses/tslib-0BSD.txt"
 cp "$modules/@fontsource-variable/inter/files/inter-latin-wght-normal.woff2" "$output/fonts/inter.woff2"
 cp "$modules/@fontsource-variable/space-grotesk/files/space-grotesk-latin-wght-normal.woff2" "$output/fonts/space-grotesk.woff2"
 cp "$modules/@fontsource/jetbrains-mono/files/jetbrains-mono-latin-400-normal.woff2" "$output/fonts/jetbrains-mono.woff2"

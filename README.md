@@ -4,6 +4,10 @@ Ferramenta de produção de modelos e assets 3D para jogos, integrada ao Blender
 
 O Arvertes Studio faz parte do universo Arvertes e tem como objetivo facilitar a criação de personagens, criaturas, construções, vegetação, objetos e acessórios para [Arvertes 3D](https://github.com/arvertes/Arvertes-3D).
 
+## Studio Web
+
+A produção Web usa a branch `main` na Vercel, com o Arvertes Agents no Render e PostgreSQL e autenticação no Supabase. A publicação anterior no Netlify está suspensa. Consulte o [manual do Studio Web](web/README.md) e as [instruções de publicação](web/VERCEL.md).
+
 ## Estado do projeto
 
 ### v0.1.0

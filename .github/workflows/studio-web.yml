@@ -5,6 +5,7 @@ on:
       - 'web/**'
       - 'office_habblaud/**'
       - 'netlify.toml'
+      - 'vercel.json'
       - '.github/workflows/studio-web.yml'
 permissions:
   contents: read
@@ -19,7 +20,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
-      - name: Build and test the Netlify preview
+      - name: Build and test the Studio Web distribution
         run: bash web/build-netlify.sh
       - uses: actions/upload-artifact@v4
         with:

@@ -110,12 +110,17 @@ with ThreadingHTTPServer(("127.0.0.1", 0), partial(Quiet, directory=studio / "we
                 content_type="text/javascript"))
 
         online = True
+        faults = {"dossier_read": False}
         def bridge(route):
             request = route.request
             if not online:
                 route.abort("internetdisconnected")
                 return
             url = urlsplit(request.url)
+            if faults["dossier_read"] and request.method == "GET" and re.fullmatch(r"/api/v1/characters/[\w-]+", url.path):
+                faults["dossier_read"] = False
+                route.fulfill(status=503, json={"error": "Serviço indisponível."})
+                return
             result = api.request(request.method, url.path + ("?" + url.query if url.query else ""),
                                  headers={k: v for k, v in request.all_headers().items() if k != "host"},
                                  content=request.post_data_buffer)
@@ -183,6 +188,21 @@ with ThreadingHTTPServer(("127.0.0.1", 0), partial(Quiet, directory=studio / "we
         page.locator("#character-history").fill("História de teste fornecida pelo autor.")
         page.get_by_role("button", name="Salvar ficha").click()
         expect(page.locator("#characters-status")).to_contain_text("Ficha salva na sua conta")
+        page.locator("#character-history").fill("Rascunho preservado após falha.")
+        faults["dossier_read"] = True
+        page.locator("#characters-list button").click()
+        expect(page.locator("#character-editor")).not_to_contain_text("Carregando ficha")
+        expect(page.locator("#character-editor")).to_contain_text("Não foi possível abrir a ficha")
+        page.get_by_role("button", name="Tentar novamente", exact=True).click()
+        expect(page.locator("#character-history")).to_have_value("Rascunho preservado após falha.")
+        unavailable_fixture = Path(tmp) / "midia-sintetica.glb"
+        write_glb(unavailable_fixture, 4)
+        page.get_by_label("Anexar Modelo 3D").set_input_files(unavailable_fixture)
+        expect(page.locator("#characters-status")).to_contain_text("Armazenamento Drive indisponível")
+        expect(page.locator("#character-history")).to_have_value("Rascunho preservado após falha.")
+        page.reload()
+        page.locator("#characters-list button").click()
+        expect(page.locator("#character-history")).to_have_value("Rascunho preservado após falha.")
         page.goto(origin + "/#production")
         page.get_by_label("Nome da produção").fill("GLB sintético")
         page.get_by_label("Instruções").fill("Preparar o modelo 3D GLB para inspeção.")

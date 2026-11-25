@@ -2,6 +2,10 @@ import { fixtureMesh, fixtures } from "./lab-fixtures.mjs";
 import { compare, meshDigest, verifiedImprovement } from "./lab-geometry.mjs";
 
 export const technique = "duplicate_faces_v1";
+export const techniques = {
+  [technique]: "Índice de faces orientadas",
+  duplicate_faces_sort_v1: "Ordenação de faces orientadas",
+};
 export const sixHours = 6 * 60 * 60 * 1000;
 const maxAttempts = 3;
 const logLimit = 80;
@@ -15,16 +19,17 @@ function history(state, at, type, detail) {
   state.events = [...state.events.slice(-(logLimit - 1)), { at, type, detail }];
 }
 
-function key(fixture) {
-  return fixture + ":" + technique;
+function key(fixture, method) {
+  return fixture + ":" + method;
 }
 
-export function authorize(state, fixture, policy, now) {
+export function authorize(state, fixture, policy, now, method = technique) {
   if (state.lease) throw Error("Aguarde a tarefa experimental reservada.");
-  if (!Object.hasOwn(fixtures, fixture) || typeof policy !== "boolean") throw Error("Escopo experimental incompatível.");
+  if (!Object.hasOwn(fixtures, fixture) || typeof policy !== "boolean" || !Object.hasOwn(techniques, method)) throw Error("Escopo experimental incompatível.");
   state.enabled = true;
   state.policy = policy;
   state.fixture = fixture;
+  state.method = method;
   state.phase = "analyzing";
   state.reason = "";
   history(state, now, "activated", { fixture, allowClassAInSyntheticLane: policy, costBrl: 0 });
@@ -41,14 +46,15 @@ export function claim(state, token, now, timeoutMs) {
   if (typeof token !== "string" || !token || !Number.isSafeInteger(timeoutMs) || timeoutMs < 100 || timeoutMs > 5000) {
     throw Error("Reserva experimental fora do limite.");
   }
-  const id = key(state.fixture);
+  const method = state.method || technique;
+  const id = key(state.fixture, method);
   const previous = state.runs[id];
   if (previous?.candidate || previous?.attempts >= maxAttempts) {
     block(state, previous.candidate ? "O resultado desta técnica e fixture já está registrado." :
       "O limite de três tentativas desta técnica foi atingido.", now);
     return null;
   }
-  state.lease = { id, token, fixture: state.fixture, started: now, expires: now + timeoutMs,
+  state.lease = { id, token, fixture: state.fixture, method, started: now, expires: now + timeoutMs,
     attempts: (previous?.attempts || 0) + 1 };
   state.phase = "experimenting";
   history(state, now, "started", { id, attempt: state.lease.attempts,
@@ -82,7 +88,7 @@ export function decision(proposal, allowClassA) {
 }
 
 function integrate(state, lease, run, at) {
-  const result = decision({ change: technique, target: "synthetic", maxCostBrl: 0, metrics: run.metrics }, state.policy);
+  const result = decision({ change: lease.method || technique, target: "synthetic", maxCostBrl: 0, metrics: run.metrics }, state.policy);
   run.promotion = result;
   if (result !== "allowed" || !state.enabled || lease.stopped !== undefined) {
     if (result === "allowed") run.promotion = "human_review";
@@ -125,7 +131,7 @@ export function complete(state, token, result, now) {
   }
   state.activeMs += Math.max(0, Math.min(result.elapsed, (lease.stopped ?? now) - lease.started,
     lease.expires - lease.started));
-  const run = { ...result, fixture: lease.fixture, attempts: lease.attempts, status: "completed", at: now };
+  const run = { ...result, fixture: lease.fixture, method: lease.method || technique, attempts: lease.attempts, status: "completed", at: now };
   state.runs[lease.id] = run;
   integrate(state, lease, run, now);
   state.lease = null;

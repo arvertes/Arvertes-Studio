@@ -1,6 +1,7 @@
 import { byId, departments, el, empty, fields, fillIcons, icon, link } from "./ui.mjs";
 import { mountOffice, unmountOffice, setOfficeRoster, setOfficeActivity } from "./office.mjs";
 import { initLibrary, closePreview } from "./library.mjs";
+import { showDepartments } from "./departments-ui.mjs";
 import { leaveLaboratory, mountLaboratory } from "./lab-ui.mjs";
 import { initPipeline } from "./pipeline.mjs";
 import { applyDisplayPreferences, renderExtraPage } from "./system-panels.mjs";
@@ -19,6 +20,7 @@ const groups = [
   ["Central", [
     ["overview", "overview", "Visão geral", "Seu espaço de trabalho para produção de assets para Unreal Engine."],
     ["office", "office", "Escritório virtual", "Explore a sede e consulte os perfis dos agentes por departamento."],
+    ["departamentos", "folder", "Departamentos", "Consulte responsabilidades, dependências e disponibilidade."],
     ["projects", "folder", "Projetos", "Reabra as produções salvas neste navegador."],
     ["characters", "users", "Personagens", "Dossiês com história, personalidade, capa 2D, 3D, animações e voz."],
   ]],
@@ -133,6 +135,7 @@ const systemPages = {
 };
 function renderSystem(page) {
   const root = byId("system-content");
+  if (page === "departamentos") { showDepartments(root, studioBackend()); return; }
   if (page === "laboratorio") { mountLaboratory(root); return; }
   if (["settings", "resources", "memory", "tools"].includes(page)) {
     renderExtraPage(page, root, { collapsed, setCollapsed(value) {

@@ -5,7 +5,7 @@ self.onmessage = async ({ data }) => {
   const started = performance.now();
   try {
     const original = fixtureMesh(data.fixture);
-    const candidate = optimize(original);
+    const candidate = optimize(original, data.method);
     const metrics = compare(original, candidate);
     const sourceSha = await meshDigest(original);
     const candidateSha = await meshDigest(candidate);

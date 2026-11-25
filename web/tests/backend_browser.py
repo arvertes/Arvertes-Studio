@@ -26,6 +26,15 @@ from arvertes_cloud.web import SupabaseAuth, create_api
 from arvertes_cloud.workspace import Workspace
 
 studio = Path(__file__).resolve().parents[2]
+acceptance = os.getenv("ARVERTES_TEST_CHARACTER_ACCEPTANCE")
+drive = None
+if acceptance:
+    acceptance = json.loads(acceptance)
+    fixtures = runpy.run_path(Path(acceptance["agents"]) / "tests/test_studio_api.py")
+    service = fixtures["DriveDouble"]()
+    def drive():
+        return fixtures["DriveWarehouse"](service, "characters", lambda stream, **_: stream.read(),
+                                          fixtures["Download"], parents=(("root","Arvertes"),))
 write_glb = runpy.run_path(studio / "tests/integration/fixture_glb.py")["write_fixture"]
 
 
@@ -64,7 +73,7 @@ else:
 with ThreadingHTTPServer(("127.0.0.1", 0), partial(Quiet, directory=studio / "web/dist")) as server:
     Thread(target=server.serve_forever, daemon=True).start()
     origin = f"http://127.0.0.1:{server.server_port}"
-    api = TestClient(create_api(Workspace(db), authenticate=authenticate, origins=(origin,)))
+    api = TestClient(create_api(Workspace(db, drive=drive), authenticate=authenticate, origins=(origin,)))
     if gotrue:
         wrong_user = signup_fixture()
         denied = api.get("/api/v1/agents", headers={"Authorization": "Bearer " + wrong_user["access_token"]})
@@ -183,6 +192,9 @@ with ThreadingHTTPServer(("127.0.0.1", 0), partial(Quiet, directory=studio / "we
         page.locator("#character-history").fill("História de teste fornecida pelo autor.")
         page.get_by_role("button", name="Salvar ficha").click()
         expect(page.locator("#characters-status")).to_contain_text("Ficha salva na sua conta")
+        if acceptance:
+            from acceptance_character import exercise
+            exercise(page, Path(tmp), studio, acceptance)
         page.goto(origin + "/#production")
         page.get_by_label("Nome da produção").fill("GLB sintético")
         page.get_by_label("Instruções").fill("Preparar o modelo 3D GLB para inspeção.")

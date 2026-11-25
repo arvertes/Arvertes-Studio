@@ -162,6 +162,52 @@ function renderEditor(record) {
   const gallery=el("div","character-media-grid");
   for(const kind of ["model","animation","voice"])gallery.append(mediaCard(record,kind));
   root.append(title,warning,cover,form,el("h3","","Modelo 3D, animações e voz"),gallery);
+  if (studioBackend()) root.append(productionDelivery(record));
+}
+
+function productionDelivery(record) {
+  const panel = el("section", "panel character-media-card");
+  const metadata = record.attachments?.production;
+  panel.append(el("h3", "", "Pacote de produção"),
+    el("p", "muted", "Envie uma revisão local conferida. O vínculo usa a versão salva da ficha."));
+  panel.append(makeButton("Baixar vínculo para o Desktop", () => {
+    const data = JSON.stringify({id:record.id, revision:record.revision});
+    download(new Blob([data], {type:"application/json"}), "vinculo-dossie.json");
+  }));
+  const input = el("input");
+  input.type = "file";
+  input.accept = ".zip";
+  input.setAttribute("aria-label", "Arquivar pacote de produção");
+  input.addEventListener("change", async () => {
+    const file = input.files?.[0];
+    if (!file) return;
+    input.disabled = true;
+    try {
+      await repo.attach(record.id, "production", file);
+      await refresh();
+      status("Pacote arquivado. O status editorial da ficha foi preservado.");
+    } catch (error) {
+      status(error.message,true);
+    } finally {
+      input.disabled = false;
+      input.value = "";
+    }
+  });
+  panel.append(input);
+  if (metadata) panel.append(el("p","character-file-name",metadata.name),
+    makeButton("Baixar pacote de produção", async () => {
+      try {
+        const media = await repo.media(record.id, "production");
+        if (!media?.blob) throw Error("Pacote de produção indisponível.");
+        const actual = new Uint8Array(await crypto.subtle.digest("SHA-256", await media.blob.arrayBuffer()));
+        const digest = Array.from(actual, value => value.toString(16).padStart(2,"0")).join("");
+        if (digest !== metadata.digest) throw Error("SHA-256 divergente ao recuperar o pacote.");
+        download(media.blob, metadata.name);
+      } catch (error) {
+        status(error.message,true);
+      }
+    }));
+  return panel;
 }
 function mediaCard(record,kind) {
   const item=el("article","panel character-media-card");

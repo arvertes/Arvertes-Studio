@@ -135,6 +135,16 @@ with ThreadingHTTPServer(("127.0.0.1", 0), partial(Quiet, directory=studio / "we
         expect(page.locator(".connection")).to_contain_text("Arvertes Agents conectado")
         if gotrue:
             assert "/token" in auth_requests, "O SDK não renovou a sessão com o Supabase Auth local."
+        if acceptance:
+            from acceptance_character import exercise
+            page.goto(origin + "/#characters")
+            page.locator("#character-new-name").fill("Fixture remota")
+            page.locator("#character-create button").click()
+            expect(page.get_by_role("heading", name="Fixture remota")).to_be_visible()
+            exercise(page, Path(tmp), studio, acceptance)
+            assert not errors, errors
+            browser.close()
+            raise SystemExit(0)
         expect(page.locator("#chat-agent")).to_have_value("coordenador")
         expect(page.locator("#chat-connection")).to_contain_text("Servidor")
         page.goto(origin + "/#agents")
@@ -192,9 +202,6 @@ with ThreadingHTTPServer(("127.0.0.1", 0), partial(Quiet, directory=studio / "we
         page.locator("#character-history").fill("História de teste fornecida pelo autor.")
         page.get_by_role("button", name="Salvar ficha").click()
         expect(page.locator("#characters-status")).to_contain_text("Ficha salva na sua conta")
-        if acceptance:
-            from acceptance_character import exercise
-            exercise(page, Path(tmp), studio, acceptance)
         page.goto(origin + "/#production")
         page.get_by_label("Nome da produção").fill("GLB sintético")
         page.get_by_label("Instruções").fill("Preparar o modelo 3D GLB para inspeção.")

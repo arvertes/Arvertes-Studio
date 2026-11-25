@@ -63,3 +63,9 @@ A execução 45061809311 recebeu HTTP 403 ao obter a distribuição do Blender. 
 - Cloud: testes de MCP Streamable HTTP e OAuth com chaves de fixture, credenciais de sincronização separadas, expiração, autorização, auditoria e rejeição de dados livres.
 - Android: sessão instrumentada com tarefas SHA-256, checkpoint, progresso e histórico. As condições de recursos seguem simuladas.
 - Resultados comparativos e método em [Desempenho](DESEMPENHO.md).
+
+## Sprint dos 26 agentes
+
+O build Web exercita as regras no navegador, o encaminhamento no chat, o reconhecimento de fichas por nome completo e o estado de dependências bloqueadas. O cenário de `web/tests/backend_browser.py` usa também o backend da sprint com PostgreSQL local descartável. Ele abre e recarrega um briefing estruturado, registra a rejeição de um GLB inválido, recupera a fila com um GLB sintético e valida o histórico, a revisão humana e o pacote.
+
+Na sprint passaram a suíte unitária Python (17 testes), Desktop (37 testes), o autoteste em Qt offscreen, o build Web com Node.js 24 e sete cenários estáticos do Chromium 156. A integração Web autenticada passou com sessão sintética e PostgreSQL 17.12. No Blender 5.3.0 (`02f0899d78e3`), passaram os nove casos headless e os fluxos de cópia/FBX e Desktop/Agents/Blender. Windows, Android físico e importação no Unreal ficaram fora desta verificação.

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
-import { applyCommand, createProduction, previewPlan, suggestCategory, taskState } from "./coordination.mjs";
+import { applyCommand, createProduction, previewPlan, serverTaskState, suggestCategory, taskState } from "./coordination.mjs";
 import { agentStages, stages } from "./production-catalog.mjs";
 
 const brief = { name: "GVS", instruction: "Criar o personagem GVS com animação e entregar para Unreal." };
@@ -113,4 +113,24 @@ test("Sentinel impede conclusão remota e preserva os checkpoints ao ampliar o p
   assert.deepEqual(task(production, "lip").needs, ["voice", "rig"]);
   assert.equal(production.tasks.filter(item => item.id === "rig").length, 1);
   assert.deepEqual(task(production, "review").evidence, review);
+});
+
+test("projeção do servidor distingue aprovação, executor e bloqueio transitivo", () => {
+  const inspect = { stage: "inspect", status: "pending", executable: true, depends_on: [] };
+  const review = { stage: "review", status: "pending", executable: true, depends_on: ["inspect"] };
+  const pack = { stage: "package", status: "pending", executable: false, depends_on: ["review"] };
+  const job = { approved: false, steps: [inspect, review, pack] };
+  assert.equal(serverTaskState(job, inspect), "approval");
+  job.approved = true;
+  assert.equal(serverTaskState(job, inspect), "ready");
+  assert.equal(serverTaskState(job, review), "dependency");
+  inspect.status = "blocked";
+  assert.equal(serverTaskState(job, pack), "dependency_blocked");
+  inspect.status = "done";
+  assert.equal(serverTaskState(job, review), "review");
+  review.status = "done";
+  assert.equal(serverTaskState(job, pack), "executor");
+  inspect.status = review.status = "pending";
+  inspect.depends_on = ["review"];
+  assert.equal(serverTaskState(job, pack), "dependency_blocked");
 });

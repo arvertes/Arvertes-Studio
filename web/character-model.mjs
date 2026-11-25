@@ -59,10 +59,15 @@ export function describeCharacter(record) {
   ].filter(([_, v])=>typeof v==="string" && v.trim());
   return [record.name + " (" + (record.status === "aprovado" ? "ficha aprovada pelo autor" : "rascunho não aprovado") + ")", ...parts.map(([k,v])=> k + ": " + v)].join("\n");
 }
+export function matchingCharacters(message, records) {
+  const words = value => normalize(value).match(/[\p{Letter}\p{Number}]+/gu)?.join(" ") || "";
+  const query = " " + words(message) + " ";
+  return (records || []).filter(record => record.name && words(record.name) &&
+    query.includes(" " + words(record.name) + " "));
+}
 export function matchingCharacter(message, records) {
-  const q = normalize(message);
-  const matches = (records || []).filter(record => record.name?.trim() && q.includes(normalize(record.name)));
-  return matches.sort((a,b) => b.name.length-a.name.length)[0] ?? null;
+  const matches = matchingCharacters(message, records);
+  return matches.length === 1 ? matches[0] : null;
 }
 export function buildCharacterBrief(record) {
   if (!record?.name) throw Error("Personagem não selecionado.");

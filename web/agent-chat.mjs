@@ -19,10 +19,30 @@ function status(message, isError = false) {
   root.textContent = message;
   root.classList.toggle("form-error", isError);
 }
-function bubble(role, text) {
+function bubble(role, text, briefing) {
   const msg = el("div", role === "user" ? "chat-bubble chat-user" : "chat-bubble chat-agent");
   const label = el("strong", "", role === "user" ? "Você" : agents.find(a => a.id === active)?.name || "Agente");
   msg.append(label, el("p", "", text));
+  if (role === "agent" && briefing?.status === "proposed" && briefing.steps?.length) {
+    const details = el("details", "production-details");
+    details.append(el("summary", "", "Consultar proposta de Atlas"));
+    details.append(el("p", "", "Aguardando aprovação · Limite de R$ " + briefing.max_cost_brl));
+    const tasks = el("ol", "production-tasks");
+    const outputs = new Map(briefing.steps.map(step => [step.id, step.output]));
+    for (const step of briefing.steps) {
+      const agent = agents.find(profile => profile.id === step.agent_id)?.name || step.agent_id;
+      const row = el("li", "production-task");
+      row.append(el("strong", "", agent + " · " + step.output), el("p", "", step.quality));
+      if (step.depends_on?.length) {
+        row.append(el("p", "", "Depende de " + step.depends_on.map(id => outputs.get(id) || id).join(", ")));
+      }
+      if (step.missing?.length) row.append(el("p", "", "Entradas pendentes · " + step.missing.join(", ")));
+      if (step.after_approval === "awaiting_executor") row.append(el("p", "", "Requer executor conectado."));
+      tasks.append(row);
+    }
+    details.append(tasks);
+    msg.append(details);
+  }
   return msg;
 }
 async function render() {
@@ -38,12 +58,14 @@ async function render() {
       log.append(el("p", "muted", "Conversa vazia. Pergunte sobre a especialidade deste agente, suas produções ou use 'Lembre que ...' para salvar uma informação compartilhada."));
     } else {
       for (const entry of data.messages) {
-        if (entry?.role === "user" || entry?.role === "agent") log.append(bubble(entry.role, String(entry.text).slice(0,6000)));
+        if (entry?.role === "user" || entry?.role === "agent") log.append(bubble(entry.role, String(entry.text).slice(0,6000), entry.briefing));
       }
     }
     for (const fact of data.facts) {
       const row = el("div", "chat-fact");
-      const txt = el("p", "", fact.text);
+      const labels = { official: "Referência oficial declarada", approved_fact: "Decisão aprovada",
+        suggestion: "Sugestão", hypothesis: "Hipótese", outdated: "Desatualizada" };
+      const txt = el("p", "", (labels[fact.label] || "Anotação") + " · " + fact.text);
       const remove = el("button", "button", "Excluir");
       remove.type = "button";
       remove.setAttribute("aria-label", "Excluir anotação: " + fact.text.slice(0,70));

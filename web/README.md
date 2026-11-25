@@ -88,3 +88,9 @@ A ficha aceita até quatro anexos por personagem:
 As mídias são verificadas por tipo, formato e SHA-256 e persistem, enquanto o navegador permitir, em IndexedDB separado (`arvertes-character-dossiers`). No máximo 40 personagens e 50 MiB por personagem. Um dossiê pode gerar um briefing para Atlas, com as descrições autorais. Os agentes consultam as fichas salvas por nome; anotações de chat não alteram o status editorial.
 
 **Exportar pacote ZIP** produz `manifesto.json` com metadados, status e hashes, um `LEIA-ME.txt` e os arquivos anexados em `midia/`. ZIP usa STORE (sem compressão), limitado a 64 MiB, sem bibliotecas externas, e pode ficar maior que os arquivos compactados comuns. Nenhum arquivo é enviado à nuvem; o pacote exportado é a cópia de segurança recomendada. Limpar dados do navegador ou trocar de dispositivo pode apagar as fichas e os anexos locais. No modo servidor, o [arquivamento no Drive](INTEGRACAO.md#ativação-da-api-v1) depende da configuração do backend e de uma ação explícita.
+
+## Revisar propostas, decisões e bloqueios
+
+No modo servidor, o chat apresenta a proposta de Atlas com responsáveis, critérios, dependências e entradas pendentes quando o backend devolve o briefing estruturado. A proposta permanece no histórico e a fila de inspeção continua disponível pelo AutoPipeline. No modo navegador, o chat sugere etapas existentes pelas regras locais e identifica a revisão e o status editorial da ficha que foi reconhecida.
+
+O plano no servidor mostra a fração de checkpoints registrados, os agentes responsáveis e as dependências. Em **Decisões, transferências e erros** aparecem aprovações, delegações, resultados com hash e tentativas rejeitadas. Após uma falha de leitura, consulte a instrução junto da etapa. A aprovação humana continua necessária para a fila e para a revisão da inspeção.

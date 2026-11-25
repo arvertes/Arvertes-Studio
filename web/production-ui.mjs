@@ -1,5 +1,5 @@
 import { studioBackend } from "./backend.mjs";
-import { activeTasks, previewPlan, suggestCategory, taskLabels, taskState } from "./coordination.mjs";
+import { activeTasks, previewPlan, serverTaskState, suggestCategory, taskLabels, taskState } from "./coordination.mjs";
 import { availableStages, categories, productionTypes, stages, trellisDemo } from "./production-catalog.mjs";
 import { createProductionRepository } from "./production-store.mjs";
 import { localAssets } from "./library.mjs";
@@ -341,30 +341,111 @@ function showRemoteList(root) {
   root.append(box);
 }
 
-async function showRemotePlan(root, id) {
+const serverLabels = {
+  approval: "Aguardando aprovação", dependency: "Aguardando dependências",
+  dependency_blocked: "Dependência bloqueada", executor: "Aguardando executor",
+  review: "Aguardando revisão humana", ready: "Disponível para iniciar",
+  done: "Checkpoint registrado", paused: "Pausada", cancelled: "Cancelada",
+  waiting: "Aguardando liberação de recursos", running: "Em execução",
+  blocked: "Bloqueada", uncertain: "Execução a reconciliar",
+};
+const stageLabels = {
+  model: "Modelagem", optimize: "Otimização", rig: "Rigging", animation: "Animação",
+  sound: "Design de som", music: "Composição musical", inspect: "Inspeção GLB",
+  review: "Revisão humana", package: "Empacotamento",
+};
+const eventLabels = {
+  approved: "Aprovação", pending: "Retomada", paused: "Pausa", cancelled: "Cancelamento",
+  delegated: "Delegação", review_requested: "Pedido de revisão", result: "Resultado",
+  retry_requested: "Nova tentativa solicitada", blocked: "Bloqueio",
+};
+const agentNames = Object.fromEntries(Object.values(stages).map(stage => [stage.agentId, stage.agent]));
+const agentName = id => agentNames[id] || "Responsável indisponível";
+const stageName = id => stageLabels[id] || id;
+
+function serverHistory(messageResult, errorResult) {
+  const history = el("div");
+  if (messageResult.status === "fulfilled" && messageResult.value.length) {
+    const timeline = el("ol", "production-history");
+    for (const event of messageResult.value) {
+      const row = el("li");
+      row.append(el("small", "muted", formatDate(event.date * 1000) + " · " +
+        (eventLabels[event.event] || event.event)),
+      el("p", "", agentName(event.sender) + " → " + agentName(event.recipient) + " · " + event.objective));
+      for (const evidence of event.evidence || []) {
+        row.append(el("p", "muted", stageName(evidence.stage) + " · SHA-256 " + evidence.sha256));
+      }
+      timeline.append(row);
+    }
+    history.append(timeline);
+  } else {
+    history.append(el("p", "muted", messageResult.status === "fulfilled" ?
+      "Nenhuma decisão ou transferência registrada." : "Histórico de decisões indisponível."));
+  }
+  if (errorResult.status === "fulfilled" && errorResult.value.length) {
+    const errors = el("ul", "production-history");
+    for (const error of errorResult.value) {
+      const reason = error.reason === "invalid_glb" ? "Arquivo GLB inválido" : "Falha registrada";
+      errors.append(el("li", "", formatDate(error.recorded * 1000) + " · " +
+        stageName(error.stage) + " · tentativa " + error.attempt + " · " + reason));
+    }
+    history.append(errors);
+  } else if (errorResult.status === "rejected") {
+    history.append(el("p", "muted", "Histórico de erros indisponível."));
+  }
+  return details("Decisões, transferências e erros", history, true);
+}
+
+async function showRemotePlan(root, id, operationError) {
   const remote = studioBackend()?.productions;
   if (!remote) return;
   const generation = ++remoteRevision;
   const box = panel("Produção no servidor", "Carregando checkpoints…");
   root.append(box);
   try {
-    const [job, reports] = await Promise.all([remote.get(id), remote.reports(id)]);
+    const [job, reports, history] = await Promise.all([
+      remote.get(id), remote.reports(id), Promise.allSettled([remote.messages(id), remote.errors(id)]),
+    ]);
     if (generation !== remoteRevision || !box.isConnected) return;
     const feedback = status();
-    box.replaceChildren(el("h2", "", job.title), el("p", "draft-copy", job.briefing), feedback);
+    const done = job.steps.filter(step => step.status === "done").length;
+    box.replaceChildren(el("h2", "", job.title), el("p", "draft-copy", job.briefing),
+      el("p", "muted", done + " de " + job.steps.length + " checkpoints registrados"), feedback);
+    if (operationError) announce(feedback, operationError, true);
     const stages = el("ol", "production-tasks");
     for (const step of job.steps) {
       const row = el("li", "production-task");
-      const labels = { inspect: "Inspeção GLB", review: "Revisão humana", package: "Empacotamento" };
-      row.append(el("h3", "", labels[step.stage] || step.stage), el("p", "muted", step.status));
+      const state = serverTaskState(job, step);
+      row.append(el("h3", "", stageName(step.stage)), el("p", "", agentName(step.agent) + " · " +
+        (serverLabels[state] || "Estado indisponível")));
+      if (step.depends_on?.length) {
+        row.append(el("p", "muted", "Depende de " + step.depends_on.map(stageName).join(", ")));
+      }
+      if (step.reason === "invalid_glb") {
+        row.append(el("p", "muted", state === "blocked" ?
+          "Limite de tentativas atingido. Corrija o GLB antes de abrir outra produção." :
+          "A última inspeção rejeitou o arquivo. Corrija ou substitua o GLB antes de tentar novamente."));
+      } else if (state === "uncertain") {
+        row.append(el("p", "muted", "Confirme com o operador se houve execução antes de repetir a etapa."));
+      }
       const report = reports.find(item => item.stage === step.stage);
-      if (report?.sha256) row.append(el("p", "muted", "SHA-256 " + report.sha256));
+      const hash = report?.sha256 ?? report?.report_digest;
+      if (hash) row.append(el("p", "muted", "SHA-256 " + hash));
       stages.append(row);
     }
     const run = (label, action) => button(label, async trigger => {
       trigger.disabled = true;
-      try { await action(); render(); }
-      catch (error) { announce(feedback, error.message, true); trigger.disabled = false; }
+      try { await action(); if (box.isConnected) render(); }
+      catch (error) {
+        if (!box.isConnected) return;
+        if ([409, 422].includes(error.status)) {
+          box.remove();
+          await showRemotePlan(root, id, error.message);
+        } else {
+          announce(feedback, error.message, true);
+          trigger.disabled = false;
+        }
+      }
     });
     if (!job.approved) {
       box.append(run("Aprovar fila com custo de R$ 0", () => remote.control(id, "approve")));
@@ -404,14 +485,14 @@ async function showRemotePlan(root, id) {
       }
       if (pending?.status === "pending") box.append(run("Pausar fila", () => remote.control(id, "pause")));
       if (pending?.status === "paused") box.append(run("Retomar fila", () => remote.control(id, "resume")));
-      if (pending && ["pending", "paused"].includes(pending.status)) {
+      if (pending && ["pending", "paused", "waiting", "blocked"].includes(pending.status)) {
         box.append(run("Cancelar etapas pendentes", () => {
           if (!confirm("Cancelar as etapas pendentes desta produção?")) return;
           return remote.control(id, "cancel");
         }));
       }
     }
-    box.append(stages);
+    box.append(stages, serverHistory(...history));
   } catch (error) {
     if (generation === remoteRevision && box.isConnected) {
       box.replaceChildren(el("p", "", error.message), button("Recarregar produção", () => render()));

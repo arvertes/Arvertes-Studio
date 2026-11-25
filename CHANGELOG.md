@@ -5,6 +5,9 @@
 - Verificação de saúde e do catálogo autenticado do Arvertes Agents com diagnóstico do início lento do Render, da sessão e das falhas de rede.
 - Conversas, dossiês e produções da conta separados dos dados locais. Configurações permite alternar para os dados deste navegador e voltar ao servidor.
 - Escritório virtual exibe o estado observado na fila real do usuário e o horário da última consulta.
+- Conversas exibem propostas de Atlas quando disponíveis no servidor e sugerem encaminhamentos no modo local.
+- AutoPipeline apresenta responsáveis, dependências, checkpoints, decisões, erros e recuperação da fila de inspeção.
+- Anotações do navegador registram a origem e a condição de sugestão. Consultas a fichas distinguem nomes ambíguos e versões.
 
 ## v0.2.2 dev
 

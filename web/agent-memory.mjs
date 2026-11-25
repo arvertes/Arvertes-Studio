@@ -1,3 +1,4 @@
+import { normalize } from "./production-catalog.mjs";
 import { MAX_FACTS, MAX_MESSAGES, MAX_MESSAGE } from "./agent-dialogue.mjs";
 
 const DB = "arvertes-studio-agent-memory";
@@ -56,16 +57,18 @@ export function createAgentMemory(indexedDB) {
       let messages, facts;
       function save() {
         if (!messages || !facts) return;
-        if (remembered !== null && facts.length >= MAX_FACTS) {
+        const newFact = remembered !== null && !facts.some(item => normalize(item.text) === normalize(remembered));
+        if (newFact && facts.length >= MAX_FACTS) {
           fail(Error("Limite de 24 anotações atingido."));
           return;
         }
-        if (remembered !== null) facts.push({ id: crypto.randomUUID(), text: remembered, at: new Date().toISOString() });
+        if (newFact) facts.push({ id: crypto.randomUUID(), text: remembered, at: new Date().toISOString(),
+          label: "suggestion", source: "operador via chat local" });
         const at = new Date().toISOString();
         messages.push({ role:"user", text:userText, at }, { role:"agent", text:reply, at });
         messages = messages.slice(-MAX_MESSAGES);
         store.put({ id: "agent:" + agentId, messages });
-        if (remembered !== null) store.put({ id: SHARED, facts });
+        if (newFact) store.put({ id: SHARED, facts });
         finish({ messages, facts });
       }
       own.onsuccess = () => { messages = Array.isArray(own.result?.messages) ? own.result.messages : []; save(); };

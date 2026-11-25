@@ -274,6 +274,8 @@ export function createBackend(origin, accessToken, fetcher = fetch, {
       review: (id, inspectionSha256) => request(productionPath(id) + "/review",
         { method: "POST", json: { inspectionSha256, accepted: true } }),
       reports: id => request(productionPath(id) + "/reports"),
+      messages: id => request(productionPath(id) + "/messages"),
+      errors: id => request(productionPath(id) + "/errors"),
       package: id => request(productionPath(id) + "/package", { method: "POST", blob: true }),
       archive: id => request(productionPath(id) + "/storage", { method: "POST" }),
     },

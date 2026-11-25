@@ -139,6 +139,15 @@ with ThreadingHTTPServer(("127.0.0.1", 0), partial(Quiet, directory=studio / "we
         expect(page.locator("#chat-facts")).to_contain_text("a referência é sintética")
         page.reload()
         expect(page.locator("#chat-messages")).to_contain_text("Lembre que a referência")
+        page.locator("#chat-message").fill("Prepare retopologia e animação para o modelo sintético.")
+        page.locator("#chat-send").click()
+        proposal = page.locator("#chat-messages details").last
+        proposal.locator("summary").click()
+        expect(proposal).to_contain_text("Forge · malha retopologizada")
+        expect(proposal).to_contain_text("Requer executor conectado")
+        expect(proposal).to_contain_text("Entradas pendentes")
+        page.reload()
+        expect(page.get_by_text("Consultar proposta de Atlas")).to_be_visible()
         page.goto(origin + "/#characters")
         page.locator("#character-new-name").fill("Fixture remota")
         page.locator("#character-create button").click()
@@ -153,6 +162,8 @@ with ThreadingHTTPServer(("127.0.0.1", 0), partial(Quiet, directory=studio / "we
         page.get_by_role("button", name="Propor plano").click()
         page.get_by_role("button", name="Salvar fila de inspeção no servidor").click()
         expect(page).to_have_url(re.compile(r"#pipeline/[a-f0-9]{32}$"))
+        expect(page.get_by_text("0 de 3 checkpoints registrados")).to_be_visible()
+        expect(page.get_by_text("Argus · Aguardando aprovação")).to_be_visible()
         page.get_by_role("button", name="Aprovar fila com custo de R$ 0").click()
         expect(page.get_by_label("GLB autorizado para inspeção")).to_be_visible()
         route = page.url
@@ -163,8 +174,15 @@ with ThreadingHTTPServer(("127.0.0.1", 0), partial(Quiet, directory=studio / "we
         page.goto(route)
         fixture = Path(tmp) / "fixture.glb"
         write_glb(fixture, 4)
+        page.get_by_label("GLB autorizado para inspeção").set_input_files(
+            {"name": "invalid.glb", "mimeType": "model/gltf-binary", "buffer": b"invalid"})
+        page.get_by_role("button", name="Inspecionar GLB").click()
+        expect(page.get_by_text("A última inspeção rejeitou o arquivo.", exact=False)).to_be_visible()
+        expect(page.get_by_text("tentativa 1 · Arquivo GLB inválido", exact=False)).to_be_visible()
         page.get_by_label("GLB autorizado para inspeção").set_input_files(fixture)
         page.get_by_role("button", name="Inspecionar GLB").click()
+        expect(page.get_by_text("1 de 3 checkpoints registrados")).to_be_visible()
+        expect(page.get_by_text("Aegis · Aguardando revisão humana")).to_be_visible()
         page.get_by_role("button", name="Confirmar revisão da inspeção").click()
         with page.expect_download() as download:
             page.get_by_role("button", name="Baixar pacote verificado").click()
@@ -173,6 +191,8 @@ with ThreadingHTTPServer(("127.0.0.1", 0), partial(Quiet, directory=studio / "we
         assert claims[0]["counts"]["meshes"] == 4, claims
         page.reload()
         expect(page.get_by_role("button", name="Baixar pacote verificado")).to_be_visible()
+        expect(page.get_by_text("3 de 3 checkpoints registrados")).to_be_visible()
+        expect(page.get_by_text("Operador aprovou limite de R$ 0.", exact=False)).to_be_visible()
         page.goto(origin + "/#settings")
         online = False
         page.get_by_role("button", name="Verificar conexão").click()

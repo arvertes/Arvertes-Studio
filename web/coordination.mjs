@@ -240,3 +240,17 @@ export function applyCommand(production, command) {
   }
   throw new CoordinationError("Ação de produção desconhecida.");
 }
+
+export function serverTaskState(job, step, seen = new Set()) {
+  if (step.status !== "pending") return step.status;
+  if (!job.approved) return "approval";
+  if (seen.has(step.stage)) return "dependency_blocked";
+  const path = new Set([...seen, step.stage]);
+  const unmet = step.depends_on?.map(id => job.steps.find(parent => parent.stage === id)?.status) ?? [];
+  if (unmet.some(status => ["blocked", "uncertain", "cancelled", "dependency_blocked"].includes(status))
+      || job.steps.some(parent => step.depends_on?.includes(parent.stage)
+        && serverTaskState(job, parent, path) === "dependency_blocked")) return "dependency_blocked";
+  if (unmet.some(status => status !== "done")) return "dependency";
+  if (!step.executable) return "executor";
+  return step.stage === "review" ? "review" : "ready";
+}

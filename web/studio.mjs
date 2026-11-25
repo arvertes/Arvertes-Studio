@@ -1,6 +1,7 @@
 import { byId, departments, el, empty, fields, fillIcons, icon, link } from "./ui.mjs";
 import { mountOffice, unmountOffice, setOfficeRoster, setOfficeActivity } from "./office.mjs";
 import { initLibrary, closePreview } from "./library.mjs";
+import { leaveLaboratory, mountLaboratory } from "./lab-ui.mjs";
 import { initPipeline } from "./pipeline.mjs";
 import { applyDisplayPreferences, renderExtraPage } from "./system-panels.mjs";
 import { initProduction, showProductionPage } from "./production-ui.mjs";
@@ -31,6 +32,7 @@ const groups = [
     ["audio", "audio", "Áudio e música", "Planejamento de som e composição para a produção."],
   ]],
   ["Inteligência artificial", [
+    ["laboratorio", "activity", "Aprimoramento Contínuo", "Experimentos locais com ativos sintéticos e evidências verificáveis."],
     ["agents", "users", "Agentes", "Consulte os especialistas cadastrados no Studio."],
     ["atlas", "spark", "Atlas", "Proponha etapas e responsáveis a partir de um briefing."],
     ["tools", "tools", "Ferramentas", "Consulte as ferramentas disponíveis para o seu fluxo."],
@@ -131,6 +133,7 @@ const systemPages = {
 };
 function renderSystem(page) {
   const root = byId("system-content");
+  if (page === "laboratorio") { mountLaboratory(root); return; }
   if (["settings", "resources", "memory", "tools"].includes(page)) {
     renderExtraPage(page, root, { collapsed, setCollapsed(value) {
       collapsed = value;
@@ -315,6 +318,7 @@ function renderPage(focus = false) {
   if (current === "office" || current === "overview") unmountOffice();
   if (current === "library") closePreview();
   if (current === "characters") leaveCharacters();
+  if (current === "laboratorio") leaveLaboratory();
   current = page;
   currentId = productionId;
   const section = byId(`view-${page}`) || byId("system-page");

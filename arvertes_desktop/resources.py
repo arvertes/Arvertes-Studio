@@ -13,9 +13,9 @@ class Reading:
     cpu: float
 
 
-def reading():
+def reading(*, cpu_interval=None):
     mem = psutil.virtual_memory()
-    return Reading(mem.available // MIB, mem.total // MIB, psutil.cpu_percent())
+    return Reading(mem.available // MIB, mem.total // MIB, psutil.cpu_percent(interval=cpu_interval))
 
 
 def reserve(sample):

@@ -73,3 +73,7 @@ Na sprint passaram a suíte unitária Python (17 testes), Desktop (37 testes), o
 ## Sprint 2
 
 A suíte Web inclui grafos sem ciclos, reaproveitamento de relatórios por versão, cancelamento e rejeição de resultados atrasados. O cenário local do Chromium verifica pausa e recarga no IndexedDB e acompanha a execução dos workers. O cenário autenticado usa uma conta sintética e o PostgreSQL local para testar rascunhos, aprovação, busca e citações. O conteúdo com marcação é verificado como texto. Entradas e arquivos dos dois cenários são sintéticos.
+
+## Sprint 3
+
+`python tests/integration/check_asset_package.py /caminho/para/blender` usa Blender 5.3.0 (`02f0899d78e3`) e executa o comando público nos três modos. Confere hashes dos arquivos originais, inventário, LODs e texturas, cena empacotada e reimportação de FBX e GLB, incluindo esqueleto e clipe sintético. A importação no Unreal requer ensaio independente.

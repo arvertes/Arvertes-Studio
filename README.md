@@ -25,6 +25,10 @@ Para gerar e instalar o pacote de desenvolvimento ou ativar a partir do código-
 
 A interface independente está em desenvolvimento no pacote `arvertes_desktop`, separado do add-on. Consulte o [manual desktop](docs/DESKTOP.md) para instalação, limites e testes. O roadmap abaixo registra as capacidades inicialmente planejadas para o add-on; a evolução desktop reorganiza as etapas de entrega, preservando essas metas. A integração de agentes locais e a biblioteca de projetos ainda são etapas futuras.
 
+## Pacotes locais de assets
+
+A Sprint 3 acrescenta produção offline com imagem, briefing e receita sintética ou GLB fornecido. O Blender exporta FBX e GLB, e o comando verifica o pacote por SHA-256. [Uso e proposta técnica](docs/PRODUCAO_AUTOMATIZADA.md)
+
 ## Tecnologias
 
 - Blender e API Python (`bpy`)

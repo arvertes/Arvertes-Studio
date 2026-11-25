@@ -24,8 +24,16 @@ def validate_payload(document, binary_size):
     buffers, views = table("buffers",1), table("bufferViews")
     nodes, meshes, accessors = table("nodes"), table("meshes"), table("accessors")
     skins, materials, textures, images = table("skins",128), table("materials"), table("textures"), table("images",64)
-    if any("uri" in row for row in buffers):
-        raise ValueError("Use um buffer BIN autocontido.")
+    embedded = {id(item) for item in images}
+    stack = [document]
+    while stack:
+        item = stack.pop()
+        if isinstance(item, dict):
+            if "uri" in item and id(item) not in embedded:
+                raise ValueError("Recursos externos fora das imagens admitidas.")
+            stack.extend(item.values())
+        elif isinstance(item, list):
+            stack.extend(item)
     if binary_size:
         if len(buffers) != 1 or not _int(buffers[0].get("byteLength"), max(1,binary_size-3), binary_size):
             raise ValueError("O buffer do GLB diverge do bloco BIN.")

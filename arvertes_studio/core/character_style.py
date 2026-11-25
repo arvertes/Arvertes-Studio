@@ -43,12 +43,14 @@ def reference_views(value, count):
 
 
 def validate_adaptation(options):
-    if not isinstance(options, dict) or set(options) != {"height_m", "front", "require_humanoid"}:
+    required = {"height_m", "front", "require_humanoid"}
+    if not isinstance(options, dict) or not required <= options.keys() or options.keys() - required - {"materials"}:
         raise ValueError("Informe altura, frente e requisito de rig para adaptação.")
     height = options["height_m"]
     if (type(height) not in (int, float) or not .50 <= height <= 3.0
             or options["front"] not in ("-Y", "+Y", "-X", "+X")
-            or type(options["require_humanoid"]) is not bool):
+            or type(options["require_humanoid"]) is not bool
+            or options.get("materials", "preserve") not in ("preserve", "fill_missing_neutral")):
         raise ValueError("Normalização fora da faixa admitida.")
     return options
 

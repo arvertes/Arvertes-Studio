@@ -25,21 +25,7 @@ def read_source(path):
         raw = source.read(MAX_INPUT + 1)
     if len(raw) > MAX_INPUT:
         raise ValueError("O GLB precisa caber no limite de 16 MiB.")
-    doc = inspect_glb_stream(BytesIO(raw), len(raw), max_json=2097152)
-    stack = [doc]
-    while stack:
-        obj = stack.pop()
-        if isinstance(obj, dict):
-            if "uri" in obj and not (isinstance(obj["uri"], str) and obj["uri"].startswith("data:")):
-                raise ValueError("A inspeção exige GLB sem recursos externos.")
-            stack.extend(obj.values())
-        elif isinstance(obj, list):
-            stack.extend(obj)
-    nodes, accessors = doc.get("nodes", []), doc.get("accessors", [])
-    if (not isinstance(nodes, list) or len(nodes) > 5000 or not isinstance(accessors, list)
-            or any(not isinstance(item, dict) or type(item.get("count")) is not int or item["count"] <= 0
-                   for item in accessors) or sum(item["count"] for item in accessors) > 3_000_000):
-        raise ValueError("A geometria excede o limite da análise local.")
+    inspect_glb_stream(BytesIO(raw), len(raw), max_json=2097152, strict=True)
     return raw
 
 

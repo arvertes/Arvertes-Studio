@@ -145,13 +145,14 @@ def _evidence(path):
                       if "reports/deformable-lods.json" in names else None)
     base = quality["base"]
     components = ["model", "master"]
-    if review["glb"]["skins"] and base["bones"]:
+    skin = (quality.get("adaptation") or {}).get("skin")
+    if review["glb"]["skins"] and base["bones"] and (skin is None or skin["weighted_vertices"] > 0):
         components.append("rig")
     if review["clips"]:
         components.append("animations")
     if review["glb"]["materials"]:
         components.append("materials")
-    if review["pbr_status"] == "opaque_maps_verified":
+    if review["pbr_status"] in ("opaque_maps_verified", "embedded_opaque_maps_verified"):
         components.append("pbr_maps")
     if lod_report and lod_report["accepted_count"] and lod_report["accepted_count"] == len(review["lods"]):
         components.append("lods")
@@ -187,7 +188,7 @@ def _delivery(job, brief, plan, evidence, assessment, preflight_report):
         "original": "preserved_glb" if "original.glb" in files else "synthetic_master_in_asset",
         "license": brief.get("license"),
         "dossier": brief.get("dossier"),
-        "reference_usage": "provenance_and_human_comparison" if brief["source"] in ("procedural", "external_glb", "image_guided")
+        "reference_usage": "provenance_and_human_comparison" if brief["source"] in ("procedural", "base_glb", "external_glb", "image_guided")
         else "provenance_and_scaled_copy",
         "fidelity_review": plan.get("fidelity_review", "human_required"),
         "external_handoff": "handoff.json" if "handoff.json" in files else None,
@@ -371,7 +372,7 @@ def review(job, digest, decision, fidelity=None):
     if fidelity is not None and (not isinstance(fidelity, dict)
             or not isinstance(fidelity.get("notes"), str) or not 1 <= len(fidelity["notes"].strip()) <= 1500):
         raise ValueError("Registre uma observação de revisão entre 1 e 1.500 caracteres.")
-    if decision == "accept" and brief["source"] in ("procedural", "external_glb", "image_guided"):
+    if decision == "accept" and brief["source"] in ("procedural", "base_glb", "external_glb", "image_guided"):
         reference_hashes = _json(job / "plan.json")["references"]
         required = {"references", "notes", "verdict"}
         if (not isinstance(fidelity, dict) or not required <= fidelity.keys()

@@ -2,6 +2,8 @@
 
 ## v0.3 Web em desenvolvimento
 
+- Dossiês deixam o estado de carregamento ao falhar, oferecem nova tentativa e preservam o rascunho na aba. Falhas de mídia aparecem junto do anexo sem interromper a edição de texto.
+
 - Verificação de saúde e do catálogo autenticado do Arvertes Agents com diagnóstico do início lento do Render, da sessão e das falhas de rede.
 - Conversas, dossiês e produções da conta separados dos dados locais. Configurações permite alternar para os dados deste navegador e voltar ao servidor.
 - Escritório virtual exibe o estado observado na fila real do usuário e o horário da última consulta.

@@ -221,9 +221,9 @@ export function createBackend(origin, accessToken, fetcher = fetch, {
   const observed = new Map();
   const inflight = new Map();
   const cache = item => { if (item?.id) observed.set(item.id, item.revision); return item; };
-  async function attachment(id, kind, file) {
+  async function attachment(id, kind, file, revision = observed.get(id)) {
     validateAttachment(kind, file);
-    const path = characterPath(id) + "/media/" + key(kind) + "?revision=" + observed.get(id);
+    const path = characterPath(id) + "/media/" + key(kind) + "?revision=" + revision;
     const bytes = await file.arrayBuffer();
     const hash = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
     const signature = path + ":" + file.name + ":" + Array.from(hash).join(",");
@@ -254,14 +254,14 @@ export function createBackend(origin, accessToken, fetcher = fetch, {
       create: async json => cache(await request("/characters", { method: "POST", json })),
       save: async ({ id, ...json }) => cache(await request(characterPath(id), { method: "PUT", json })),
       attach: attachment,
-      removeAttachment: async (id, kind) => cache(await request(characterPath(id) + "/media/" + key(kind)
-        + "?revision=" + observed.get(id), { method: "DELETE" })),
-      media: async (id, kind) => {
-        const path = characterPath(id) + "/media/" + key(kind);
+      removeAttachment: async (id, kind, revision = observed.get(id)) => cache(await request(characterPath(id) + "/media/" + key(kind)
+        + "?revision=" + revision, { method: "DELETE" })),
+      media: async (id, kind, revision = observed.get(id)) => {
+        const path = characterPath(id) + "/media/" + key(kind) + (revision === undefined ? "" : "?revision=" + revision);
         try { return { blob: await request(path, { blob: true }) }; }
         catch (error) { if (error.status === 404) return null; throw error; }
       },
-      remove: id => request(characterPath(id) + "?revision=" + observed.get(id), { method: "DELETE" }),
+      remove: (id, revision = observed.get(id)) => request(characterPath(id) + "?revision=" + revision, { method: "DELETE" }),
       exportZip: (id, revision = observed.get(id)) => request(characterPath(id) + "/package?revision=" + revision, { blob: true }),
     },
     productions: {

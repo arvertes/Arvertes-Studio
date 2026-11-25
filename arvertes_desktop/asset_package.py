@@ -16,7 +16,9 @@ from zipfile import BadZipFile, ZIP_STORED, ZipFile
 import psutil
 
 from arvertes_studio.core.asset_package import (ACTIVE_QUALITY, MAX_FILE, MAX_IMAGE, MAX_PACKAGE, SAFE_ENTRY,
-                                               QUALITY, image_info, json_bytes, library_pins, verify_package)
+                                               QUALITY, RECIPES, RIGGED_RECIPES, OTHER_RECIPES, image_info, json_bytes, library_pins, verify_package)
+from arvertes_studio.core.lab_audio import render_transition
+from arvertes_studio.core.unreal_preflight import compare_motion, preflight
 from .blender_job import checked_digest, fingerprint, read_source
 from .resources import MIB, budget, reading, reserve, stop_children
 from .settings import validate_blender_path
@@ -111,6 +113,12 @@ def _outputs(folder, quality, mode):
             or report.get("unreal_import") != "pending" or report.get("artistic_review") != "pending"):
         raise ValueError("Relatório de qualidade incompatível.")
     files = {"models/asset.fbx", "models/preview.glb", "scene/working.blend", "reports/quality.json"}
+    if mode in RIGGED_RECIPES:
+        read_local(folder / "reports/motion.json", 64 * 1024)
+        files.add("reports/motion.json")
+    if mode in OTHER_RECIPES:
+        read_local(folder / "reports/environment.json", 64 * 1024)
+        files.add("reports/environment.json")
     triangles = report["base"]["triangles"]
     if type(triangles) is not int or triangles <= 0:
         raise ValueError("Relatório de geometria inválido.")
@@ -139,6 +147,23 @@ def _outputs(folder, quality, mode):
     return files
 
 
+def documented_requirements(path):
+    value = json.loads(read_local(path, 8192))
+    fields = {"characteristics", "animation_requirements", "delivery_formats"}
+    if not isinstance(value, dict) or value.keys() != fields:
+        raise ValueError("Requisitos técnicos incompatíveis.")
+    for key in fields:
+        entries = value[key]
+        if (not isinstance(entries, list) or len(entries) > 12
+                or any(not isinstance(item, str) or not 1 <= len(item.strip()) <= 160
+                       or any(ord(char) < 32 for char in item) for item in entries)
+                or len(entries) != len(set(entries))):
+            raise ValueError("Lista de requisitos incompatível.")
+    if set(value["delivery_formats"]) - {"fbx", "glb", "blend"}:
+        raise ValueError("Formato fora dos executores disponíveis.")
+    return value
+
+
 def build(args):
     if not args.approved:
         raise ValueError("Confirme explicitamente a execução local com --approved.")
@@ -157,6 +182,8 @@ def build(args):
     image = image_info(concept)
     pins = library_pins(json.loads(read_local(args.references, 32 * 1024))) if args.references else []
     mode = "imported_glb" if args.model else args.recipe
+    if args.motion_revision != 1 and mode != "humanoid":
+        raise ValueError("Revisão alternativa disponível somente para o manequim.")
     with package_slot(), TemporaryDirectory(prefix="arvertes-asset-", dir=output.parent) as directory:
         folder = Path(directory)
         (folder / "references").mkdir()
@@ -165,6 +192,10 @@ def build(args):
         (folder / "references/library.json").write_bytes(json_bytes(pins))
         info = {"schema": 1, "description": description, "reference": ref_path, "image": image,
                 "mode": mode, "quality": args.quality, "max_cost_centavos": 0}
+        if mode == "humanoid":
+            info["motion_revision"] = args.motion_revision
+        if args.requirements:
+            info["requirements"] = documented_requirements(args.requirements)
         if args.model:
             original = read_source(args.model.absolute())
             info["model_sha256"] = fingerprint(original)
@@ -172,6 +203,13 @@ def build(args):
         (folder / "brief.json").write_bytes(json_bytes(info))
         run_worker(blender, folder)
         files = _outputs(folder, args.quality, mode) | {ref_path, "references/library.json", "brief.json"}
+        if mode == "effects":
+            cut, fade, audio_report = render_transition()
+            (folder / "audio").mkdir()
+            (folder / "audio/cut.wav").write_bytes(cut)
+            (folder / "audio/crossfade.wav").write_bytes(fade)
+            (folder / "reports/audio.json").write_bytes(json_bytes(audio_report))
+            files.update(("audio/cut.wav", "audio/crossfade.wav", "reports/audio.json"))
         entries = [{"path": item, "bytes": (folder / item).stat().st_size,
                     "sha256": checked_digest(folder / item, MAX_FILE)} for item in sorted(files)]
         if sum(item["bytes"] for item in entries) > MAX_PACKAGE:
@@ -198,16 +236,29 @@ def main(argv=None):
     make.add_argument("--description", required=True)
     make.add_argument("--quality", choices=tuple(QUALITY), default="lite")
     sources = make.add_mutually_exclusive_group(required=True)
-    sources.add_argument("--recipe", choices=("static", "rigged"), help="receita sintética explícita")
+    sources.add_argument("--recipe", choices=RECIPES, help="receita sintética explícita")
     sources.add_argument("--model", type=Path, help="GLB local escolhido pelo operador")
     make.add_argument("--references", type=Path, help="lista JSON de revisões licenciadas")
     make.add_argument("--approved", action="store_true")
+    make.add_argument("--motion-revision", type=int, choices=(1,2), default=1)
+    make.add_argument("--requirements", type=Path, help="requisitos documentais JSON")
     check = sub.add_parser("verify", help="verificar inventário e hashes sem extrair")
     check.add_argument("package", type=Path)
+    check = sub.add_parser("preflight", help="pré-validação de pacote para Unreal")
+    check.add_argument("package", type=Path)
+    compare = sub.add_parser("compare-motion", help="comparar amostras entre duas revisões")
+    compare.add_argument("before", type=Path)
+    compare.add_argument("after", type=Path)
     args = parser.parse_args(argv)
     try:
-        manifest = build(args) if args.action == "build" else verify_package(args.package)
-    except (OSError, ValueError, BadZipFile, RecursionError, KeyError, TypeError, psutil.Error) as error:
+        if args.action == "build":
+            manifest = build(args)
+        elif args.action == "compare-motion":
+            manifest = compare_motion(args.before, args.after)
+        else:
+            inspect = preflight if args.action == "preflight" else verify_package
+            manifest = inspect(args.package)
+    except (OSError, ValueError, BadZipFile, RecursionError, KeyError, TypeError, AttributeError, psutil.Error) as error:
         print(f"Pacote bloqueado. {error}", file=sys.stderr)
         return 2
     print(json_bytes(manifest).decode("utf-8"), end="")

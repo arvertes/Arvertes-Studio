@@ -14,7 +14,7 @@ _GLB_HEADER = Struct("<4sII")
 _CHUNK_HEADER = Struct("<I4s")
 
 
-def _validate_glb_document(raw: bytes) -> None:
+def _decode_glb_document(raw: bytes) -> dict:
     try:
         document = json.loads(raw.decode("utf-8"))
     except (ValueError, RecursionError) as exc:
@@ -35,36 +35,42 @@ def _validate_glb_document(raw: bytes) -> None:
             if type(mesh) is not int or not 0 <= mesh < len(meshes):
                 raise ImportValidationError("O GLB contém um nó que referencia uma malha inexistente.")
 
+    return document
+
+
+def inspect_glb_stream(source, size, *, max_json=None):
+    """Lê um contêiner sem alocar a seção geométrica. O chamador controla o size."""
+    header = source.read(_GLB_HEADER.size)
+    if len(header) != _GLB_HEADER.size:
+        raise ImportValidationError("Cabeçalho GLB incompleto.")
+    magic, version, declared = _GLB_HEADER.unpack(header)
+    if magic != b"glTF" or version != 2:
+        raise ImportValidationError("O arquivo precisa ser um GLB 2.0 válido.")
+    if size != declared or size < 24:
+        raise ImportValidationError("Tamanho inválido no cabeçalho do GLB.")
+
+    document = None
+    while source.tell() < size:
+        chunk = source.read(_CHUNK_HEADER.size)
+        if len(chunk) != _CHUNK_HEADER.size:
+            raise ImportValidationError("Cabeçalho de seção GLB incompleto.")
+        length, kind = _CHUNK_HEADER.unpack(chunk)
+        if length % 4 or source.tell() + length > size:
+            raise ImportValidationError("Tamanho inválido em uma seção do GLB.")
+        if document is None:
+            if kind != b"JSON" or length == 0:
+                raise ImportValidationError("A primeira seção do GLB deve conter JSON.")
+            if max_json is not None and length > max_json:
+                raise ImportValidationError("Metadados GLB acima do limite.")
+            document = _decode_glb_document(source.read(length))
+        else:
+            source.seek(length, os.SEEK_CUR)
+    return document
+
 
 def _validate_glb(path: Path) -> None:
-    # Confere a estrutura do contêiner sem carregar a geometria em memória.
     with path.open("rb") as source:
-        header = source.read(_GLB_HEADER.size)
-        if len(header) != _GLB_HEADER.size:
-            raise ImportValidationError("Cabeçalho GLB incompleto.")
-
-        magic, version, size = _GLB_HEADER.unpack(header)
-        if magic != b"glTF" or version != 2:
-            raise ImportValidationError("O arquivo precisa ser um GLB 2.0 válido.")
-        if size != os.fstat(source.fileno()).st_size or size < 24:
-            raise ImportValidationError("Tamanho inválido no cabeçalho do GLB.")
-
-        first_chunk = True
-        while source.tell() < size:
-            chunk = source.read(_CHUNK_HEADER.size)
-            if len(chunk) != _CHUNK_HEADER.size:
-                raise ImportValidationError("Cabeçalho de seção GLB incompleto.")
-            length, kind = _CHUNK_HEADER.unpack(chunk)
-            if first_chunk and (kind != b"JSON" or length == 0):
-                raise ImportValidationError("A primeira seção do GLB deve conter JSON.")
-            if length % 4 or source.tell() + length > size:
-                raise ImportValidationError("Tamanho inválido em uma seção do GLB.")
-            if first_chunk:
-                # O Blender pode importar um nó com índice de malha inválido como vazio.
-                _validate_glb_document(source.read(length))
-            else:
-                source.seek(length, os.SEEK_CUR)
-            first_chunk = False
+        inspect_glb_stream(source, os.fstat(source.fileno()).st_size)
 
 
 _VALIDATORS = {".glb": _validate_glb}

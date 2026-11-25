@@ -1,17 +1,16 @@
 """Admissão local de uma referência GLB explícita para análise em cópia."""
 from hashlib import sha256
+from io import BytesIO
 import json
 from pathlib import Path
-from struct import Struct
 import os
 import stat
 
-from arvertes_studio.core.imports import validate_import_path
+from arvertes_studio.core.imports import inspect_glb_stream, validate_import_path
 
 MAX_INPUT = 16 * 1024 * 1024
 MAX_REPORT = 8 * 1024 * 1024
 MAX_COPY = 128 * 1024 * 1024
-HEADER = Struct("<4sIII4s")
 
 
 def read_source(path):
@@ -24,17 +23,9 @@ def read_source(path):
         if not stat.S_ISREG(os.fstat(source.fileno()).st_mode):
             raise ValueError("A referência não é um arquivo regular.")
         raw = source.read(MAX_INPUT + 1)
-    if len(raw) < HEADER.size or len(raw) > MAX_INPUT:
+    if len(raw) > MAX_INPUT:
         raise ValueError("O GLB precisa caber no limite de 16 MiB.")
-    magic, version, size, length, kind = HEADER.unpack_from(raw)
-    if magic != b"glTF" or version != 2 or size != len(raw) or kind != b"JSON" or length > 2097152:
-        raise ValueError("Cabeçalho do GLB fora do limite.")
-    try:
-        doc = json.loads(raw[HEADER.size:HEADER.size + length])
-    except (ValueError, RecursionError) as error:
-        raise ValueError("Metadados GLB inválidos.") from error
-    if not isinstance(doc, dict) or len(raw) < HEADER.size + length:
-        raise ValueError("Documento GLB incompatível.")
+    doc = inspect_glb_stream(BytesIO(raw), len(raw), max_json=2097152)
     stack = [doc]
     while stack:
         obj = stack.pop()

@@ -3,10 +3,11 @@ from pathlib import Path
 import json
 
 import bpy
+from mathutils import Vector
 
 from .assets import asset_objects, import_asset
 from .technical import inspect
-from ..core.asset_package import ACTIVE_QUALITY, QUALITY, json_bytes
+from ..core.asset_package import ACTIVE_QUALITY, ASSET_MODES, QUALITY, RIGGED_RECIPES, OTHER_RECIPES, json_bytes
 
 
 def _activate(obj):
@@ -65,9 +66,37 @@ def _texture_variants(folder, source, quality):
     return texture, variants
 
 
-def _synthetic(folder, source, quality, recipe):
+def _synthetic(folder, source, quality, recipe, motion_revision):
     collection = bpy.data.collections.new("SyntheticReference")
     bpy.context.scene.collection.children.link(collection)
+    if recipe in OTHER_RECIPES:
+        from .lab_scene import build as scene_recipe
+
+        evidence = scene_recipe(collection, recipe, quality)
+        (folder / "reports/environment.json").write_bytes(json_bytes(evidence))
+        return collection, []
+    texture, variants = _texture_variants(folder, source, quality)
+    material = bpy.data.materials.new("FixtureBaseColor")
+    material.use_nodes = True
+    nodes = material.node_tree.nodes
+    principled = next(node for node in nodes if node.type == "BSDF_PRINCIPLED")
+    image_node = nodes.new("ShaderNodeTexImage")
+    image_node.image = texture
+    material.node_tree.links.new(image_node.outputs["Color"], principled.inputs["Base Color"])
+    if recipe in RIGGED_RECIPES:
+        from . import lab_assets
+
+        if recipe == "humanoid":
+            arm, obj = lab_assets.mannequin(collection, material)
+            clips = lab_assets.CLIPS
+            lab_assets.animate(arm, clips, lambda name, phase: lab_assets.humanoid_pose(name, phase, motion_revision))
+            stance = ("Foot.L", "Foot.R")
+        else:
+            arm, obj, clips = lab_assets.creature(collection, material, recipe)
+            stance = ("FrontLower.L", "FrontLower.R")
+        evidence = lab_assets.motion_evidence(arm, obj, clips, stance)
+        (folder / "reports/motion.json").write_bytes(json_bytes(evidence))
+        return collection, variants
     bpy.ops.mesh.primitive_uv_sphere_add(segments=24, ring_count=16, radius=0.6)
     obj = bpy.context.object
     obj.name = "FixtureBody"
@@ -77,14 +106,6 @@ def _synthetic(folder, source, quality, recipe):
             membership.objects.unlink(obj)
     for polygon in obj.data.polygons:
         polygon.use_smooth = True
-    texture, variants = _texture_variants(folder, source, quality)
-    material = bpy.data.materials.new("FixtureBaseColor")
-    material.use_nodes = True
-    nodes = material.node_tree.nodes
-    principled = next(node for node in nodes if node.type == "BSDF_PRINCIPLED")
-    image_node = nodes.new("ShaderNodeTexImage")
-    image_node.image = texture
-    material.node_tree.links.new(image_node.outputs["Color"], principled.inputs["Base Color"])
     obj.data.materials.append(material)
     if recipe == "rigged":
         _rig(obj, collection)
@@ -120,7 +141,7 @@ def _valid_lod(mesh):
     return bool(faces)
 
 
-def _lods(folder, meshes, original, quality, animated):
+def _lods(folder, meshes, original, quality, animated, *, retain_small=False):
     if animated or any(mesh.data.shape_keys or mesh.modifiers for mesh in meshes):
         return [], "deforming_asset_requires_lod_review"
     if original > 240_000:
@@ -129,20 +150,25 @@ def _lods(folder, meshes, original, quality, animated):
     previous = original
     for level, ratio in enumerate(quality.lod_ratios, 1):
         objects = []
+        cached_meshes = {}
         try:
             for source in meshes:
                 copy = source.copy()
                 objects.append(copy)
-                copy.data = source.data.copy()
+                identity = source.data.as_pointer()
+                copy.data = cached_meshes.get(identity) or source.data.copy()
                 copy.name = f"{source.name}_LOD{level}"
                 bpy.context.scene.collection.objects.link(copy)
                 matrix = source.matrix_world.copy()
                 copy.parent = None
                 copy.matrix_world = matrix
-                _activate(copy)
-                modifier = copy.modifiers.new("ArvertesLOD", "DECIMATE")
-                modifier.ratio = ratio
-                bpy.ops.object.modifier_apply(modifier=modifier.name)
+                if identity not in cached_meshes:
+                    _activate(copy)
+                    if not retain_small or len(copy.data.polygons) > 24:
+                        modifier = copy.modifiers.new("ArvertesLOD", "DECIMATE")
+                        modifier.ratio = ratio
+                        bpy.ops.object.modifier_apply(modifier=modifier.name)
+                    cached_meshes[identity] = copy.data
             if not all(_valid_lod(obj.data) for obj in objects):
                 return result, "invalid_lod_topology"
             count = _triangles(objects)
@@ -165,7 +191,7 @@ def build(folder: Path):
     request = json.loads((folder / "brief.json").read_text(encoding="utf-8"))
     preset = request["quality"]
     mode = request["mode"]
-    if preset not in ACTIVE_QUALITY or mode not in ("static", "rigged", "imported_glb"):
+    if preset not in ACTIVE_QUALITY or mode not in ASSET_MODES:
         raise ValueError("Perfil ou modo indisponível para execução.")
     quality = QUALITY[preset]
     for name in ("models", "textures", "scene", "reports"):
@@ -180,27 +206,32 @@ def build(folder: Path):
         collection = import_asset(bpy.context, folder / "source.glb")
         textures = []
     else:
-        collection, textures = _synthetic(folder, folder / request["reference"], quality, mode)
+        collection, textures = _synthetic(folder, folder / request["reference"], quality, mode, request.get("motion_revision", 1))
     bpy.context.scene.unit_settings.system = "METRIC"
     bpy.context.scene.unit_settings.scale_length = 1.0
     objects = asset_objects(collection)
+    export_objects = [obj for obj in objects if not obj.get("arvertes_blender_volume_only")]
     meshes = [obj for obj in objects if obj.type == "MESH"]
+    bpy.context.view_layer.update()
+    bounds = [obj.matrix_world @ Vector(corner) for obj in meshes for corner in obj.bound_box]
+    dimensions = [round(max(point[i] for point in bounds) - min(point[i] for point in bounds), 6)
+                  for i in range(3)] if bounds else []
     original = _triangles(meshes)
     if original <= 0:
         raise ValueError("A cena não contém triângulos exportáveis.")
     technical = inspect(collection)
     animated = bool(technical["armatures"] or technical["actions"])
-    _fbx(folder / "models/asset.fbx", objects, animated=animated)
+    _fbx(folder / "models/asset.fbx", export_objects, animated=animated)
     bpy.ops.object.select_all(action="DESELECT")
-    for obj in objects:
+    for obj in export_objects:
         obj.select_set(True)
     if "FINISHED" not in bpy.ops.export_scene.gltf(filepath=str(folder / "models/preview.glb"),
-                       export_format="GLB", use_selection=True):
+                       export_format="GLB", use_selection=True, export_lights=mode in OTHER_RECIPES):
         raise ValueError("A exportação GLB foi interrompida.")
     bpy.ops.file.pack_all()
     if "FINISHED" not in bpy.ops.wm.save_as_mainfile(filepath=str(folder / "scene/working.blend")):
         raise ValueError("A cópia Blender não foi gravada.")
-    lods, lod_status = _lods(folder, meshes, original, quality, animated)
+    lods, lod_status = _lods(folder, meshes, original, quality, animated, retain_small=mode == "environment")
     findings = []
     if original > quality.triangle_target:
         findings.append("triangle_target_exceeded")
@@ -213,9 +244,11 @@ def build(folder: Path):
         findings.append("missing_uv")
     report = {
         "schema": 1, "blender_version": bpy.app.version_string, "mode": mode, "quality": preset, "scene_unit": "meter",
+        "fbx_axes": {"forward": "-Y", "up": "Z"}, "gltf_up": "Y", "dimensions_m": dimensions,
         "base": {"triangles": original, "mesh_objects": len(meshes), "uv_meshes": uv_meshes, **technical},
         "lods": lods, "lod_status": lod_status, "texture_variants": textures,
-        "texture_status": "scaled_reference" if textures else "imported_materials_preserved",
+        "texture_status": "scaled_reference" if textures else (
+            "imported_materials_preserved" if mode == "imported_glb" else "procedural_materials"),
         "actions": sorted(action.name for action in bpy.data.actions),
         "findings": findings, "unreal_import": "pending", "artistic_review": "pending",
     }

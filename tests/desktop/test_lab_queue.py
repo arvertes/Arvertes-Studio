@@ -5,8 +5,10 @@ from tempfile import TemporaryDirectory
 from uuid import uuid4
 import sqlite3
 import unittest
+from unittest.mock import patch
 
-from arvertes_desktop.lab_queue import LEASE_SECONDS, Queue, geometry_row
+from arvertes_desktop.lab_queue import LEASE_SECONDS, Queue, geometry_row, run_local
+from arvertes_desktop.resources import Reading
 
 
 class WorkerQueueTest(unittest.TestCase):
@@ -102,7 +104,15 @@ class WorkerQueueTest(unittest.TestCase):
         from time import monotonic, sleep
 
         self.queue.control("enable", approved=True)
-        command = [sys.executable, "-m", "arvertes_desktop.lab_queue", "--workspace", str(self.root)]
+        script = (
+            "import sys\n"
+            "from unittest.mock import patch\n"
+            "from arvertes_desktop.lab_queue import main\n"
+            "from arvertes_desktop.resources import Reading\n"
+            "with patch('arvertes_desktop.lab_queue.reading', return_value=Reading(4096, 8192, 15)):\n"
+            "    main(sys.argv[1:])\n"
+        )
+        command = [sys.executable, "-c", script, "--workspace", str(self.root)]
         with subprocess.Popen([*command, "serve", "--max-seconds", "12"], stdout=subprocess.PIPE) as process:
             try:
                 standby = monotonic() + 8
@@ -116,3 +126,10 @@ class WorkerQueueTest(unittest.TestCase):
             finally:
                 if process.poll() is None:
                     process.terminate()
+
+    def test_worker_leaves_task_queued_below_memory_reserve(self):
+        self.queue.control("enable", approved=True)
+        with patch("arvertes_desktop.lab_queue.reading", return_value=Reading(1023, 8192, 15)):
+            self.assertEqual(run_local(self.queue)["state"], "blocked")
+        job, = self.queue.read()["jobs"]
+        self.assertEqual((job["state"], job["next_row"]), ("queued", 0))

@@ -60,6 +60,8 @@ jobs:
         run: |
           $p = Start-Process -FilePath "dist/ArvertesStudio/ArvertesStudio.exe" -ArgumentList "--self-test" -Wait -PassThru
           if ($p.ExitCode -ne 0) { throw "Executable smoke test failed: $($p.ExitCode)" }
+      - name: Check portable module dispatch
+        run: python tests/integration/check_portable_dispatch.py dist/ArvertesStudio/ArvertesStudio.exe
       - name: Smoke Habblaud on Windows
         env:
           QTWEBENGINE_CHROMIUM_FLAGS: --disable-gpu
@@ -69,6 +71,7 @@ jobs:
           $p = Start-Process -FilePath "dist/ArvertesStudio/ArvertesStudio.exe" -ArgumentList "--self-test-habblaud" -Wait -PassThru
           if ($p.ExitCode -ne 0) { throw "Habblaud smoke test failed: $($p.ExitCode)" }
       - name: Package
+        if: github.event_name != 'pull_request' || !github.event.pull_request.draft
         shell: pwsh
         run: |
           Copy-Item docs/WINDOWS.md dist/ArvertesStudio/LEIA-ME.md
@@ -82,6 +85,7 @@ jobs:
           python -c "from arvertes_desktop.update_check import verify; print(verify('dist/ArvertesStudio-Windows-x64-diagnostico.zip','dist/UpdateManifest.json'))"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - uses: actions/upload-artifact@v4
+        if: github.event_name != 'pull_request' || !github.event.pull_request.draft
         with:
           name: ArvertesStudio-Windows-x64-diagnostico
           path: |

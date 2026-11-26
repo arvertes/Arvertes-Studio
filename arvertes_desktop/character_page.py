@@ -132,11 +132,13 @@ class CharacterDialog(QDialog):
 
     def check_setup(self):
         blender = self.production.blender_path()
-        checkout = self.production.bridge.checkout
+        bridge = self.production.bridge
+        checkout = bridge.checkout
         try:
             report = diagnose(self.root.parent, Path(blender) if blender else None,
                               Path(checkout) if checkout else None,
-                              self.executor_config if self.executor_config.is_file() else None)
+                              self.executor_config if self.executor_config.is_file() else None,
+                              agents_python=Path(bridge.python) if bridge.python else None)
         except (ValueError, OSError) as error:
             self.tools_label.setText(str(error))
             return
@@ -180,7 +182,8 @@ class CharacterDialog(QDialog):
     def start(self):
         source = self.source.currentData()
         description = self.description.toPlainText().strip()
-        checkout = self.production.bridge.checkout
+        bridge = self.production.bridge
+        checkout = bridge.checkout
         blender = self.production.blender_path()
         if not checkout or not blender:
             self.status.setText("Configure os caminhos locais do Agents e do Blender.")
@@ -207,7 +210,8 @@ class CharacterDialog(QDialog):
                if source == "procedural" else {}),
         }), encoding="utf-8")
         args = ["-m", "arvertes_desktop.character_production", "--workspace", str(self.root), "start",
-                "--agents", checkout, "--blender", blender, "--brief", str(briefing), "--approved", "--progress"]
+                "--agents", checkout, "--agents-python", bridge.python,
+                "--blender", blender, "--brief", str(briefing), "--approved", "--progress"]
         for path in self.images:
             args.extend(("--image", path))
         if source in ("base_glb", "external_glb"):

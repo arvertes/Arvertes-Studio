@@ -1,5 +1,6 @@
 """Fluxo local de personagens. Atlas só recebe dados normalizados e evidências."""
 import argparse
+from functools import partial
 from hashlib import sha256
 import json
 import os
@@ -17,6 +18,7 @@ from arvertes_studio.core.asset_package import MAX_FILE, MAX_IMAGE, MAX_PACKAGE,
 from arvertes_studio.core.unreal_preflight import preflight
 from arvertes_studio.core.character_style import reference_views, validate_adaptation, validate_style
 from .generation_adapter import run_triposr, validate_handoff
+from .process_runtime import system_dll_search
 from .production_tools import inventory, read_config
 from .visual_executor import analyze as analyze_visual
 from . import asset_package
@@ -58,11 +60,17 @@ def _job(workspace, identifier):
     return path
 
 
-def _atlas(repository, action, **payload):
+def _atlas(repository, action, *, python=None, **payload):
     request = {"version": 1, "action": action, **payload}
     repository = repository.resolve(strict=True)
     if not (repository / "arvertes_agents" / "__main__.py").is_file():
         raise ValueError("Selecione um checkout local confiável do Agents.")
+    if python is None and getattr(sys, "frozen", False):
+        raise ValueError("Informe o Python local configurado para o Agents.")
+    interpreter = Path(python or sys.executable)
+    if python is not None and (not interpreter.is_absolute() or not interpreter.is_file()
+                               or interpreter.name.lower() not in {"python", "python3", "python.exe", "python3.exe"}):
+        raise ValueError("Selecione um executável Python local confiável para o Agents.")
     environment = {key: os.environ[key] for key in ("PATH", "SystemRoot", "WINDIR", "TEMP", "TMP", "TMPDIR", "LANG")
                    if key in os.environ}
     bootstrap = ("import sys; sys.path.insert(0, sys.argv[1]); "
@@ -70,8 +78,9 @@ def _atlas(repository, action, **payload):
     data = (json.dumps(request, allow_nan=False) + "\n").encode()
     if len(data) > 65536:
         raise ValueError("A consulta do Atlas ultrapassa 64 KiB.")
-    result = subprocess.run([sys.executable, "-I", "-B", "-c", bootstrap, str(repository)], cwd=repository,
-                            env=environment, input=data, capture_output=True, timeout=15)
+    with system_dll_search():
+        result = subprocess.run([str(interpreter), "-I", "-B", "-c", bootstrap, str(repository)], cwd=repository,
+                                env=environment, input=data, capture_output=True, timeout=15)
     if result.returncode or not 0 < len(result.stdout) <= 64 * 1024:
         raise ValueError("Atlas recusou o contrato ou está indisponível.")
     response = json.loads(result.stdout)
@@ -224,14 +233,15 @@ def start(args):
     stage("references")
     brief, images, request = _inputs(args)
     stage("planning")
-    plan = _atlas(args.agents, "plan_character", brief=request)
+    atlas = partial(_atlas, args.agents, python=getattr(args, "agents_python", None))
+    plan = atlas("plan_character", brief=request)
     selections = brief.get("reference_revisions", [])
     if not isinstance(selections, list) or len(selections) > 12 or (selections and not args.library):
         raise ValueError("Informe revisões específicas e o catálogo local de referências.")
     pins = []
     if selections:
-        pins = library_pins(_atlas(args.agents, "pin_asset_references",
-                                   library=_json(args.library, 48 * 1024), selections=selections))
+        pins = library_pins(atlas("pin_asset_references",
+                                 library=_json(args.library, 48 * 1024), selections=selections))
     plan["library_references"] = pins
     config = read_config(getattr(args, "executor_config", None))
     mode = brief["source"]
@@ -243,13 +253,13 @@ def start(args):
         "base_glb": ("reuse", "glb", "zip"), "external_glb": ("reuse", "glb", "zip"),
         "synthetic_fixture": ("procedural", "json", "zip"), "procedural": ("procedural", "json", "zip"),
     }[mode]
-    choice = _atlas(args.agents, "select_production_executor", demand={
+    choice = atlas("select_production_executor", demand={
         "task": task, "quality": brief["quality"], "input": input_format, "output": output_format,
         "views": len(images), "complexity": getattr(args, "complexity", "simple")}, reports=reports)
     plan["tool_selection"] = choice
     plan["executor_inventory"] = probe_details
     if wants_vision:
-        visual_choice = _atlas(args.agents, "select_production_executor", demand={
+        visual_choice = atlas("select_production_executor", demand={
             "task":"vision", "quality":brief["quality"], "input":images[0][1]["extension"], "output":"json",
             "views":len(images), "complexity":"simple"}, reports=reports)
         plan["visual_analysis"] = {"state":"planned" if visual_choice["executor"] else "blocked",
@@ -332,7 +342,7 @@ def start(args):
                 if brief.get("proportions") is not None else None))
             stage("checking")
             evidence, review = _evidence(inner)
-            assessment = _atlas(args.agents, "assess_character_result", plan=plan, evidence=evidence)
+            assessment = atlas("assess_character_result", plan=plan, evidence=evidence)
             stage("packaging")
             digest = _delivery(job, brief, plan, evidence, assessment, review)
             status.update(assessment, sha256=digest)
@@ -460,6 +470,7 @@ def main(argv=None):
     begin = commands.add_parser("start")
     for key in ("agents", "brief", "blender"):
         begin.add_argument("--" + key, required=True, type=Path)
+    begin.add_argument("--agents-python", type=Path, help="Python local do checkout do Agents")
     for key in ("base", "library", "handoff", "executor_config"):
         begin.add_argument("--" + key.replace("_", "-"), type=Path)
     begin.add_argument("--image", required=True, action="append", type=Path)

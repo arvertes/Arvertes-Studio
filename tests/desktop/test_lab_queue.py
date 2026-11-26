@@ -1,4 +1,5 @@
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import closing
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from uuid import uuid4
@@ -74,7 +75,7 @@ class WorkerQueueTest(unittest.TestCase):
         other = self.root / "external"
         other.mkdir()
         target = other / self.queue.path.name
-        with sqlite3.connect(target) as db:
+        with closing(sqlite3.connect(target)) as db, db:
             db.execute("CREATE TABLE original (data TEXT)")
         snapshot = target.read_bytes()
         with self.assertRaises(ValueError):

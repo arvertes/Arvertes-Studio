@@ -39,6 +39,8 @@ bash scripts/check_sprint9.sh /caminho/Arvertes-Agents /caminho/blender
 
 O roteiro roda agentes e API, produção procedural e GLB fornecido, testes do Desktop, build Web, Chromium com PostgreSQL e o fluxo de capa e ZIP da produção local. O ensaio de migração com dados sintéticos parte da main publicada, mantém as revisões existentes e adiciona a base editorial `002_knowledge.sql` no esquema privado. As Actions dos PRs são verificações de código e builds de bancada. A branch consolidada do Studio desabilita o deploy automático Vercel pelo Git. O workflow do Pages exige outra branch e um marcador próprio.
 
+O primeiro job Windows revelou uma conexão SQLite deixada aberta pelo teste de isolamento do Laboratório. O teste agora encerra a conexão antes de inspecionar os bytes e limpar o diretório temporário. A verificação de que a fila preserva o banco externo continua ativa.
+
 ## Publicação coordenada e reversão
 
 1. Em revisão, congele os dois SHAs, confira os resultados de CI e confirme quais recursos usar em homologação e na janela de publicação. Os PRs empilhados ficam preservados para rastreabilidade.

@@ -16,6 +16,41 @@ const labels={
 };
 const mediaAccept={cover:"image/png,image/jpeg,image/webp",model:".glb",animation:".glb",voice:".wav,.ogg,.mp3"};
 let entries=[],selected=null,initialized=false,revision=0,coverUrl,voiceUrl,viewer;
+const drafts = new Map();
+
+function formFields(form) {
+  return Object.fromEntries(new FormData(form));
+}
+
+function setEditorBusy(root) {
+  const actions = root.querySelectorAll("button:enabled, input[type=file]:enabled");
+  for (const action of actions) action.disabled = true;
+  return () => { for (const action of actions) action.disabled = false; };
+}
+
+async function saveFields(form, record) {
+  const fields = formFields(form);
+  if (Object.entries(fields).every(([name, value]) => value === (record[name] ?? ""))) {
+    drafts.delete(record.id);
+    return record;
+  }
+  const saved = await repo.save({...fields, id: record.id, revision: drafts.get(record.id)?.revision ?? record.revision});
+  Object.assign(record, saved);
+  const current = formFields(form);
+  if (Object.entries(fields).some(([name, value]) => current[name] !== value)) {
+    drafts.set(record.id, {revision: saved.revision, fields: current});
+  } else {
+    drafts.delete(record.id);
+  }
+  const version = form.closest("#character-editor")?.querySelector("[data-character-revision]");
+  if (version) version.textContent = revisionLabel(record);
+  return record;
+}
+
+function revisionLabel(record) {
+  const editorial = record.status === "aprovado" ? "Aprovado pelo autor" : "Rascunho editorial";
+  return "Versão da ficha: " + record.revision + " · " + editorial;
+}
 const status=(message,error=false)=>{
   const node=byId("characters-status");
   node.textContent=message;
@@ -61,28 +96,41 @@ function renderGrid() {
   }
 }
 async function refresh() {
-  const token=++revision;
+  const token = ++revision;
   try {
-    entries=await repo.list();
-    if(token!==revision)return;
+    const records = await repo.list();
+    if (token !== revision) return false;
+    entries = records;
     renderGrid();
-    if(selected && !entries.some(item=>item.id===selected))selected=null;
-    if(selected) await select(selected);
-  }catch(error){status("Dossiês indisponíveis: "+error.message,true);}
+    if (selected) return await select(selected);
+    return true;
+  } catch (error) {
+    if (token === revision) {
+      status("Dossiês indisponíveis. " + error.message, true);
+      byId("characters-status").append(" ", makeButton("Tentar listar novamente", () => void refresh()));
+    }
+    return false;
+  }
 }
 async function select(id) {
-  const token=++revision;
+  const token = ++revision;
   cleanPreview();
-  selected=id;
+  selected = id;
   renderGrid();
-  const root=byId("character-editor");
-  root.replaceChildren(el("p","muted","Carregando ficha…"));
+  const root = byId("character-editor");
+  root.replaceChildren(el("p", "muted", "Carregando ficha…"));
   try {
-    const record=await repo.get(id);
-    if(token!==revision)return;
-    if(!record){selected=null;root.replaceChildren(empty("users","Personagem não encontrado","Reabra a lista."));return;}
+    const record = await repo.get(id);
+    if (token !== revision) return false;
+    if (!record) throw Error("Personagem não encontrado.");
     renderEditor(record);
-  }catch(error){if(token===revision) status(error.message,true);}
+    return true;
+  } catch (error) {
+    if (token !== revision) return false;
+    const retry = makeButton("Tentar novamente", () => void select(id));
+    root.replaceChildren(el("p", "form-error", "Não foi possível abrir a ficha. " + error.message), retry);
+    return false;
+  }
 }
 function download(blob,filename) {
   const url=URL.createObjectURL(blob);
@@ -96,72 +144,149 @@ function renderEditor(record) {
   root.replaceChildren();
   const title=el("div","panel-heading");
   const copy=el("div");
-  copy.append(el("p","eyebrow","Dossiê do personagem"),el("h2","",record.name),el("p","muted","Versão da ficha: "+record.revision+" · "+(record.status==="aprovado"?"Aprovado pelo autor":"Rascunho editorial")));
+  const version = el("p", "muted", revisionLabel(record));
+  version.dataset.characterRevision = "";
+  copy.append(el("p", "eyebrow", "Dossiê do personagem"), el("h2", "", record.name), version);
   title.append(copy);
   const warning=el("p","muted","A história, as características e a arte são definidas pelo autor. Não existe geração automática nem publicação no jogo. " + (studioBackend() ? "A ficha fica na sua conta; exporte a versão exibida como ZIP." : "Os dados ficam neste navegador; exporte um ZIP como cópia."));
   const form=el("form","character-form");
-  for(const [name,limit] of Object.entries(FIELDS))form.append(field(name,limit,record[name]));
+  const draft = drafts.get(record.id);
+  const values = draft?.fields ?? record;
+  for (const [name, limit] of Object.entries(FIELDS)) form.append(field(name, limit, values[name]));
   const approval=el("label","character-field");
   approval.append(el("span","","Estado editorial"));
   const state=el("select");state.name="status";
   for(const [value,caption] of [["rascunho","Rascunho: não aprovado"],["aprovado","Aprovado por mim"]])state.add(new Option(caption,value));
-  state.value=record.status;
+  state.value=values.status;
+  form.addEventListener("input", () => {
+    const fields = formFields(form);
+    if (Object.entries(fields).every(([name, value]) => value === (record[name] ?? ""))) {
+      drafts.delete(record.id);
+    } else {
+      drafts.set(record.id, {revision: drafts.get(record.id)?.revision ?? record.revision, fields});
+    }
+  });
   approval.append(state);form.append(approval);
   const controls=el("div","character-actions");
   const save=el("button","button primary","Salvar ficha");
   save.type="submit";
   controls.append(save);
   controls.append(makeButton("Planejar com Atlas",async ()=>{
-    // Save first to preserve the full context for the planner.
+    const release = setEditorBusy(root);
     try {
-      const payload=Object.fromEntries(new FormData(form).entries());
-      payload.id=record.id;payload.revision=record.revision;
-      const current=await repo.save(payload);
+      const current = await saveFields(form, record);
       const brief=buildCharacterBrief(current);
       document.dispatchEvent(new CustomEvent("studio:character-plan",{detail:brief}));
       location.hash="#production";
       status("Ficha salva. Atlas recebeu um briefing local baseado no dossiê.");
     }catch(error){status(error.message,true);}
+    finally { release(); }
   }));
-  controls.append(makeButton("Exportar pacote ZIP",async trigger=>{
-    trigger=trigger.currentTarget;
-    trigger.disabled=true;
+  controls.append(makeButton("Exportar pacote ZIP",async ()=>{
+    const release = setEditorBusy(root);
     try {
-      const fields=Object.fromEntries(new FormData(form).entries());
-      const current=await repo.save({...fields,id:record.id,revision:record.revision});
-      Object.assign(record,current);
+      await saveFields(form, record);
       const zip=await repo.exportZip(record.id, record.revision);
       const name=record.name.normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-zA-Z0-9-_]+/g,"-").slice(0,60)||"personagem";
       download(zip,name+"-arvertes.zip");
       status("Pacote ZIP exportado, incluindo manifesto e todos os anexos registrados.");
     }catch(error){status(error.message,true);}
-    finally{trigger.disabled=false;}
+    finally { release(); }
   }));
   controls.append(makeButton("Excluir personagem",async ()=>{
     if(!confirm(studioBackend() ? "Remover o acesso ao dossiê e às versões pelo Studio? Os originais no Drive são preservados."
       : "Excluir o personagem e TODAS as mídias locais? Esta ação não pode ser desfeita. Exporte o ZIP antes de continuar."))return;
-    try {await repo.remove(record.id);selected=null;cleanPreview();root.replaceChildren();await refresh();status(studioBackend() ? "Dossiê removido da conta." : "Dossiê excluído do navegador.");}
-    catch(error){status(error.message,true);}
+    const release = setEditorBusy(root);
+    try {
+      await repo.remove(record.id, record.revision);
+      drafts.delete(record.id);
+      if (selected === record.id) {
+        selected = null;
+        cleanPreview();
+        root.replaceChildren();
+      }
+      if (await refresh()) status(studioBackend() ? "Dossiê removido da conta." : "Dossiê excluído do navegador.");
+    } catch (error) {
+      status(error.message, true);
+    } finally {
+      release();
+    }
   }));
   form.append(controls);
   form.addEventListener("submit",async event=>{
     event.preventDefault();
-    const actions=root.querySelectorAll("button:enabled, input[type=file]:enabled");
-    for(const action of actions)action.disabled=true;
+    const release = setEditorBusy(root);
     try {
-      const payload=Object.fromEntries(new FormData(form).entries());
-      payload.id=record.id;payload.revision=record.revision;
-      Object.assign(record, await repo.save(payload));
-      await refresh();
-      status(studioBackend() ? "Ficha salva na sua conta." : "Ficha salva neste navegador.");
-    }catch(error){status(error.message,true);}
-    finally{for(const action of actions)action.disabled=false;}
+      await saveFields(form, record);
+      if (selected === record.id && await refresh()) {
+        status(studioBackend() ? "Ficha salva na sua conta." : "Ficha salva neste navegador.");
+      }
+    } catch (error) {
+      status(error.message, true);
+    } finally {
+      release();
+    }
   });
   const cover=mediaCard(record,"cover");
   cover.classList.add("character-cover-card");
   const gallery=el("div","character-media-grid");
   for(const kind of ["model","animation","voice"])gallery.append(mediaCard(record,kind));
-  root.append(title,warning,cover,form,el("h3","","Modelo 3D, animações e voz"),gallery);
+  root.append(title, warning);
+  if (draft && draft.revision !== record.revision) {
+    root.append(el("p", "form-error", "A ficha recebeu outra revisão. Seu rascunho continua aqui. Copie as alterações que quiser reaplicar antes de abrir a versão atual."),
+      makeButton("Abrir versão atual", () => {
+        if (!confirm("Descartar as alterações não salvas deste formulário?")) return;
+        drafts.delete(record.id);
+        void select(record.id);
+      }));
+  }
+  root.append(cover, form, el("h3", "", "Modelo 3D, animações e voz"), gallery);
+  if (studioBackend()) root.append(productionDelivery(record));
+}
+
+function productionDelivery(record) {
+  const panel = el("section", "panel character-media-card");
+  const metadata = record.attachments?.production;
+  panel.append(el("h3", "", "Pacote de produção"),
+    el("p", "muted", "Envie uma revisão local conferida. O vínculo usa a versão salva da ficha."));
+  panel.append(makeButton("Baixar vínculo para o Desktop", () => {
+    const data = JSON.stringify({id:record.id, revision:record.revision});
+    download(new Blob([data], {type:"application/json"}), "vinculo-dossie.json");
+  }));
+  const input = el("input");
+  input.type = "file";
+  input.accept = ".zip";
+  input.setAttribute("aria-label", "Arquivar pacote de produção");
+  input.addEventListener("change", async () => {
+    const file = input.files?.[0];
+    if (!file) return;
+    const release = setEditorBusy(panel.closest("#character-editor"));
+    try {
+      await repo.attach(record.id, "production", file, record.revision);
+      await refresh();
+      status("Pacote arquivado. O status editorial da ficha foi preservado.");
+    } catch (error) {
+      status(error.message,true);
+    } finally {
+      release();
+      input.value = "";
+    }
+  });
+  panel.append(input);
+  if (metadata) panel.append(el("p","character-file-name",metadata.name),
+    makeButton("Baixar pacote de produção", async () => {
+      try {
+        const media = await repo.media(record.id, "production", record.revision);
+        if (!media?.blob) throw Error("Pacote de produção indisponível.");
+        const actual = new Uint8Array(await crypto.subtle.digest("SHA-256", await media.blob.arrayBuffer()));
+        const digest = Array.from(actual, value => value.toString(16).padStart(2,"0")).join("");
+        if (digest !== metadata.digest) throw Error("SHA-256 divergente ao recuperar o pacote.");
+        download(media.blob, metadata.name);
+      } catch (error) {
+        status(error.message,true);
+      }
+    }));
+  return panel;
 }
 function mediaCard(record,kind) {
   const item=el("article","panel character-media-card");
@@ -177,12 +302,24 @@ function mediaCard(record,kind) {
     item.append(el("p","character-file-name",meta.name),el("small","muted",(meta.size/1048576).toLocaleString("pt-BR",{maximumFractionDigits:2})+" MiB · SHA-256 "+meta.digest.slice(0,12)+"…"));
     const surface=el("div","character-media-surface");
     item.append(surface);
-    if(kind==="cover")void showCover(record.id,surface).catch(error=>status(error.message,true));
-    if(kind==="voice")void showVoice(record.id,surface).catch(error=>status(error.message,true));
-    if(kind==="model"||kind==="animation")item.append(makeButton("Visualizar GLB",()=>void showModel(record.id,kind,surface)));
+    if (kind === "cover" || kind === "voice") {
+      const preview = kind === "cover" ? showCover : showVoice;
+      const attempt = async () => {
+        surface.replaceChildren(el("p", "muted", "Carregando mídia…"));
+        try {
+          await preview(record.id, surface, record.revision);
+        } catch (error) {
+          if (surface.isConnected) surface.replaceChildren(
+            el("p", "form-error", "Mídia indisponível. " + error.message),
+            makeButton("Tentar mídia novamente", () => void attempt()));
+        }
+      };
+      void attempt();
+    }
+    if(kind==="model"||kind==="animation")item.append(makeButton("Visualizar GLB",()=>void showModel(record.id,kind,surface,record.revision)));
     if(kind==="model")item.append(makeButton("Enviar modelo à biblioteca",async ()=>{
       try{
-        const saved=await repo.media(record.id,kind);
+        const saved=await repo.media(record.id,kind,record.revision);
         if(!saved?.blob)throw Error("Arquivo 3D indisponível.");
         const file=new File([saved.blob],meta.name,{type:"model/gltf-binary"});
         await importCharacterGlb(file);
@@ -192,8 +329,17 @@ function mediaCard(record,kind) {
     }));
     item.append(makeButton("Remover arquivo",async ()=>{
       if(!confirm("Remover este arquivo da versão atual do dossiê?"))return;
-      try{await repo.removeAttachment(record.id,kind);status("Anexo removido.");await refresh();}
-      catch(error){status(error.message,true);}
+      const release = setEditorBusy(byId("character-editor"));
+      try {
+        const draft = drafts.get(record.id);
+        const saved = await repo.removeAttachment(record.id, kind, record.revision);
+        if (draft?.revision === record.revision) draft.revision = saved.revision;
+        if (selected === record.id && await refresh()) status("Anexo removido.");
+      } catch (error) {
+        status(error.message, true);
+      } finally {
+        release();
+      }
     }));
   }else item.append(el("p","muted","Arquivo ainda não anexado."));
   const input=el("input");
@@ -204,41 +350,47 @@ function mediaCard(record,kind) {
   item.append(label);
   input.addEventListener("change",async ()=>{
     if(!input.files?.length)return;
-    input.disabled=true;
-    try{
-      const form=byId("character-editor").querySelector(".character-form");
-      if(form){
-        const fields=Object.fromEntries(new FormData(form).entries());
-        await repo.save({...fields,id:record.id,revision:record.revision});
-      }
-      await repo.attach(record.id,kind,input.files[0]);
-      status(MEDIA_LABELS[kind]+" anexado com hash SHA-256.");await refresh();
+    const root = byId("character-editor");
+    const release = setEditorBusy(root);
+    const file = input.files[0];
+    try {
+      const form = root.querySelector(".character-form");
+      if (form) await saveFields(form, record);
+      Object.assign(record, await repo.attach(record.id, kind, file, record.revision));
+      const draft = drafts.get(record.id);
+      if (draft) draft.revision = record.revision;
+      if (selected === record.id && await refresh()) status(MEDIA_LABELS[kind] + " anexado com hash SHA-256.");
+    } catch (error) {
+      status("Não foi possível anexar a mídia. " + error.message, true);
+    } finally {
+      input.value = "";
+      release();
     }
-    catch(error){status(error.message,true);}
-    finally{input.disabled=false;input.value="";}
   });
   return item;
 }
-async function showCover(id,surface) {
-  const file=await repo.media(id,"cover");
-  if(!file?.blob || !surface.isConnected)return;
+async function showCover(id,surface,expected) {
+  const file=await repo.media(id,"cover",expected);
+  if (!surface.isConnected) return;
+  if (!file?.blob) throw Error("Capa não encontrada.");
   if(coverUrl)URL.revokeObjectURL(coverUrl);
   coverUrl=URL.createObjectURL(file.blob);
   const image=el("img","character-cover");image.src=coverUrl;image.alt="Capa 2D do personagem";
   surface.replaceChildren(image);
 }
-async function showVoice(id,surface) {
-  const file=await repo.media(id,"voice");
-  if(!file?.blob || !surface.isConnected)return;
+async function showVoice(id,surface,expected) {
+  const file=await repo.media(id,"voice",expected);
+  if (!surface.isConnected) return;
+  if (!file?.blob) throw Error("Áudio não encontrado.");
   if(voiceUrl)URL.revokeObjectURL(voiceUrl);
   voiceUrl=URL.createObjectURL(file.blob);
   const audio=el("audio");audio.controls=true;audio.preload="none";audio.src=voiceUrl;
   surface.replaceChildren(audio);
 }
-async function showModel(id,kind,surface) {
+async function showModel(id,kind,surface,expected) {
   try{
     if(viewer){viewer.dispose();viewer=null;}
-    const saved=await repo.media(id,kind);
+    const saved=await repo.media(id,kind,expected);
     if(!saved?.blob)throw Error("Modelo não encontrado na memória.");
     surface.replaceChildren(el("p","muted","Preparando visualizador…"));
     const file=new File([saved.blob],kind+".glb",{type:"model/gltf-binary"});

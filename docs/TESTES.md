@@ -63,3 +63,25 @@ A execução 45061809311 recebeu HTTP 403 ao obter a distribuição do Blender. 
 - Cloud: testes de MCP Streamable HTTP e OAuth com chaves de fixture, credenciais de sincronização separadas, expiração, autorização, auditoria e rejeição de dados livres.
 - Android: sessão instrumentada com tarefas SHA-256, checkpoint, progresso e histórico. As condições de recursos seguem simuladas.
 - Resultados comparativos e método em [Desempenho](DESEMPENHO.md).
+
+## Sprint dos 26 agentes
+
+O build Web exercita as regras no navegador, o encaminhamento no chat, o reconhecimento de fichas por nome completo e o estado de dependências bloqueadas. O cenário de `web/tests/backend_browser.py` usa também o backend da sprint com PostgreSQL local descartável. Ele abre e recarrega um briefing estruturado, registra a rejeição de um GLB inválido, recupera a fila com um GLB sintético e valida o histórico, a revisão humana e o pacote.
+
+Na sprint passaram a suíte unitária Python (17 testes), Desktop (37 testes), o autoteste em Qt offscreen, o build Web com Node.js 24 e sete cenários estáticos do Chromium 156. A integração Web autenticada passou com sessão sintética e PostgreSQL 17.12. No Blender 5.3.0 (`02f0899d78e3`), passaram os nove casos headless e os fluxos de cópia/FBX e Desktop/Agents/Blender. Windows, Android físico e importação no Unreal ficaram fora desta verificação.
+
+## Sprint 2
+
+A suíte Web inclui grafos sem ciclos, reaproveitamento de relatórios por versão, cancelamento e rejeição de resultados atrasados. O cenário local do Chromium verifica pausa e recarga no IndexedDB e acompanha a execução dos workers. O cenário autenticado usa uma conta sintética e o PostgreSQL local para testar rascunhos, aprovação, busca e citações. O conteúdo com marcação é verificado como texto. Entradas e arquivos dos dois cenários são sintéticos.
+
+## Sprint 3
+
+`python tests/integration/check_asset_package.py /caminho/para/blender` usa Blender 5.3.0 (`02f0899d78e3`) e executa o comando público nos três modos. Confere hashes dos arquivos originais, inventário, LODs e texturas, cena empacotada e reimportação de FBX e GLB, incluindo esqueleto e clipe sintético. A importação no Unreal requer ensaio independente.
+
+## Sprint 4
+
+`node --test web/test-laboratory.mjs` cobre integridade e exportação sintética, decisões A/B/C, concorrência, recuperação e dois ciclos com relógio controlado. A suíte Chromium testa o worker real, a autorização, a trava, o encerramento, a prioridade do AutoPipeline, a recarga, a reversão e o isolamento da fila. Para salvar os resultados sintéticos, passe `--lab-artifacts ./diretorio` ao script `web/tests/browser.py`.
+
+## Sprint 5
+
+`python tests/integration/check_lab_production.py /caminho/para/blender --artifacts ./exemplos` testa as receitas reais do Blender 5.3.0, reimportações, WAVs e comparação das revisões. A fila SQLite é coberta pela suíte Desktop. O [relatório da Sprint 5](SPRINT_5.md) reúne os procedimentos e os limites.

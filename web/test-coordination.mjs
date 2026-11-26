@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
-import { applyCommand, createProduction, previewPlan, suggestCategory, taskState } from "./coordination.mjs";
+import { applyCommand, checkDependencies, createProduction, inspectTask, inspectionBatch, previewPlan, serverTaskState, settleInspections, suggestCategory, taskState } from "./coordination.mjs";
 import { agentStages, stages } from "./production-catalog.mjs";
 
 const brief = { name: "GVS", instruction: "Criar o personagem GVS com animação e entregar para Unreal." };
@@ -113,4 +113,79 @@ test("Sentinel impede conclusão remota e preserva os checkpoints ao ampliar o p
   assert.deepEqual(task(production, "lip").needs, ["voice", "rig"]);
   assert.equal(production.tasks.filter(item => item.id === "rig").length, 1);
   assert.deepEqual(task(production, "review").evidence, review);
+});
+
+test("projeção do servidor distingue aprovação, executor e bloqueio transitivo", () => {
+  const inspect = { stage: "inspect", status: "pending", executable: true, depends_on: [] };
+  const review = { stage: "review", status: "pending", executable: true, depends_on: ["inspect"] };
+  const pack = { stage: "package", status: "pending", executable: false, depends_on: ["review"] };
+  const job = { approved: false, steps: [inspect, review, pack] };
+  assert.equal(serverTaskState(job, inspect), "approval");
+  job.approved = true;
+  assert.equal(serverTaskState(job, inspect), "ready");
+  assert.equal(serverTaskState(job, review), "dependency");
+  inspect.status = "blocked";
+  assert.equal(serverTaskState(job, pack), "dependency_blocked");
+  inspect.status = "done";
+  assert.equal(serverTaskState(job, review), "review");
+  review.status = "done";
+  assert.equal(serverTaskState(job, pack), "executor");
+  inspect.status = review.status = "pending";
+  inspect.depends_on = ["review"];
+  assert.equal(serverTaskState(job, pack), "dependency_blocked");
+});
+
+test("grafos completos de personagem e criatura validam dependências e mantêm executores bloqueados", () => {
+  for (const type of ["character", "creature"]) {
+    const production = createProduction(previewPlan({ ...brief, type, fullPipeline: true }));
+    checkDependencies(production.tasks);
+    assert.ok(task(production, "retopology").needs.includes("design"));
+    assert.ok(task(production, "rig").needs.includes("retopology"));
+    assert.ok(task(production, "package").needs.includes("audit"));
+    assert.ok(production.tasks.filter(item => item.kind === "external").every(item => !item.evidence));
+    task(production, "design").needs.push("package");
+    assert.throws(() => checkDependencies(production.tasks), /circular/);
+  }
+});
+
+test("lotes independentes são idempotentes e a pausa invalida respostas atrasadas", () => {
+  const production = plan();
+  for (const command of [{ action: "approve" }, requirements, attachment]) applyCommand(production, command);
+  const batch = inspectionBatch(production);
+  assert.deepEqual(batch.tasks, ["materials", "geometry", "skin", "clips"]);
+  const outcomes = batch.tasks.map(id => ({ id, report: inspectTask(id, batch.data, batch.requirements) }));
+  applyCommand(production, { action: "pause" });
+  assert.equal(state(production, "clips"), "paused");
+  assert.equal(inspectionBatch(production), null);
+  applyCommand(production, { action: "resume" });
+  assert.throws(() => settleInspections(production, batch, outcomes), /mudou/);
+  const current = inspectionBatch(production);
+  assert.throws(() => settleInspections(production, current, [outcomes[0]]), /incompatíveis/);
+  assert.equal(state(production, "geometry"), "ready");
+  settleInspections(production, current, outcomes);
+  const saved = structuredClone(production);
+  settleInspections(production, current, outcomes);
+  assert.deepEqual(production, saved);
+  assert.deepEqual(inspectionBatch(production).tasks, ["review"]);
+  applyCommand(production, { action: "cancel" });
+  assert.equal(state(production, "review"), "cancelled");
+  assert.equal(state(production, "clips"), "done");
+  assert.throws(() => applyCommand(production, { action: "resume" }), /incompatível/);
+});
+
+test("revisões retêm evidências anteriores e exigem novo aceite humano ao reaproveitar inspeções", () => {
+  const production = plan();
+  for (const command of [{ action: "approve" }, requirements, attachment, { action: "inspect-ready" },
+    { action: "validate" }]) applyCommand(production, command);
+  const previous = structuredClone(task(production, "validation").evidence);
+  applyCommand(production, { ...attachment, action: "revise", asset: { ...sample, digest: "b".repeat(64) } });
+  assert.equal(production.assetRevision, 2);
+  assert.deepEqual(production.assetHistory[0].evidence.validation, previous);
+  assert.equal(state(production, "materials"), "ready");
+  assert.equal(state(production, "forge"), "done");
+  applyCommand(production, { ...attachment, action: "revise" });
+  assert.equal(task(production, "materials").evidence.reusedFrom, 1);
+  assert.equal(state(production, "validation"), "human");
+  applyCommand(production, { action: "validate" });
+  assert.equal(task(production, "validation").evidence.revision, 3);
 });

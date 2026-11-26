@@ -52,6 +52,13 @@ async function openPreview(asset, trigger) {
     makeButton("Aproximar", "plus", () => request.viewer?.zoom(0.8)),
     makeButton("Enquadrar", "focus", () => request.viewer?.frame()),
   ];
+  const wireframe = makeButton("Malha", "cube", () => {
+    const next = wireframe.getAttribute("aria-pressed") !== "true";
+    wireframe.setAttribute("aria-pressed", String(next));
+    request.viewer?.setWireframe(next);
+  });
+  wireframe.setAttribute("aria-pressed", "false");
+  controls.push(wireframe);
   for (const button of controls) button.disabled = true;
   const close = makeButton("Fechar", "close", () => {
     closePreview();
@@ -81,6 +88,19 @@ async function openPreview(asset, trigger) {
     if (preview === request && container.querySelector("canvas")) {
       status.hidden = true;
       for (const button of controls) button.disabled = false;
+      const clips = request.viewer.clips();
+      if (clips.length) {
+        const label = el("label", "filter-field", "Animação");
+        const select = el("select");
+        select.setAttribute("aria-label", "Animação");
+        select.add(new Option("Parada", ""));
+        clips.forEach((name, index) => select.add(new Option(name || `Clipe ${index + 1}`, String(index))));
+        select.addEventListener("change", () => {
+          request.viewer.play(select.value === "" ? -1 : Number(select.value));
+        });
+        label.append(select);
+        bar.insertBefore(label, close);
+      }
     }
   } catch {
     if (preview === request) onError("O módulo de visualização 3D está indisponível.");

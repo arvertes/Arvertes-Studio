@@ -1,5 +1,6 @@
 import { agentStages, normalize } from "./production-catalog.mjs";
-import { matchingCharacter } from "./character-model.mjs";
+import { matchingCharacters } from "./character-model.mjs";
+import { previewPlan } from "./coordination.mjs";
 
 export const MAX_MESSAGE = 600;
 export const MAX_FACT = 320;
@@ -21,7 +22,7 @@ export function memoryIntent(input) {
 export function relatedFacts(query, facts, limit = 3) {
   const queryTerms = terms(query);
   if (!queryTerms.length) return [];
-  return facts.map(fact => {
+  return facts.filter(fact => !fact.subject).map(fact => {
     const haystack = new Set(terms(fact.text));
     const score = queryTerms.reduce((n, word) => n + (haystack.has(word) ? 1 : 0), 0);
     return { fact, score };
@@ -60,16 +61,31 @@ export function agentResponse({agent, message, facts = [], productions = null, c
   if (/(o que|quais|mostre|liste|minha).*(lembra|memoria|anotac|informac)/.test(question) || /^(memoria|o que sabe)$/.test(question)) {
     return { reply: "Memória compartilhada deste navegador:\n" + presentFacts(facts) };
   }
-  if (/(produc|projet|taref|andamento|checkpoint|progresso|status)/.test(question)) {
+  if (/\b(andamento|checkpoints?|progresso|status|tarefas?|projetos?|producoes)\b/.test(question) &&
+      !/\b(crie|criar|gere|gerar|planeje|planejar|produza|produzir)\b/.test(question)) {
     return { reply: productionSummary(productions) };
   }
   if (/(custo|cota|gpu|credito|assinatura|dinheiro|orcamento)/.test(question)) {
     return { reply: "Orçamento adicional autorizado: R$ 0. Cotas de GPU e créditos externos não são consultados nesta versão. Sentinel mantém a execução remota bloqueada." };
   }
-  if (/(crie|criar|gere|gera|gerar|produza|anime|animar|execute|renderize|conecte)/.test(question)) {
-    return { reply: "Ainda não consigo executar essa operação remotamente. Posso orientar o planejamento local, e o AutoPipeline permite registrar etapas e evidências reais. Geração, rig, animação e áudio exigem ferramentas conectadas." };
+  const matches = matchingCharacters(message, characters);
+  if (matches.length > 1) {
+    return { reply: "Encontrei mais de uma ficha. Faça a consulta pelo nome de um personagem por vez." };
   }
-  const character = matchingCharacter(message, characters);
+  const character = matches[0];
+  if (/\b(crie|criar|gere|gera|gerar|produza|produzir|planeje|planejar|anime|animar|execute|renderize|conecte)\b/.test(question)) {
+    const plan = previewPlan({ name: character?.name || "Briefing", instruction: message,
+      type: character ? "character" : "" });
+    const limitation = "Não consigo executar essa operação pelo chat. ";
+    if (!plan.tasks) return { reply: limitation + "Informe o tipo de entrega desejada para Atlas propor um plano." };
+    const stages = plan.tasks.filter(task => task.kind === "external");
+    const own = stages.filter(task => task.agentId === agent.id);
+    const steps = (own.length ? own : stages).map(task => task.agent + " · " + task.title);
+    const proposal = steps.length ? " Proposta de etapas externas: " + steps.join(" → ") + "." : "";
+    const source = character ? " Referência: ficha " + (character.status === "aprovado" ? "aprovada" : "em rascunho") +
+      " de " + character.name + "." : "";
+    return { reply: limitation + "Abra Nova produção para revisar com Atlas as etapas e dependências." + source + proposal };
+  }
   if (character) {
     const requested = [
       [/(historia|origem|passado|lore|biografia)/, "História e origem", character.history],
@@ -79,7 +95,8 @@ export function agentResponse({agent, message, facts = [], productions = null, c
       [/(voz|dublagem|fala)/, "Direção de voz", character.voiceDirection],
       [/(animacao|animar|gesto|movimento)/, "Direção de animação", character.animationDirection],
     ].find(([pattern]) => pattern.test(question));
-    const prefix = character.name + " · " + (character.status === "aprovado" ? "ficha aprovada pelo autor" : "rascunho do autor") + ".";
+    const prefix = character.name + " · " + (character.status === "aprovado" ? "ficha aprovada pelo autor" : "rascunho do autor")
+      + (character.revision ? " · revisão " + character.revision : "") + ".";
     if (requested) return { reply: prefix + "\n" + requested[1] + ": " +
       (requested[2] ? requested[2].slice(0,900) : "ainda não foi definido na ficha.") };
     if (/(planej|producao|produzir)/.test(question)) return { reply: prefix +
@@ -87,7 +104,7 @@ export function agentResponse({agent, message, facts = [], productions = null, c
     const snippets = [["História",character.history],["Personalidade",character.personality],
       ["Vestuário",character.clothing],["Aparência",character.appearance]]
       .filter(([,v])=>v).map(([label,value])=>label + ": " + value.slice(0,400));
-    const memories = relatedFacts(message, facts, 2).map(f=>"Anotação compartilhada: "+f.text);
+    const memories = relatedFacts(message, facts, 2).map(f=>"Sugestão da memória local: "+f.text);
     return { reply: prefix + "\n" + (snippets.length ? snippets.join("\n") : "Ainda não há detalhes narrativos preenchidos.") +
       (memories.length ? "\n" + memories.join("\n") : "") +
       "\nA ficha não é confirmação de execução 3D nem consulta a fontes externas." };
@@ -98,7 +115,7 @@ export function agentResponse({agent, message, facts = [], productions = null, c
   const askedAboutMemory = /(qual|quais|como|porque|por que|sabe|lembra|me diga|resuma|informe|conte|mostre)/.test(question);
   if (askedAboutMemory) {
     const matched = relatedFacts(message, facts);
-    if (matched.length) return { reply: "Encontrei estas informações registradas na memória local:\n" + matched.map(f => "• " + f.text).join("\n") +
+    if (matched.length) return { reply: "Encontrei estas sugestões registradas na memória local:\n" + matched.map(f => "• " + f.text).join("\n") +
       "\nNão consigo verificar fatos externos sem integração." };
   }
   const steps = agentStages(agent.id).slice(0,4);

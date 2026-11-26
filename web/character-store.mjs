@@ -107,7 +107,7 @@ export function createCharacterRepository(indexedDB) {
       return {digest,blob:new Blob([buffer],{type:file.type||"application/octet-stream"}),name:file.name,size:file.size,mime:file.type||"application/octet-stream"};
     });
   }
-  async function attach(characterId,kind,file) {
+  async function attach(characterId,kind,file,revision) {
     if(!safeId(characterId)||!Object.hasOwn(MEDIA_LIMITS,kind))throw fail("Anexo inválido.");
     const payload=await checkFile(kind,file);
     return transact("readwrite",[RECORDS,FILES],(tx,done,reject)=>{
@@ -116,6 +116,10 @@ export function createCharacterRepository(indexedDB) {
       read.onsuccess=()=>{
         const data=read.result;
         if(!data){reject(fail("Personagem não encontrado."));return;}
+        if (revision !== undefined && data.revision !== revision) {
+          reject(fail("O personagem mudou em outra aba. Reabra a ficha."));
+          return;
+        }
         const total=Object.values(data.attachments||{}).reduce((sum,m)=>sum+m.size,0)-
           (data.attachments?.[kind]?.size||0)+payload.size;
         if(total>MAX_TOTAL_FILE_BYTES){reject(fail("Os anexos de um personagem não podem ultrapassar 50 MiB."));return;}
@@ -128,7 +132,7 @@ export function createCharacterRepository(indexedDB) {
       };
     });
   }
-  function removeAttachment(characterId,kind) {
+  function removeAttachment(characterId,kind,revision) {
     if(!safeId(characterId)||!slots.includes(kind))return Promise.reject(fail("Anexo inválido."));
     return transact("readwrite",[RECORDS,FILES],(tx,done,reject)=>{
       const store=tx.objectStore(RECORDS);
@@ -136,6 +140,10 @@ export function createCharacterRepository(indexedDB) {
       req.onsuccess=()=>{
         const data=req.result;
         if(!data){reject(fail("Personagem não encontrado."));return;}
+        if (revision !== undefined && data.revision !== revision) {
+          reject(fail("O personagem mudou em outra aba. Reabra a ficha."));
+          return;
+        }
         if(data.attachments?.[kind]) {
           delete data.attachments[kind];data.updatedAt=new Date().toISOString();data.revision++;
           store.put(data);
@@ -145,30 +153,48 @@ export function createCharacterRepository(indexedDB) {
       };
     });
   }
-  function media(id,kind) {
-    if(!safeId(id)||!slots.includes(kind))return Promise.reject(fail("Anexo inválido."));
-    return transact("readonly",[FILES],(tx,done)=>{
-      const req=tx.objectStore(FILES).get(id+":"+kind);
-      req.onsuccess=()=>done(req.result??null);
+  function media(id, kind, revision) {
+    if (!safeId(id) || !slots.includes(kind)) return Promise.reject(fail("Anexo inválido."));
+    return transact("readonly", [RECORDS, FILES], (tx, done, reject) => {
+      const record = tx.objectStore(RECORDS).get(id);
+      record.onsuccess = () => {
+        if (revision !== undefined && record.result?.revision !== revision) {
+          reject(fail("O personagem mudou em outra aba. Reabra a ficha."));
+          return;
+        }
+        const file = tx.objectStore(FILES).get(id + ":" + kind);
+        file.onsuccess = () => done(file.result ?? null);
+      };
     });
   }
-  function remove(id) {
+  function remove(id, revision) {
     if(!safeId(id))return Promise.reject(fail("Personagem inválido."));
-    return transact("readwrite",[RECORDS,FILES],(tx,done)=>{
-      tx.objectStore(RECORDS).delete(id);
-      for(const kind of slots)tx.objectStore(FILES).delete(id+":"+kind);
-      done(true);
+    return transact("readwrite",[RECORDS,FILES],(tx,done,reject)=>{
+      const store = tx.objectStore(RECORDS);
+      const read = store.get(id);
+      read.onsuccess = () => {
+        if (revision !== undefined && read.result?.revision !== revision) {
+          reject(fail("O personagem mudou em outra aba. Reabra a ficha."));
+          return;
+        }
+        store.delete(id);
+        for (const kind of slots) tx.objectStore(FILES).delete(id + ":" + kind);
+        done(true);
+      };
     });
   }
-  async function exportZip(id) {
+  async function exportZip(id, revision) {
     const character=await get(id);
     if(!character)throw fail("Personagem não encontrado.");
+    if (revision !== undefined && character.revision !== revision) {
+      throw fail("O personagem mudou em outra aba. Reabra a ficha.");
+    }
     const entries=[];
     const attachments={};
     for (const kind of slots) {
       const meta=character.attachments?.[kind];
       if(!meta)continue;
-      const file=await media(id,kind);
+      const file=await media(id,kind,character.revision);
       if(!file?.blob)throw fail("Arquivo "+meta.name+" não está disponível. Reimporte antes de exportar.");
       const blob=file.blob;
       if(blob.size!==meta.size||file.digest!==meta.digest)throw fail("Anexo divergente; pacote não exportado.");

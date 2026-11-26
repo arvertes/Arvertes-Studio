@@ -1,0 +1,28 @@
+name: Sprint 6 local acceptance
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  local-checks:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: python -m pip install -r requirements-desktop.txt
+      - run: python -m unittest discover -s tests/unit -v
+      - run: python -m unittest discover -s tests/desktop -v
+      - run: bash web/build-netlify.sh

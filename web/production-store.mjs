@@ -1,5 +1,5 @@
 import { productionTypes } from "./production-catalog.mjs";
-import { applyCommand, CoordinationError, createProduction, previewPlan, productionLimit } from "./coordination.mjs";
+import { applyCommand, checkDependencies, CoordinationError, createProduction, inspectionBatch, previewPlan, productionLimit, settleInspections } from "./coordination.mjs";
 
 /**
  * @typedef {object} ProductionRepository
@@ -12,6 +12,40 @@ const databaseName = "arvertes-studio-production";
 const collection = "productions";
 const version = 1;
 const unavailable = "O navegador não conseguiu gravar ou ler o plano local. Verifique o armazenamento e tente novamente.";
+
+const workerTimeout = 5000;
+
+function inspectInWorker(worker, id, batch) {
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => finish(reject, Error("A inspeção local excedeu o tempo limite.")), workerTimeout);
+    function finish(callback, result) {
+      clearTimeout(timeout);
+      worker.onmessage = worker.onerror = worker.onmessageerror = null;
+      callback(result);
+    }
+    worker.onmessage = event => finish(resolve, event.data);
+    worker.onerror = worker.onmessageerror = () => finish(reject, Error("Falha no worker de inspeção local."));
+    try { worker.postMessage({ id, data: batch.data, requirements: batch.requirements }); }
+    catch (error) { finish(reject, error); }
+  });
+}
+
+async function runInParallel(batch) {
+  const workers = [];
+  const pending = batch.tasks.slice();
+  const results = [];
+  try {
+    for (let index = 0; index < Math.min(2, batch.tasks.length); index += 1) {
+      workers.push(new Worker(new URL("./inspection-worker.mjs", import.meta.url), { type: "module" }));
+    }
+    await Promise.all(workers.map(async worker => {
+      while (pending.length) results.push(await inspectInWorker(worker, pending.shift(), batch));
+    }));
+    return results;
+  } finally {
+    for (const worker of workers) worker.terminate();
+  }
+}
 
 export function createProductionRepository(indexedDB) {
   let connection;
@@ -72,6 +106,7 @@ export function createProductionRepository(indexedDB) {
       !Array.isArray(record.history) || !record.history.every(event => event && Number.isFinite(Date.parse(event.at)))) {
       throw Error("Um plano tem formato indisponível. Os dados do navegador foram preservados.");
     }
+    checkDependencies(record.tasks);
     return record;
   }
 
@@ -93,6 +128,34 @@ export function createProductionRepository(indexedDB) {
         store.add(record);
         return record;
       }));
+    },
+    async inspectParallel(id) {
+      const load = () => transaction("readonly", (store, read) => read(store.get(id), checkRecord));
+      return navigator.locks.request("arvertes-studio-glb-workers", { ifAvailable: true }, async lock => {
+        let production = await load();
+        if (!lock) return { production, rejection: "Outra aba já está usando os workers de inspeção." };
+        for (let round = 0; round < 2; round += 1) {
+          const batch = inspectionBatch(production);
+          if (!batch) break;
+          try {
+            const results = await runInParallel(batch);
+            production = await transaction("readwrite", (store, read) => read(store.get(id), record => {
+              const current = checkRecord(record);
+              settleInspections(current, batch, results);
+              store.put(current);
+              return current;
+            }));
+          } catch (error) {
+            const current = await load();
+            if (current.queueState || current.generation !== production.generation) {
+              return { production: current, rejection: "A fila ou a revisão mudou durante a inspeção." };
+            }
+            const saved = await this.dispatch(id, { action: "error", message: error.message.slice(0, 500) });
+            return { ...saved, rejection: error.message };
+          }
+        }
+        return { production };
+      });
     },
     dispatch(id, command) {
       return transaction("readwrite", (store, read) => read(store.get(id), record => {

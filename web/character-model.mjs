@@ -1,8 +1,8 @@
 import { normalize } from "./production-catalog.mjs";
 
 export const CHARACTER_LIMIT = 40;
-export const MEDIA_LIMITS = Object.freeze({cover: 2*1024*1024, model: 16*1024*1024, animation: 16*1024*1024, voice: 16*1024*1024});
-export const MEDIA_LABELS = Object.freeze({cover:"Capa 2D",model:"Modelo 3D",animation:"Animações",voice:"Voz"});
+export const MEDIA_LIMITS = Object.freeze({cover: 2*1024*1024, model: 16*1024*1024, animation: 16*1024*1024, voice: 16*1024*1024, production: 16*1024*1024});
+export const MEDIA_LABELS = Object.freeze({cover:"Capa 2D",model:"Modelo 3D",animation:"Animações",voice:"Voz", production:"Pacote de produção"});
 export const FIELDS = Object.freeze({
   name: 100, history: 4000, personality: 2000, appearance: 1500, clothing: 2000,
   voiceDirection: 1200, animationDirection: 1200, relationships: 1600, notes: 2000, credits: 1200,
@@ -12,9 +12,10 @@ export const allowedStatus = ["rascunho", "aprovado"];
 const exts = {
   cover: /\.(png|jpe?g|webp)$/i,
   model: /\.glb$/i, animation: /\.glb$/i,
-  voice: /\.(wav|ogg|mp3)$/i,
+  voice: /\.(wav|ogg|mp3)$/i, production: /\.zip$/i,
 };
 const allowedMime = {
+  production: ["application/zip","application/x-zip-compressed","application/octet-stream",""],
   cover: ["image/png","image/jpeg","image/webp"],
   model: ["model/gltf-binary","application/octet-stream",""],
   animation: ["model/gltf-binary","application/octet-stream",""],
@@ -59,10 +60,15 @@ export function describeCharacter(record) {
   ].filter(([_, v])=>typeof v==="string" && v.trim());
   return [record.name + " (" + (record.status === "aprovado" ? "ficha aprovada pelo autor" : "rascunho não aprovado") + ")", ...parts.map(([k,v])=> k + ": " + v)].join("\n");
 }
+export function matchingCharacters(message, records) {
+  const words = value => normalize(value).match(/[\p{Letter}\p{Number}]+/gu)?.join(" ") || "";
+  const query = " " + words(message) + " ";
+  return (records || []).filter(record => record.name && words(record.name) &&
+    query.includes(" " + words(record.name) + " "));
+}
 export function matchingCharacter(message, records) {
-  const q = normalize(message);
-  const matches = (records || []).filter(record => record.name?.trim() && q.includes(normalize(record.name)));
-  return matches.sort((a,b) => b.name.length-a.name.length)[0] ?? null;
+  const matches = matchingCharacters(message, records);
+  return matches.length === 1 ? matches[0] : null;
 }
 export function buildCharacterBrief(record) {
   if (!record?.name) throw Error("Personagem não selecionado.");

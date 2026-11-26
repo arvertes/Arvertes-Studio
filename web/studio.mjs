@@ -1,6 +1,8 @@
 import { byId, departments, el, empty, fields, fillIcons, icon, link } from "./ui.mjs";
 import { mountOffice, unmountOffice, setOfficeRoster, setOfficeActivity } from "./office.mjs";
 import { initLibrary, closePreview } from "./library.mjs";
+import { showDepartments } from "./departments-ui.mjs";
+import { leaveLaboratory, mountLaboratory } from "./lab-ui.mjs";
 import { initPipeline } from "./pipeline.mjs";
 import { applyDisplayPreferences, renderExtraPage } from "./system-panels.mjs";
 import { initProduction, showProductionPage } from "./production-ui.mjs";
@@ -18,6 +20,7 @@ const groups = [
   ["Central", [
     ["overview", "overview", "Visão geral", "Seu espaço de trabalho para produção de assets para Unreal Engine."],
     ["office", "office", "Escritório virtual", "Explore a sede e consulte os perfis dos agentes por departamento."],
+    ["departamentos", "folder", "Departamentos", "Consulte responsabilidades, dependências e disponibilidade."],
     ["projects", "folder", "Projetos", "Reabra as produções salvas neste navegador."],
     ["characters", "users", "Personagens", "Dossiês com história, personalidade, capa 2D, 3D, animações e voz."],
   ]],
@@ -31,6 +34,7 @@ const groups = [
     ["audio", "audio", "Áudio e música", "Planejamento de som e composição para a produção."],
   ]],
   ["Inteligência artificial", [
+    ["laboratorio", "activity", "Aprimoramento Contínuo", "Experimentos locais com ativos sintéticos e evidências verificáveis."],
     ["agents", "users", "Agentes", "Consulte os especialistas cadastrados no Studio."],
     ["atlas", "spark", "Atlas", "Proponha etapas e responsáveis a partir de um briefing."],
     ["tools", "tools", "Ferramentas", "Consulte as ferramentas disponíveis para o seu fluxo."],
@@ -131,6 +135,8 @@ const systemPages = {
 };
 function renderSystem(page) {
   const root = byId("system-content");
+  if (page === "departamentos") { showDepartments(root, studioBackend()); return; }
+  if (page === "laboratorio") { mountLaboratory(root); return; }
   if (["settings", "resources", "memory", "tools"].includes(page)) {
     renderExtraPage(page, root, { collapsed, setCollapsed(value) {
       collapsed = value;
@@ -231,6 +237,13 @@ function renderAgents() {
       ["Etapas e responsabilidades", steps.map(stage => `${stage.title} · ${stage.description}`).join(" • ")],
       ["Ferramentas", Array.isArray(remote?.tools) && remote.tools.length ? remote.tools.join(" • ")
         : [...new Set(steps.map(stage => stage.tool))].join(" • ")],
+      ...(remote?.intake?.length ? [["Entradas e conhecimentos", remote.intake.join(" • ")]] : []),
+      ...(remote?.completion ? [["Critério de qualidade", remote.completion]] : []),
+      ...(remote?.review?.input?.length ? [
+        ["Evidências da revisão", remote.review.input.join(" • ")],
+        ["Próxima revisão", roster.find(item => item.id === remote.review.next_reviewer)?.name || "Revisão humana"],
+      ] : []),
+      ...(remote?.boundary ? [["Restrição da especialidade", remote.boundary]] : []),
       ["Limite atual", canOperate ? "Ações locais conforme os checkpoints do AutoPipeline." : "A execução depende de uma integração validada."],
     ]), link("Consultar AutoPipeline", "pipeline"));
     const talk = el("button", "button", "Conversar");
@@ -308,6 +321,7 @@ function renderPage(focus = false) {
   if (current === "office" || current === "overview") unmountOffice();
   if (current === "library") closePreview();
   if (current === "characters") leaveCharacters();
+  if (current === "laboratorio") leaveLaboratory();
   current = page;
   currentId = productionId;
   const section = byId(`view-${page}`) || byId("system-page");

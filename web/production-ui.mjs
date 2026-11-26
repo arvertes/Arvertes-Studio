@@ -1,5 +1,6 @@
 import { studioBackend } from "./backend.mjs";
-import { activeTasks, previewPlan, suggestCategory, taskLabels, taskState } from "./coordination.mjs";
+import { prioritizeProduction } from "./lab-ui.mjs";
+import { activeTasks, previewPlan, serverTaskState, suggestCategory, taskLabels, taskState } from "./coordination.mjs";
 import { availableStages, categories, productionTypes, stages, trellisDemo } from "./production-catalog.mjs";
 import { createProductionRepository } from "./production-store.mjs";
 import { localAssets } from "./library.mjs";
@@ -7,7 +8,7 @@ import { byId, el, empty, fields, link } from "./ui.mjs";
 
 const date = new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" });
 const formatDate = value => date.format(new Date(value));
-const historyLabels = { plan: "Plano", checkpoint: "Checkpoint", note: "Decisão", error: "Erro" };
+const historyLabels = { plan: "Plano", checkpoint: "Checkpoint", decision: "Decisão da fila", note: "Decisão", error: "Erro" };
 
 let indexedDB;
 try { indexedDB = window.indexedDB; } catch { /* acesso pode ser bloqueado pelo navegador */ }
@@ -63,6 +64,7 @@ function demo() {
 
 function productionStatus(production) {
   if (!production.approvedAt) return "Aguardando aprovação";
+  if (production.queueState) return taskLabels[production.queueState];
   const tasks = activeTasks(production);
   if (!tasks.length) return "Etapas validadas";
   if (tasks.every(task => taskState(production, task) === "executor")) return "Aguardando executor";
@@ -128,6 +130,7 @@ function taskEvidence(task) {
     default:
       content.append(el("p", "", "Confirmação registrada pela pessoa responsável."));
   }
+  if (evidence.reusedFrom) content.append(el("p", "muted", "Resultado reaproveitado da revisão " + evidence.reusedFrom + "."));
   return details(`Evidência · ${formatDate(evidence.at)}`, content, task.id === "review");
 }
 
@@ -189,9 +192,11 @@ function status() {
 }
 
 async function dispatch(production, command, trigger, feedback, message) {
+  prioritizeProduction();
   trigger.disabled = true;
   try {
-    const result = await repository.dispatch(production.id, command);
+    const result = command.action === "inspect-parallel" ? await repository.inspectParallel(production.id) :
+      await repository.dispatch(production.id, command);
     const index = records.findIndex(record => record.id === production.id);
     if (index >= 0) records[index] = result.production;
     updates?.postMessage("changed");
@@ -213,7 +218,9 @@ function renderPlan(production) {
   const feedback = status();
   feedback.id = "pipeline-feedback";
   feedback.dataset.production = production.id;
-  card.append(el("p", "draft-copy", production.instruction), el("span", "badge cyan", productionStatus(production)), feedback);
+  const completed = production.tasks.filter(task => task.evidence).length;
+  card.append(el("p", "draft-copy", production.instruction), el("span", "badge cyan", productionStatus(production)),
+    el("p", "muted", completed + " de " + production.tasks.length + " checkpoints registrados"), feedback);
   if (!production.approvedAt) {
     card.append(el("p", "", "Revise as etapas, os responsáveis e as ferramentas. Sua aprovação libera a fila de tarefas."),
       button("Aprovar plano e liberar tarefas", trigger =>
@@ -247,6 +254,21 @@ function renderPlan(production) {
 
 function actions(production, feedback) {
   const card = panel("Continuar produção");
+  if (!production.queueState && activeTasks(production).length) {
+    card.append(button("Pausar produção local", trigger =>
+      dispatch(production, { action: "pause" }, trigger, feedback, "Produção pausada.")));
+  } else if (production.queueState === "paused") {
+    card.append(button("Retomar produção local", trigger =>
+      dispatch(production, { action: "resume" }, trigger, feedback, "Produção retomada."), true));
+  }
+  if (production.queueState !== "cancelled" && production.tasks.some(task => !task.evidence)) {
+    card.append(button("Cancelar produção local", trigger => {
+      if (confirm("Cancelar as etapas pendentes desta produção local?")) {
+        void dispatch(production, { action: "cancel" }, trigger, feedback, "Etapas pendentes canceladas.");
+      }
+    }));
+  }
+  if (production.queueState) return card;
   const ready = activeTasks(production);
   const latest = production.history.findLast(event => event.type === "checkpoint");
   if (latest) card.append(el("p", "", `Último checkpoint · ${latest.message}`));
@@ -272,12 +294,28 @@ function actions(production, feedback) {
     else card.append(el("p", "muted", "Nenhum GLB disponível para associar nesta aba."));
   }
   const model = production.tasks.find(task => task.id === "model")?.evidence?.asset;
+  if (model) {
+    const versions = el("ul", "inspection-list");
+    for (const version of [...(production.assetHistory || []), { revision: production.assetRevision || 1, asset: model }]) {
+      versions.append(el("li", "", "Revisão " + version.revision + " · " + version.asset.name + " · SHA-256 " + version.asset.digest));
+    }
+    const alternatives = localAssets().filter(asset => asset.digest && asset.digest !== model.digest && asset.data.primitives);
+    const content = el("div");
+    content.append(versions);
+    if (alternatives.length) content.append(attachmentForm(production, alternatives, feedback, "revise"));
+    else content.append(link("Importar GLB para uma revisão", `library/${production.id}`, "button"));
+    card.append(details("Revisões do GLB", content));
+  }
   if (model && !localAssets().some(asset => asset.digest === model.digest)) {
     card.append(el("p", "muted", `As inspeções usam os metadados salvos de ${model.name}. Para abrir a visualização 3D, importe o mesmo arquivo na biblioteca.`));
   }
   if (ready.some(task => task.kind === "inspection")) {
     card.append(button("Executar inspeções locais", trigger =>
       dispatch(production, { action: "inspect-ready" }, trigger, feedback, "Inspeções e parecer preliminar registrados."), true));
+    if (typeof Worker === "function" && navigator.locks && navigator.hardwareConcurrency > 1 && ready.filter(task => task.kind === "inspection").length > 1) {
+      card.append(button("Inspecionar com dois workers", trigger =>
+        dispatch(production, { action: "inspect-parallel" }, trigger, feedback, "Inspeções em workers e parecer registrados.")));
+    }
   }
   if (ready.some(task => task.id === "validation")) {
     card.append(el("p", "", "Confira a evidência de Argus nas etapas abaixo e registre seu aceite do parecer preliminar."),
@@ -306,7 +344,7 @@ function actions(production, feedback) {
   return card;
 }
 
-function attachmentForm(production, assets, feedback) {
+function attachmentForm(production, assets, feedback, action = "attach") {
   const form = el("form", "production-form");
   const picker = el("select");
   assets.forEach((asset, index) => picker.add(new Option(`${asset.name} · ${asset.digest.slice(0, 8)}`, String(index))));
@@ -321,14 +359,15 @@ function attachmentForm(production, assets, feedback) {
   }
   picker.addEventListener("change", suggest);
   suggest();
-  const save = button("Associar e catalogar GLB", null, true);
+  const save = button(action === "revise" ? "Registrar nova revisão do GLB" : "Associar e catalogar GLB", null, true);
   save.type = "submit";
   form.append(label("GLB importado", picker), label("Categoria na produção", category), suggestion, save);
   form.addEventListener("submit", event => {
     event.preventDefault();
     const asset = assets[picker.selectedIndex];
-    void dispatch(production, { action: "attach", asset, category: category.value }, save, feedback,
-      "GLB associado a Forge e catalogado por Nexus.");
+    void dispatch(production, { action, asset, category: category.value }, save, feedback,
+      action === "revise" ? "Nova revisão registrada. O aceite anterior fica no histórico." :
+        "GLB associado a Forge e catalogado por Nexus.");
   });
   return form;
 }
@@ -341,30 +380,112 @@ function showRemoteList(root) {
   root.append(box);
 }
 
-async function showRemotePlan(root, id) {
+const serverLabels = {
+  approval: "Aguardando aprovação", dependency: "Aguardando dependências",
+  dependency_blocked: "Dependência bloqueada", executor: "Aguardando executor",
+  review: "Aguardando revisão humana", ready: "Disponível para iniciar",
+  done: "Checkpoint registrado", paused: "Pausada", cancelled: "Cancelada",
+  waiting: "Aguardando liberação de recursos", running: "Em execução",
+  blocked: "Bloqueada", uncertain: "Execução a reconciliar",
+};
+const stageLabels = {
+  model: "Modelagem", optimize: "Otimização", rig: "Rigging", animation: "Animação",
+  sound: "Design de som", music: "Composição musical", inspect: "Inspeção GLB",
+  review: "Revisão humana", package: "Empacotamento",
+};
+const eventLabels = {
+  approved: "Aprovação", pending: "Retomada", paused: "Pausa", cancelled: "Cancelamento",
+  delegated: "Delegação", review_requested: "Pedido de revisão", result: "Resultado",
+  retry_requested: "Nova tentativa solicitada", blocked: "Bloqueio",
+};
+const agentNames = Object.fromEntries(Object.values(stages).map(stage => [stage.agentId, stage.agent]));
+const agentName = id => agentNames[id] || "Responsável indisponível";
+const stageName = id => stageLabels[id] || id;
+
+function serverHistory(messageResult, errorResult) {
+  const history = el("div");
+  if (messageResult.status === "fulfilled" && messageResult.value.length) {
+    const timeline = el("ol", "production-history");
+    for (const event of messageResult.value) {
+      const row = el("li");
+      row.append(el("small", "muted", formatDate(event.date * 1000) + " · " +
+        (eventLabels[event.event] || event.event)),
+      el("p", "", agentName(event.sender) + " → " + agentName(event.recipient) + " · " + event.objective));
+      for (const evidence of event.evidence || []) {
+        row.append(el("p", "muted", stageName(evidence.stage) + " · SHA-256 " + evidence.sha256));
+      }
+      timeline.append(row);
+    }
+    history.append(timeline);
+  } else {
+    history.append(el("p", "muted", messageResult.status === "fulfilled" ?
+      "Nenhuma decisão ou transferência registrada." : "Histórico de decisões indisponível."));
+  }
+  if (errorResult.status === "fulfilled" && errorResult.value.length) {
+    const errors = el("ul", "production-history");
+    for (const error of errorResult.value) {
+      const reason = error.reason === "invalid_glb" ? "Arquivo GLB inválido" : "Falha registrada";
+      errors.append(el("li", "", formatDate(error.recorded * 1000) + " · " +
+        stageName(error.stage) + " · tentativa " + error.attempt + " · " + reason));
+    }
+    history.append(errors);
+  } else if (errorResult.status === "rejected") {
+    history.append(el("p", "muted", "Histórico de erros indisponível."));
+  }
+  return details("Decisões, transferências e erros", history, true);
+}
+
+async function showRemotePlan(root, id, operationError) {
   const remote = studioBackend()?.productions;
   if (!remote) return;
   const generation = ++remoteRevision;
   const box = panel("Produção no servidor", "Carregando checkpoints…");
   root.append(box);
   try {
-    const [job, reports] = await Promise.all([remote.get(id), remote.reports(id)]);
+    const [job, reports, history] = await Promise.all([
+      remote.get(id), remote.reports(id), Promise.allSettled([remote.messages(id), remote.errors(id)]),
+    ]);
     if (generation !== remoteRevision || !box.isConnected) return;
     const feedback = status();
-    box.replaceChildren(el("h2", "", job.title), el("p", "draft-copy", job.briefing), feedback);
+    const done = job.steps.filter(step => step.status === "done").length;
+    box.replaceChildren(el("h2", "", job.title), el("p", "draft-copy", job.briefing),
+      el("p", "muted", done + " de " + job.steps.length + " checkpoints registrados"), feedback);
+    if (operationError) announce(feedback, operationError, true);
     const stages = el("ol", "production-tasks");
     for (const step of job.steps) {
       const row = el("li", "production-task");
-      const labels = { inspect: "Inspeção GLB", review: "Revisão humana", package: "Empacotamento" };
-      row.append(el("h3", "", labels[step.stage] || step.stage), el("p", "muted", step.status));
+      const state = serverTaskState(job, step);
+      row.append(el("h3", "", stageName(step.stage)), el("p", "", agentName(step.agent) + " · " +
+        (serverLabels[state] || "Estado indisponível")));
+      if (step.depends_on?.length) {
+        row.append(el("p", "muted", "Depende de " + step.depends_on.map(stageName).join(", ")));
+      }
+      if (step.reason === "invalid_glb") {
+        row.append(el("p", "muted", state === "blocked" ?
+          "Limite de tentativas atingido. Corrija o GLB antes de abrir outra produção." :
+          "A última inspeção rejeitou o arquivo. Corrija ou substitua o GLB antes de tentar novamente."));
+      } else if (state === "uncertain") {
+        row.append(el("p", "muted", "Confirme com o operador se houve execução antes de repetir a etapa."));
+      }
       const report = reports.find(item => item.stage === step.stage);
-      if (report?.sha256) row.append(el("p", "muted", "SHA-256 " + report.sha256));
+      const hash = report?.sha256 ?? report?.report_digest;
+      if (hash) row.append(el("p", "muted", "SHA-256 " + hash));
       stages.append(row);
     }
     const run = (label, action) => button(label, async trigger => {
+      prioritizeProduction();
       trigger.disabled = true;
-      try { await action(); render(); }
-      catch (error) { announce(feedback, error.message, true); trigger.disabled = false; }
+      try { await action(); if (box.isConnected) render(); }
+      catch (error) {
+        if (!box.isConnected) return;
+        if ([409, 422].includes(error.status)) {
+          box.remove();
+          await showRemotePlan(root, id, error.message);
+        } else {
+          announce(feedback, error.message, true);
+          trigger.disabled = false;
+        }
+      }
     });
     if (!job.approved) {
       box.append(run("Aprovar fila com custo de R$ 0", () => remote.control(id, "approve")));
@@ -404,14 +525,14 @@ async function showRemotePlan(root, id) {
       }
       if (pending?.status === "pending") box.append(run("Pausar fila", () => remote.control(id, "pause")));
       if (pending?.status === "paused") box.append(run("Retomar fila", () => remote.control(id, "resume")));
-      if (pending && ["pending", "paused"].includes(pending.status)) {
+      if (pending && ["pending", "paused", "waiting", "blocked"].includes(pending.status)) {
         box.append(run("Cancelar etapas pendentes", () => {
           if (!confirm("Cancelar as etapas pendentes desta produção?")) return;
           return remote.control(id, "cancel");
         }));
       }
     }
-    box.append(stages);
+    box.append(stages, serverHistory(...history));
   } catch (error) {
     if (generation === remoteRevision && box.isConnected) {
       box.replaceChildren(el("p", "", error.message), button("Recarregar produção", () => render()));
@@ -487,7 +608,8 @@ export function initProduction() {
   form.addEventListener("submit", event => {
     event.preventDefault();
     const feedback = byId("draft-error");
-    const brief = { name: byId("name").value, instruction: byId("instruction").value, type: type.value };
+    const brief = { name: byId("name").value, instruction: byId("instruction").value, type: type.value,
+      fullPipeline: byId("full-pipeline").checked };
     if (form.dataset.characterId && byId("name").value.trim() === form.dataset.characterName) brief.characterId = form.dataset.characterId;
     const showMessage = message => {
       feedback.textContent = message;

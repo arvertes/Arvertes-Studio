@@ -26,6 +26,15 @@ from arvertes_cloud.web import SupabaseAuth, create_api
 from arvertes_cloud.workspace import Workspace
 
 studio = Path(__file__).resolve().parents[2]
+acceptance = os.getenv("ARVERTES_TEST_CHARACTER_ACCEPTANCE")
+drive = None
+if acceptance:
+    acceptance = json.loads(acceptance)
+    fixtures = runpy.run_path(Path(acceptance["agents"]) / "tests/test_studio_api.py")
+    service = fixtures["DriveDouble"]()
+    def drive():
+        return fixtures["DriveWarehouse"](service, "characters", lambda stream, **_: stream.read(),
+                                          fixtures["Download"], parents=(("root","Arvertes"),))
 write_glb = runpy.run_path(studio / "tests/integration/fixture_glb.py")["write_fixture"]
 
 
@@ -64,7 +73,8 @@ else:
 with ThreadingHTTPServer(("127.0.0.1", 0), partial(Quiet, directory=studio / "web/dist")) as server:
     Thread(target=server.serve_forever, daemon=True).start()
     origin = f"http://127.0.0.1:{server.server_port}"
-    api = TestClient(create_api(Workspace(db), authenticate=authenticate, origins=(origin,)))
+    workspace = Workspace(db, drive=drive)
+    api = TestClient(create_api(workspace, authenticate=authenticate, origins=(origin,)))
     if gotrue:
         wrong_user = signup_fixture()
         denied = api.get("/api/v1/agents", headers={"Authorization": "Bearer " + wrong_user["access_token"]})
@@ -110,12 +120,17 @@ with ThreadingHTTPServer(("127.0.0.1", 0), partial(Quiet, directory=studio / "we
                 content_type="text/javascript"))
 
         online = True
+        faults = {"dossier_read": False}
         def bridge(route):
             request = route.request
             if not online:
                 route.abort("internetdisconnected")
                 return
             url = urlsplit(request.url)
+            if faults["dossier_read"] and request.method == "GET" and re.fullmatch(r"/api/v1/characters/[\w-]+", url.path):
+                faults["dossier_read"] = False
+                route.fulfill(status=503, json={"error": "Serviço indisponível."})
+                return
             result = api.request(request.method, url.path + ("?" + url.query if url.query else ""),
                                  headers={k: v for k, v in request.all_headers().items() if k != "host"},
                                  content=request.post_data_buffer)
@@ -126,6 +141,16 @@ with ThreadingHTTPServer(("127.0.0.1", 0), partial(Quiet, directory=studio / "we
         expect(page.locator(".connection")).to_contain_text("Arvertes Agents conectado")
         if gotrue:
             assert "/token" in auth_requests, "O SDK não renovou a sessão com o Supabase Auth local."
+        if acceptance:
+            from acceptance_character import exercise
+            page.goto(origin + "/#characters")
+            page.locator("#character-new-name").fill("Fixture remota")
+            page.locator("#character-create button").click()
+            expect(page.get_by_role("heading", name="Fixture remota")).to_be_visible()
+            exercise(page, Path(tmp), studio, acceptance)
+            assert not errors, errors
+            browser.close()
+            raise SystemExit(0)
         expect(page.locator("#chat-agent")).to_have_value("coordenador")
         expect(page.locator("#chat-connection")).to_contain_text("Servidor")
         page.goto(origin + "/#agents")
@@ -139,6 +164,43 @@ with ThreadingHTTPServer(("127.0.0.1", 0), partial(Quiet, directory=studio / "we
         expect(page.locator("#chat-facts")).to_contain_text("a referência é sintética")
         page.reload()
         expect(page.locator("#chat-messages")).to_contain_text("Lembre que a referência")
+        page.locator("#chat-message").fill("Prepare retopologia e animação para o modelo sintético.")
+        page.locator("#chat-send").click()
+        proposal = page.locator("#chat-messages details").last
+        proposal.locator("summary").click()
+        expect(proposal).to_contain_text("Forge · malha retopologizada")
+        expect(proposal).to_contain_text("Requer executor conectado")
+        expect(proposal).to_contain_text("Entradas pendentes")
+        page.reload()
+        expect(page.get_by_text("Consultar proposta de Atlas")).to_be_visible()
+        page.goto(origin + "/#departamentos")
+        expect(page.get_by_text("Oito contratos de produção consultados.")).to_be_visible()
+        page.locator("#system-content summary").filter(has_text=re.compile("^Criaturas$")).click()
+        expect(page.get_by_text("locomoção e silhueta", exact=False)).to_be_visible()
+        page.goto(origin + "/#memory")
+        page.get_by_text("Base editorial dos agentes", exact=True).click()
+        expect(page.get_by_text("Nenhum documento preparado.")).to_be_visible()
+        page.get_by_label("Documento UTF-8").set_input_files({
+            "name": "nimbo.txt", "mimeType": "text/plain",
+            "buffer": b"Nimbo habita dunas. <script>window.fixtureExecuted = true</script>",
+        })
+        page.get_by_role("button", name="Preparar prévia editorial").click()
+        expect(page.get_by_text("Sugestão · Rascunho")).to_be_visible()
+        assert page.evaluate("window.fixtureExecuted === undefined")
+        search = page.get_by_role("button", name="Pesquisar conhecimento aprovado")
+        page.get_by_label("Consulta editorial").fill("Nimbo")
+        search.click()
+        expect(page.get_by_text("Nenhum trecho aprovado neste escopo.")).to_be_visible()
+        page.once("dialog", lambda dialog: dialog.accept())
+        page.get_by_role("button", name="Aprovar revisão editorial").click()
+        expect(page.get_by_text("Sugestão · Aprovado")).to_be_visible()
+        search.click()
+        expect(page.get_by_text("nimbo.txt · revisão 1 · trecho 1", exact=False)).to_be_visible()
+        page.goto(origin + "/#atlas")
+        page.locator("#chat-message").fill("Qual o habitat de Nimbo?")
+        page.locator("#chat-send").click()
+        page.get_by_text("Fontes consultadas", exact=True).click()
+        expect(page.get_by_text("nimbo.txt · revisão 1 · trecho 1", exact=True)).to_be_visible()
         page.goto(origin + "/#characters")
         page.locator("#character-new-name").fill("Fixture remota")
         page.locator("#character-create button").click()
@@ -146,6 +208,23 @@ with ThreadingHTTPServer(("127.0.0.1", 0), partial(Quiet, directory=studio / "we
         page.locator("#character-history").fill("História de teste fornecida pelo autor.")
         page.get_by_role("button", name="Salvar ficha").click()
         expect(page.locator("#characters-status")).to_contain_text("Ficha salva na sua conta")
+        page.locator("#character-history").fill("Rascunho preservado após falha.")
+        faults["dossier_read"] = True
+        page.locator("#characters-list button").click()
+        expect(page.locator("#character-editor")).not_to_contain_text("Carregando ficha")
+        expect(page.locator("#character-editor")).to_contain_text("Não foi possível abrir a ficha")
+        page.get_by_role("button", name="Tentar novamente", exact=True).click()
+        expect(page.locator("#character-history")).to_have_value("Rascunho preservado após falha.")
+        unavailable_fixture = Path(tmp) / "midia-sintetica.glb"
+        write_glb(unavailable_fixture, 4)
+        workspace.drive = None
+        page.get_by_label("Anexar Modelo 3D").set_input_files(unavailable_fixture)
+        expect(page.locator("#characters-status")).to_contain_text("Armazenamento Drive indisponível")
+        workspace.drive = drive
+        expect(page.locator("#character-history")).to_have_value("Rascunho preservado após falha.")
+        page.reload()
+        page.locator("#characters-list button").click()
+        expect(page.locator("#character-history")).to_have_value("Rascunho preservado após falha.")
         page.goto(origin + "/#production")
         page.get_by_label("Nome da produção").fill("GLB sintético")
         page.get_by_label("Instruções").fill("Preparar o modelo 3D GLB para inspeção.")
@@ -153,6 +232,8 @@ with ThreadingHTTPServer(("127.0.0.1", 0), partial(Quiet, directory=studio / "we
         page.get_by_role("button", name="Propor plano").click()
         page.get_by_role("button", name="Salvar fila de inspeção no servidor").click()
         expect(page).to_have_url(re.compile(r"#pipeline/[a-f0-9]{32}$"))
+        expect(page.get_by_text("0 de 3 checkpoints registrados")).to_be_visible()
+        expect(page.get_by_text("Argus · Aguardando aprovação")).to_be_visible()
         page.get_by_role("button", name="Aprovar fila com custo de R$ 0").click()
         expect(page.get_by_label("GLB autorizado para inspeção")).to_be_visible()
         route = page.url
@@ -163,8 +244,15 @@ with ThreadingHTTPServer(("127.0.0.1", 0), partial(Quiet, directory=studio / "we
         page.goto(route)
         fixture = Path(tmp) / "fixture.glb"
         write_glb(fixture, 4)
+        page.get_by_label("GLB autorizado para inspeção").set_input_files(
+            {"name": "invalid.glb", "mimeType": "model/gltf-binary", "buffer": b"invalid"})
+        page.get_by_role("button", name="Inspecionar GLB").click()
+        expect(page.get_by_text("A última inspeção rejeitou o arquivo.", exact=False)).to_be_visible()
+        expect(page.get_by_text("tentativa 1 · Arquivo GLB inválido", exact=False)).to_be_visible()
         page.get_by_label("GLB autorizado para inspeção").set_input_files(fixture)
         page.get_by_role("button", name="Inspecionar GLB").click()
+        expect(page.get_by_text("1 de 3 checkpoints registrados")).to_be_visible()
+        expect(page.get_by_text("Aegis · Aguardando revisão humana")).to_be_visible()
         page.get_by_role("button", name="Confirmar revisão da inspeção").click()
         with page.expect_download() as download:
             page.get_by_role("button", name="Baixar pacote verificado").click()
@@ -173,6 +261,8 @@ with ThreadingHTTPServer(("127.0.0.1", 0), partial(Quiet, directory=studio / "we
         assert claims[0]["counts"]["meshes"] == 4, claims
         page.reload()
         expect(page.get_by_role("button", name="Baixar pacote verificado")).to_be_visible()
+        expect(page.get_by_text("3 de 3 checkpoints registrados")).to_be_visible()
+        expect(page.get_by_text("Operador aprovou limite de R$ 0.", exact=False)).to_be_visible()
         page.goto(origin + "/#settings")
         online = False
         page.get_by_role("button", name="Verificar conexão").click()

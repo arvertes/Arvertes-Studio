@@ -88,3 +88,17 @@ A ficha aceita até quatro anexos por personagem:
 As mídias são verificadas por tipo, formato e SHA-256 e persistem, enquanto o navegador permitir, em IndexedDB separado (`arvertes-character-dossiers`). No máximo 40 personagens e 50 MiB por personagem. Um dossiê pode gerar um briefing para Atlas, com as descrições autorais. Os agentes consultam as fichas salvas por nome; anotações de chat não alteram o status editorial.
 
 **Exportar pacote ZIP** produz `manifesto.json` com metadados, status e hashes, um `LEIA-ME.txt` e os arquivos anexados em `midia/`. ZIP usa STORE (sem compressão), limitado a 64 MiB, sem bibliotecas externas, e pode ficar maior que os arquivos compactados comuns. Nenhum arquivo é enviado à nuvem; o pacote exportado é a cópia de segurança recomendada. Limpar dados do navegador ou trocar de dispositivo pode apagar as fichas e os anexos locais. No modo servidor, o [arquivamento no Drive](INTEGRACAO.md#ativação-da-api-v1) depende da configuração do backend e de uma ação explícita.
+
+## Revisar propostas, decisões e bloqueios
+
+No modo servidor, o chat apresenta a proposta de Atlas com responsáveis, critérios, dependências e entradas pendentes quando o backend devolve o briefing estruturado. A proposta permanece no histórico e a fila de inspeção continua disponível pelo AutoPipeline. No modo navegador, o chat sugere etapas existentes pelas regras locais e identifica a revisão e o status editorial da ficha que foi reconhecida.
+
+O plano no servidor mostra a fração de checkpoints registrados, os agentes responsáveis e as dependências. Em **Decisões, transferências e erros** aparecem aprovações, delegações, resultados com hash e tentativas rejeitadas. Após uma falha de leitura, consulte a instrução junto da etapa. A aprovação humana continua necessária para a fila e para a revisão da inspeção.
+
+## Sprint 2
+
+Em **Memória → Base editorial dos agentes**, selecione um arquivo UTF-8 de até 16 KiB, informe a classificação e prepare a prévia. A base fica na conta autenticada. A busca e o chat usam somente revisões aprovadas e identificam fonte, revisão e trecho. Referências oficiais com propriedades estruturadas conflitantes aguardam revisão editorial. O conteúdo dos documentos é apresentado como texto. Arquivos do repositório do jogo podem ser selecionados de uma cópia autorizada de leitura.
+
+Para personagem ou criatura, em **Nova produção**, marque **Incluir etapas futuras de personagem ou criatura**. O plano inclui os responsáveis pela trilha de produção e indica as etapas dependentes de executor. A inspeção local usa o GLB apresentado e permite revisão de arquivo, pausa, retomada e cancelamento. Em navegadores com Web Locks e pelo menos dois processadores lógicos, **Inspecionar com dois workers** faz as inspeções independentes de metadados. O parecer depende dos checkpoints, e cada revisão exige seu próprio aceite humano.
+
+O rascunho da sprint parte de `codex/sprint-agentes` (PR Studio #9). A base editorial e as citações requerem a Sprint 2 de Agents, baseada no PR Agents #5. Os fluxos locais legados continuam disponíveis. Os executores de geração e validação no Unreal ainda exigem integração e autorização.

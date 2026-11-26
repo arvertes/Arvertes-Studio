@@ -6,6 +6,7 @@ export interface Brief {
   name: string;
   instruction: string;
   type?: ProductionType | "";
+  fullPipeline?: boolean;
   characterId?: string; // Vínculo opcional com um dossiê local
 }
 
@@ -21,8 +22,8 @@ export type Evidence = { at: string } & (
   | { kind: "requirements"; technical: string; artistic: string }
   | { kind: "imported-glb"; asset: GlbSnapshot }
   | { kind: "catalog"; digest: string; category: string }
-  | { kind: "inspection"; digest: string; report: string[] }
-  | { kind: "human-validation"; digest: string }
+  | { kind: "inspection"; digest: string; report: string[]; reusedFrom?: number }
+  | { kind: "human-validation"; digest: string; revision?: number }
 );
 
 export interface Task {
@@ -47,14 +48,18 @@ export interface LocalProduction {
   characterId?: string;
   approvedAt?: string;
   tasks: Task[];
-  history: { at: string; type: "plan" | "checkpoint" | "note" | "error"; message: string }[];
+  queueState?: "paused" | "cancelled" | null;
+  generation?: number;
+  assetRevision?: number;
+  assetHistory?: { revision: number; asset: GlbSnapshot; evidence: Record<string, Evidence> }[];
+  history: { at: string; type: "plan" | "checkpoint" | "decision" | "note" | "error"; message: string }[];
 }
 
 export type Command =
-  | { action: "approve" | "inspect-ready" | "validate" }
+  | { action: "approve" | "inspect-ready" | "validate" | "pause" | "resume" | "cancel" }
   | { action: "note" | "error"; message: string }
   | { action: "prepare"; technical: string; artistic: string }
-  | { action: "attach"; asset: GlbSnapshot; category: string }
+  | { action: "attach" | "revise"; asset: GlbSnapshot; category: string }
   | { action: "inspect" | "extend" | "execute"; id: string };
 
 export interface ProductionRepository {

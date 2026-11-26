@@ -111,12 +111,19 @@ def production_flow(page, origin, directory, capture):
     page.get_by_role("button", name="Associar e catalogar GLB").click()
     expect(page.get_by_role("button", name="Executar inspeções locais")).to_be_visible()
 
-    # A fila continua a partir do GLB vinculado mesmo quando os bytes não estão mais na biblioteca.
+    page.get_by_role("button", name="Pausar produção local").click()
+    expect(page.get_by_role("button", name="Retomar produção local")).to_be_visible()
     page.reload()
+    expect(page.get_by_role("button", name="Executar inspeções locais")).to_have_count(0)
+    page.get_by_role("button", name="Retomar produção local").click()
+    # O executor usa o checkpoint de metadados, mesmo após recarregar sem o arquivo na biblioteca.
     expect(page.get_by_text("As inspeções usam os metadados salvos", exact=False)).to_be_visible()
-    page.get_by_role("button", name="Executar inspeções locais").click()
+    workers = []
+    page.on("worker", lambda worker: workers.append(worker.url))
+    page.get_by_role("button", name="Inspecionar com dois workers").click()
     review = page.locator(".production-task").filter(has=page.get_by_role("heading", name="Parecer técnico preliminar"))
     expect(review.get_by_text("Inventário confirmado · 4 malhas", exact=False)).to_be_visible()
+    assert len([url for url in workers if url.endswith("/inspection-worker.mjs")]) == 3
     expect(review.get_by_text("Verificar no Unreal", exact=False)).to_be_visible()
     page.get_by_role("button", name="Validar parecer preliminar").click()
     expect(page.get_by_text("Sentinel mantém as etapas externas aguardando executor e permissões.")).to_be_visible()
@@ -357,11 +364,110 @@ def character_bundle_flow(page, origin, directory):
     page.get_by_role("button", name="Propor plano").click()
     expect(page.get_by_role("heading", name="Proposta de Atlas")).to_be_visible()
 
+def laboratory_flow(page, origin, artifacts):
+    page.goto(origin + "#laboratorio")
+    expect(page.get_by_role("heading", name="Aprimoramento Contínuo")).to_be_visible()
+    baseline = page.evaluate("""async () => {
+      const {createProductionRepository} = await import('./production-store.mjs');
+      const repo = createProductionRepository(indexedDB);
+      await repo.create({name: 'Fixture externa ao laboratório', type: 'character', instruction: 'Modelo de teste.'});
+      return await repo.list();
+    }""")
+    page.get_by_label("Autorizar Classe A apenas na produção sintética").check()
+    page.evaluate("""() => new Promise(resolve => {
+      navigator.locks.request('arvertes-studio-lab-worker-v1', async () => {
+        await new Promise(release => { window.releaseFixtureLock = release; resolve(); });
+      });
+    })""")
+    start = page.get_by_role("button", name="Ativar ou retomar laboratório")
+    stop = page.get_by_role("button", name="Salvar e encerrar laboratório")
+    start.click()
+    expect(page.get_by_text("Outra aba está usando o executor experimental.")).to_be_visible()
+    page.evaluate("window.releaseFixtureLock()")
+    page.wait_for_function("async () => !(await navigator.locks.query()).held.some(l => l.name === 'arvertes-studio-lab-worker-v1')")
+    workers = []
+    page.on("worker", lambda worker: workers.append(worker.url))
+    start.click()
+    expect(page.get_by_text("87 → 84 triângulos")).to_be_visible()
+    expect(page.get_by_text("Revisão sintética atual 2", exact=False)).to_be_visible()
+    assert any(url.endswith("/lab-worker.mjs") for url in workers)
+    if artifacts:
+        with page.expect_download() as download:
+            page.get_by_role("button", name="Baixar GLB experimental").click()
+        download.value.save_as(artifacts / "arvertes-manequim-experimental.glb")
+    stop.click()
+    expect(page.get_by_text("Desativado", exact=True)).to_be_visible()
+    page.reload()
+    expect(page.get_by_text("Revisão sintética atual 2", exact=False)).to_be_visible()
+    page.once("dialog", lambda dialog: dialog.accept())
+    page.get_by_role("button", name="Reverter revisão sintética").click()
+    expect(page.get_by_text("Revisão sintética atual 1 · Histórico 1, 2")).to_be_visible()
+
+    page.get_by_label("Asset sintético").select_option("grid")
+    page.evaluate("""() => {
+      window.RealWorker = window.Worker;
+      window.Worker = class extends window.RealWorker {
+        postMessage(message) { setTimeout(() => super.postMessage(message), 650); }
+      };
+    }""")
+    start.click()
+    expect(page.get_by_text("Experimentando", exact=True)).to_be_visible()
+    page.evaluate("""() => {
+      const priority = new BroadcastChannel('arvertes-studio-foreground-work');
+      priority.postMessage('production');
+      priority.close();
+    }""")
+    expect(page.get_by_text("Desativado", exact=True)).to_be_visible()
+    expect(page.get_by_text("Trabalho interrompido", exact=False)).to_be_visible()
+    expect(page.get_by_text("3203 → 3200 triângulos")).to_have_count(0)
+    page.reload()
+    page.get_by_label("Asset sintético").select_option("grid")
+    start.click()
+    expect(page.get_by_text("3203 → 3200 triângulos")).to_be_visible()
+    expect(page.get_by_text("Candidata aguardando revisão humana")).to_be_visible()
+    stop.click()
+    expect(page.get_by_text("Desativado", exact=True)).to_be_visible()
+    saved = page.evaluate("""async () => {
+      const {createProductionRepository} = await import('./production-store.mjs');
+      return await createProductionRepository(indexedDB).list();
+    }""")
+    assert saved == baseline, "O laboratório tocou na fila normal do Studio."
+    if artifacts:
+        for label, name in [("Baixar GLB experimental", "arvertes-grade-experimental.glb"),
+                            ("Baixar evidências experimentais", "arvertes-evidencias-laboratorio.json"),
+                            ("Baixar amostra PCM sintética", "arvertes-fixture.wav")]:
+            with page.expect_download() as download:
+                page.get_by_role("button", name=label).click()
+            download.value.save_as(artifacts / name)
+
+
+def character_mesh_preview(page, origin, path, capture):
+    page.goto(origin + "#library")
+    page.get_by_label("Importar GLB", exact=True).set_input_files(path)
+    page.get_by_role("button", name="Abrir visualização 3D").click()
+    expect(page.locator(".viewer canvas")).to_be_visible()
+    clips = page.get_by_label("Animação", exact=True)
+    expect(clips.locator("option")).to_have_count(12)
+    clips.select_option(label="Walk")
+    page.get_by_role("button", name="Malha", exact=True).click()
+    expect(page.get_by_role("button", name="Malha", exact=True)).to_have_attribute("aria-pressed", "true")
+    capture(page, "sprint6-malha")
+    page.get_by_role("button", name="Malha", exact=True).click()
+    clips.select_option(label="Parada")
+    capture(page, "sprint6-manequim")
+    page.get_by_role("button", name="Fechar", exact=True).click()
+    expect(page.locator(".viewer canvas")).to_have_count(0)
+
+
 def main():
     args = argparse.ArgumentParser(description=__doc__)
     args.add_argument("--chromium", help="Caminho do Chromium instalado, quando não fornecido pelo Playwright")
     args.add_argument("--screenshots", type=Path, help="Diretório opcional para capturas")
+    args.add_argument("--lab-artifacts", type=Path, help="Salvar exemplos sintéticos da suíte de laboratório")
+    args.add_argument("--character-preview", type=Path, help="GLB animado produzido pelo Blender")
     options = args.parse_args()
+    if options.lab_artifacts:
+        options.lab_artifacts.mkdir(parents=True, exist_ok=True)
     if options.screenshots:
         options.screenshots.mkdir(parents=True, exist_ok=True)
 
@@ -375,7 +481,7 @@ def main():
         with sync_playwright() as playwright, tempfile.TemporaryDirectory() as scratch:
             browser = playwright.chromium.launch(executable_path=options.chromium, args=["--use-angle=swiftshader"])
             try:
-                for scenario, viewport in [
+                scenarios = [
                     (settings_and_panels, {"width": 1280, "height": 900}),
                     (production_flow, {"width": 1280, "height": 900}),
                     (office_and_mobile, {"width": 375, "height": 812}),
@@ -383,11 +489,20 @@ def main():
                     (concurrent_transactions, {"width": 1280, "height": 900}),
                     (agent_memory_flow, {"width": 1280, "height": 900}),
                     (character_bundle_flow, {"width": 1280, "height": 900}),
-                ]:
+                    (laboratory_flow, {"width": 375, "height": 812}),
+                ]
+                if options.character_preview:
+                    scenarios.append((character_mesh_preview, {"width": 1280, "height": 900}))
+                for scenario, viewport in scenarios:
                     page = browser.new_page(viewport=viewport, accept_downloads=True)
                     errors = []
                     page.on("pageerror", lambda error: errors.append(str(error)))
-                    extra = (Path(scratch), capture) if scenario is production_flow else (Path(scratch),) if scenario is character_bundle_flow else (capture,) if scenario is office_and_mobile else ()
+                    arguments = {
+                        production_flow: (Path(scratch), capture), character_bundle_flow: (Path(scratch),),
+                        office_and_mobile: (capture,), laboratory_flow: (options.lab_artifacts,),
+                        character_mesh_preview: (options.character_preview, capture),
+                    }
+                    extra = arguments.get(scenario, ())
                     scenario(page, origin, *extra)
                     assert not errors, errors
                     page.close()

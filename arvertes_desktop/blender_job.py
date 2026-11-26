@@ -1,17 +1,16 @@
 """Admissão local de uma referência GLB explícita para análise em cópia."""
 from hashlib import sha256
+from io import BytesIO
 import json
 from pathlib import Path
-from struct import Struct
 import os
 import stat
 
-from arvertes_studio.core.imports import validate_import_path
+from arvertes_studio.core.imports import inspect_glb_stream, validate_import_path
 
 MAX_INPUT = 16 * 1024 * 1024
 MAX_REPORT = 8 * 1024 * 1024
 MAX_COPY = 128 * 1024 * 1024
-HEADER = Struct("<4sIII4s")
 
 
 def read_source(path):
@@ -24,31 +23,9 @@ def read_source(path):
         if not stat.S_ISREG(os.fstat(source.fileno()).st_mode):
             raise ValueError("A referência não é um arquivo regular.")
         raw = source.read(MAX_INPUT + 1)
-    if len(raw) < HEADER.size or len(raw) > MAX_INPUT:
+    if len(raw) > MAX_INPUT:
         raise ValueError("O GLB precisa caber no limite de 16 MiB.")
-    magic, version, size, length, kind = HEADER.unpack_from(raw)
-    if magic != b"glTF" or version != 2 or size != len(raw) or kind != b"JSON" or length > 2097152:
-        raise ValueError("Cabeçalho do GLB fora do limite.")
-    try:
-        doc = json.loads(raw[HEADER.size:HEADER.size + length])
-    except (ValueError, RecursionError) as error:
-        raise ValueError("Metadados GLB inválidos.") from error
-    if not isinstance(doc, dict) or len(raw) < HEADER.size + length:
-        raise ValueError("Documento GLB incompatível.")
-    stack = [doc]
-    while stack:
-        obj = stack.pop()
-        if isinstance(obj, dict):
-            if "uri" in obj and not (isinstance(obj["uri"], str) and obj["uri"].startswith("data:")):
-                raise ValueError("A inspeção exige GLB sem recursos externos.")
-            stack.extend(obj.values())
-        elif isinstance(obj, list):
-            stack.extend(obj)
-    nodes, accessors = doc.get("nodes", []), doc.get("accessors", [])
-    if (not isinstance(nodes, list) or len(nodes) > 5000 or not isinstance(accessors, list)
-            or any(not isinstance(item, dict) or type(item.get("count")) is not int or item["count"] <= 0
-                   for item in accessors) or sum(item["count"] for item in accessors) > 3_000_000):
-        raise ValueError("A geometria excede o limite da análise local.")
+    inspect_glb_stream(BytesIO(raw), len(raw), max_json=2097152, strict=True)
     return raw
 
 

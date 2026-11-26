@@ -108,10 +108,12 @@ async function readResponse(fetcher, url, options, timeout, blob = false) {
       cache: "no-store", redirect: "error"});
     if (!result.ok) {
       const payload = await result.json().catch(() => ({}));
-      throw connectionError(
+      const error = connectionError(
         result.status === 401 ? "Sessão expirada ou sem acesso. Entre novamente em Configurações."
           : (payload?.error || "Servidor indisponível."),
         result.status === 401 || result.status === 403 ? "unauthorized" : "http", result.status);
+      if (typeof payload?.code === "string" && /^[a-z_]{1,64}$/.test(payload.code)) error.diagnostic = payload.code;
+      throw error;
     }
     return blob ? await result.blob() : await result.json();
   } catch (error) {
@@ -220,24 +222,36 @@ export function createBackend(origin, accessToken, fetcher = fetch, {
   const productionPath = id => "/productions/" + key(id);
   const observed = new Map();
   const inflight = new Map();
-  const cache = item => { if (item?.id) observed.set(item.id, item.revision); return item; };
-  async function attachment(id, kind, file) {
+  const cache = item => {
+    if (item?.id && (observed.get(item.id) ?? 0) <= item.revision) observed.set(item.id, item.revision);
+    return item;
+  };
+  const hex = bytes => Array.from(bytes, value => value.toString(16).padStart(2, "0")).join("");
+  async function attachment(id, kind, file, revision = observed.get(id)) {
     validateAttachment(kind, file);
-    const path = characterPath(id) + "/media/" + key(kind) + "?revision=" + observed.get(id);
+    if (!Number.isSafeInteger(revision) || revision < 1) throw Error("Abra a revisão da ficha antes de anexar.");
+    const path = characterPath(id) + "/media/" + key(kind) + "?revision=" + revision;
     const bytes = await file.arrayBuffer();
-    const hash = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
-    const signature = path + ":" + file.name + ":" + Array.from(hash).join(",");
-    if (!inflight.has(signature)) {
-      if (inflight.size >= 32) inflight.delete(inflight.keys().next().value);
-      inflight.set(signature, crypto.randomUUID());
+    const digest = hex(new Uint8Array(await crypto.subtle.digest("SHA-256", bytes)));
+    const signature = new TextEncoder().encode(JSON.stringify([path, file.name, digest]));
+    const idem = hex(new Uint8Array(await crypto.subtle.digest("SHA-256", signature))).slice(0, 32);
+    if (inflight.has(idem)) return inflight.get(idem);
+    if (inflight.size >= 4) throw Error("Aguarde as transferências em andamento.");
+    const pending = request(path, { method: "PUT", binary: bytes, headers: {
+      "Content-Type": "application/octet-stream",
+      "X-Arvertes-Filename": encodeURIComponent(file.name),
+      "Idempotency-Key": idem,
+    } }).then(cache);
+    inflight.set(idem, pending);
+    try {
+      return await pending;
+    } finally {
+      inflight.delete(idem);
     }
-    const result = await request(path, { method: "PUT", binary: bytes,
-      headers: { "X-Arvertes-Filename": encodeURIComponent(file.name), "Idempotency-Key": inflight.get(signature) } });
-    inflight.delete(signature);
-    return cache(result);
   }
   return {
     agents: () => request("/agents"),
+    departments: () => request("/production-departments"),
     activity: () => request("/agents/activity"),
     resources: () => request("/resources"),
     chat: (agent, message, remember) => request(agentPath(agent), {
@@ -254,15 +268,24 @@ export function createBackend(origin, accessToken, fetcher = fetch, {
       create: async json => cache(await request("/characters", { method: "POST", json })),
       save: async ({ id, ...json }) => cache(await request(characterPath(id), { method: "PUT", json })),
       attach: attachment,
-      removeAttachment: async (id, kind) => cache(await request(characterPath(id) + "/media/" + key(kind)
-        + "?revision=" + observed.get(id), { method: "DELETE" })),
-      media: async (id, kind) => {
-        const path = characterPath(id) + "/media/" + key(kind);
+      removeAttachment: async (id, kind, revision = observed.get(id)) => cache(await request(characterPath(id) + "/media/" + key(kind)
+        + "?revision=" + revision, { method: "DELETE" })),
+      media: async (id, kind, revision = observed.get(id)) => {
+        const path = characterPath(id) + "/media/" + key(kind) + (revision === undefined ? "" : "?revision=" + revision);
         try { return { blob: await request(path, { blob: true }) }; }
         catch (error) { if (error.status === 404) return null; throw error; }
       },
-      remove: id => request(characterPath(id) + "?revision=" + observed.get(id), { method: "DELETE" }),
+      remove: (id, revision = observed.get(id)) => request(characterPath(id) + "?revision=" + revision, { method: "DELETE" }),
       exportZip: (id, revision = observed.get(id)) => request(characterPath(id) + "/package?revision=" + revision, { blob: true }),
+    },
+    knowledge: {
+      list: () => request("/knowledge"),
+      stage: json => request("/knowledge", { method: "POST", json }),
+      get: (id, revision) => request("/knowledge/" + key(id) + "?revision=" + encodeURIComponent(revision)),
+      approve: (id, revision, approvalDigest) => request("/knowledge/" + key(id) + "/approve",
+        { method: "POST", json: { revision, approvalDigest } }),
+      search: (q, agent, scope) => request("/knowledge/search?" +
+        new URLSearchParams({ q, agent, ...(scope ? { kind: scope.kind, scope: scope.id } : {}) })),
     },
     productions: {
       list: () => request("/productions"),
@@ -274,6 +297,8 @@ export function createBackend(origin, accessToken, fetcher = fetch, {
       review: (id, inspectionSha256) => request(productionPath(id) + "/review",
         { method: "POST", json: { inspectionSha256, accepted: true } }),
       reports: id => request(productionPath(id) + "/reports"),
+      messages: id => request(productionPath(id) + "/messages"),
+      errors: id => request(productionPath(id) + "/errors"),
       package: id => request(productionPath(id) + "/package", { method: "POST", blob: true }),
       archive: id => request(productionPath(id) + "/storage", { method: "POST" }),
     },

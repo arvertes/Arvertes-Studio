@@ -45,3 +45,25 @@ test("entrada inválida e segredos não disparam comandos de produção", () => 
   assert.equal(r.remember,undefined);
   assert.match(r.reply,/exigir ferramentas conectadas|execução|operação/i);
 });
+
+test("planejamento reaproveita a ficha e sugere encaminhamentos sem iniciar a produção", () => {
+  const fixture = { name: "Mira das Dunas", status: "rascunho", revision: 2 };
+  const plan = agentResponse({ agent: atlas, characters: [fixture],
+    message: "Planeje animação para Mira das Dunas." });
+  assert.match(plan.reply, /ficha em rascunho de Mira das Dunas/);
+  assert.match(plan.reply, /Axis.*Kairo/);
+  assert.match(plan.reply, /Não consigo executar/);
+  assert.equal(plan.remember, undefined);
+});
+
+test("consultas narrativas distinguem nomes completos, fichas e ambiguidades", () => {
+  const characters = [
+    { name: "Mira", status: "aprovado", revision: 3, history: "Origem ficcional da ficha A." },
+    { name: "Oren", status: "rascunho", history: "Origem ficcional da ficha B." },
+  ];
+  const reply = message => agentResponse({ agent: atlas, message, characters }).reply;
+  assert.match(reply("Qual a história de Mira?"), /ficha aprovada pelo autor · revisão 3/);
+  assert.doesNotMatch(reply("Qual a história de Mirante?"), /ficha A/);
+  assert.match(reply("Qual a história de Mira e Oren?"), /mais de uma ficha/);
+  assert.doesNotMatch(reply("Qual a história de Mira e Oren?"), /ficha [AB]/);
+});

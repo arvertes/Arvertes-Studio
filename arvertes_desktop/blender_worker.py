@@ -16,11 +16,15 @@ def main():
         raise ValueError("A inspeção requer Blender 5.3.0.")
     folder_arg, operation = sys.argv[sys.argv.index("--") + 1:]
     folder = Path(folder_arg).resolve(strict=True)
-    if operation not in ("inspect", "organize", "export"):
+    if operation not in ("inspect", "organize", "export", "package"):
         raise ValueError("Operação fora do contrato.")
     bpy.ops.wm.read_factory_settings(use_empty=True)
     if bpy.app.online_access or bpy.context.preferences.filepaths.use_scripts_auto_execute:
         raise ValueError("O executor requer Blender offline e scripts automáticos desabilitados.")
+    if operation == "package":
+        from arvertes_studio.blender.package_asset import build
+        build(folder)
+        return
     if operation == "export":
         bpy.ops.wm.open_mainfile(filepath=str(folder / "working.blend"), use_scripts=False)
         result = bpy.ops.export_scene.fbx(filepath=str(folder / "asset.fbx"), use_selection=False,

@@ -1,5 +1,6 @@
 """Controles do fluxo de GLB e histórico das mensagens por projeto."""
 from pathlib import Path
+import sys
 
 from PySide6.QtCore import QUrl
 from PySide6.QtGui import QDesktopServices
@@ -27,6 +28,11 @@ def event_label(row):
 
 
 def build_production(layout, production, protect):
+    if not getattr(sys, "frozen", False):
+        from .character_page import CharacterDialog
+
+        layout.addWidget(button("Produzir personagem localmente",
+                                lambda: CharacterDialog(production.parent(), production).exec()))
     layout.addWidget(plain("Fluxo GLB local. Atlas delega a partir de uma referência do projeto. "
                            "Selecione uma inspeção e autorize o início no Studio."))
     project = QComboBox()

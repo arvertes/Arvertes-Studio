@@ -108,10 +108,12 @@ async function readResponse(fetcher, url, options, timeout, blob = false) {
       cache: "no-store", redirect: "error"});
     if (!result.ok) {
       const payload = await result.json().catch(() => ({}));
-      throw connectionError(
+      const error = connectionError(
         result.status === 401 ? "Sessão expirada ou sem acesso. Entre novamente em Configurações."
           : (payload?.error || "Servidor indisponível."),
         result.status === 401 || result.status === 403 ? "unauthorized" : "http", result.status);
+      if (typeof payload?.code === "string" && /^[a-z_]{1,64}$/.test(payload.code)) error.diagnostic = payload.code;
+      throw error;
     }
     return blob ? await result.blob() : await result.json();
   } catch (error) {
@@ -235,8 +237,11 @@ export function createBackend(origin, accessToken, fetcher = fetch, {
     const idem = hex(new Uint8Array(await crypto.subtle.digest("SHA-256", signature))).slice(0, 32);
     if (inflight.has(idem)) return inflight.get(idem);
     if (inflight.size >= 4) throw Error("Aguarde as transferências em andamento.");
-    const pending = request(path, { method: "PUT", binary: bytes,
-      headers: { "X-Arvertes-Filename": encodeURIComponent(file.name), "Idempotency-Key": idem } }).then(cache);
+    const pending = request(path, { method: "PUT", binary: bytes, headers: {
+      "Content-Type": "application/octet-stream",
+      "X-Arvertes-Filename": encodeURIComponent(file.name),
+      "Idempotency-Key": idem,
+    } }).then(cache);
     inflight.set(idem, pending);
     try {
       return await pending;

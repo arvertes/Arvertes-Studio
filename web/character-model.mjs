@@ -16,7 +16,7 @@ const exts = {
 };
 const allowedMime = {
   production: ["application/zip","application/x-zip-compressed","application/octet-stream",""],
-  cover: ["image/png","image/jpeg","image/webp"],
+  cover: ["image/png","image/jpeg","image/webp","application/octet-stream",""],
   model: ["model/gltf-binary","application/octet-stream",""],
   animation: ["model/gltf-binary","application/octet-stream",""],
   voice: ["audio/wav","audio/x-wav","audio/wave","audio/mpeg","audio/mp3","audio/ogg","application/ogg",""],
@@ -25,6 +25,9 @@ export function validateAttachment(kind, file) {
   if (!Object.hasOwn(MEDIA_LIMITS, kind)) throw Error("Tipo de mídia inválido.");
   if (!file || typeof file.name !== "string" || !Number.isSafeInteger(file.size) || file.size < 1 || file.size > MEDIA_LIMITS[kind])
     throw Error("Arquivo ausente ou maior que o limite permitido.");
+  if ([...file.name].length > 128 || [...file.name].some(char => char.charCodeAt(0) < 32
+      || char.charCodeAt(0) === 127 || '/\\<>:"|?*'.includes(char)))
+    throw Error("Nome de arquivo incompatível.");
   if (!exts[kind].test(file.name) || !allowedMime[kind].includes(file.type))
     throw Error("Formato de arquivo não permitido para " + MEDIA_LABELS[kind] + ".");
 }

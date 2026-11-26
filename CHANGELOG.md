@@ -2,6 +2,8 @@
 
 ## v0.3 Web em desenvolvimento
 
+- Integração final: capa 2D com envio binário explícito, nomes Unicode e revisão verificada. O ensaio pareado passa pela anexação, produção local, arquivo e recuperação por SHA-256. [Roteiro de integração e aceite](docs/INTEGRACAO_FINAL.md)
+
 - Sprint 9: diagnóstico de configuração, validação estrutural de GLB, retomada segmentada em disco e anexos persistidos por revisão.
 - Sprint 9: evidência de movimento por apoio e transição, adaptação de materiais e decisões de reutilização no laboratório.
 

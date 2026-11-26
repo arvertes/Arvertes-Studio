@@ -64,3 +64,18 @@ test("anexo de produção usa revisão fixa e chave estável após falha ou conc
   assert.equal(keys[0],keys[1]);
   assert.match(keys[0],/^[a-f0-9]{32}$/);
 });
+
+test("capa usa bytes binários, nome UTF-8 codificado e diagnóstico específico do serviço", async () => {
+  const file = new File([new Uint8Array([137, 80, 78, 71])], "Ilustração 100%.png");
+  const api = createBackend("https://api.example.test", async () => "token-sintetico", async (url, options) => {
+    assert.ok(url.endsWith("/characters/char/media/cover?revision=3"));
+    assert.equal(options.headers["Content-Type"], "application/octet-stream");
+    assert.equal(options.headers["X-Arvertes-Filename"], "Ilustra%C3%A7%C3%A3o%20100%25.png");
+    assert.deepEqual([...new Uint8Array(options.body)], [137, 80, 78, 71]);
+    return Response.json({error: "OAuth do Drive com configuração inválida.", code: "drive_configuration_invalid"},
+      {status: 503});
+  });
+  await assert.rejects(api.characters.attach("char", "cover", file, 3), {
+    status: 503, diagnostic: "drive_configuration_invalid", message: "OAuth do Drive com configuração inválida.",
+  });
+});

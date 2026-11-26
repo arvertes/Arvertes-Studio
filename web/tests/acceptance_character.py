@@ -11,9 +11,6 @@ from playwright.sync_api import expect
 
 
 def exercise(page, root, studio, config):
-    with page.expect_download() as binding:
-        page.get_by_role("button", name="Baixar vínculo para o Desktop").click()
-    dossier = json.loads(binding.value.path().read_bytes())
     reference = root / "acceptance.png"
     previous = sys.path.copy()
     try:
@@ -21,6 +18,33 @@ def exercise(page, root, studio, config):
         runpy.run_path(studio / "tests/integration/check_asset_package.py")["write_image"](reference)
     finally:
         sys.path[:] = previous
+    # Exercise the API and Drive double before exporting the current revision to Desktop.
+    cover = page.get_by_label("Anexar Capa 2D")
+    cover.set_input_files({"name": "capa.png", "mimeType": "image/png", "buffer": b"invalid"})
+    expect(page.locator("#characters-status")).to_contain_text("Assinatura de mídia incompatível")
+    name = "Ilustração 100%.png"
+    payload = reference.read_bytes()
+    with page.expect_response(lambda res: "/media/cover?" in res.url and res.request.method == "PUT") as put:
+        cover.set_input_files({"name": name, "mimeType": "", "buffer": payload})
+    saved = put.value.json()
+    assert put.value.ok and saved["attachments"]["cover"]["name"] == name, saved
+    assert saved["attachments"]["cover"]["digest"] == sha256(payload).hexdigest()
+    page.reload()
+    with page.expect_response(lambda res: "/media/cover?" in res.url and res.request.method == "GET") as downloaded:
+        page.get_by_role("button", name="Fixture remota", exact=False).click()
+    expect(page.locator(".character-cover")).to_be_visible()
+    assert downloaded.value.ok, (downloaded.value.status, downloaded.value.url)
+    # Hash the actual image blob that Studio displayed after download.
+    rendered_hash = page.locator(".character-cover").evaluate("""async img => {
+      const data = await (await fetch(img.src)).arrayBuffer();
+      const digest = await crypto.subtle.digest("SHA-256", data);
+      return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, "0")).join("");
+    }""")
+    assert rendered_hash == sha256(payload).hexdigest(), rendered_hash
+    with page.expect_download() as binding:
+        page.get_by_role("button", name="Baixar vínculo para o Desktop").click()
+    dossier = json.loads(binding.value.path().read_bytes())
+    assert dossier["revision"] == saved["revision"]
     design = runpy.run_path(studio / "arvertes_studio/core/character_style.py")["study_presets"]()["túnica e trança"]
     request = {"name": "Fixture remota", "description": "Ensaio fictício de aceitação", "source": "procedural",
                "quality": "lite", "views": ["front"], "dossier": dossier, "design": design,
@@ -62,4 +86,4 @@ def exercise(page, root, studio, config):
             assert sha256(outer.read(name)).hexdigest() == entry["sha256"]
         visual = json.loads(outer.read("visual.json"))
         assert not visual["probe"]["available"] and visual["review"] == "human_required"
-    print("OK dossiê, produção Blender vinculada, revisão, arquivo no substituto Drive e download SHA-256", flush=True)
+    print("OK dossiê, capa binária com nome Unicode e SHA-256, produção Blender vinculada, revisão, arquivo no substituto Drive e download SHA-256", flush=True)

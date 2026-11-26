@@ -1,4 +1,9 @@
 {
+  "git": {
+    "deploymentEnabled": {
+      "integracao/consolidada": false
+    }
+  },
   "headers": [
     {
       "source": "/(.*)",

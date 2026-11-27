@@ -20,6 +20,7 @@ from arvertes_studio.core.asset_package import (ACTIVE_QUALITY, MAX_FILE, MAX_IM
 from arvertes_studio.core.lab_audio import render_transition
 from arvertes_studio.core.unreal_preflight import compare_motion, preflight
 from .blender_job import checked_digest, fingerprint, read_source
+from .process_runtime import external_popen
 from .resources import MIB, budget, reading, reserve, stop_children
 from .settings import validate_blender_path
 
@@ -76,8 +77,8 @@ def run_worker(blender, folder):
     log = folder / "blender.log"
     command = [str(blender), "--background", "--factory-startup", "--offline-mode", "--disable-autoexec",
                "--threads", "2", "--python-exit-code", "1", "--python", str(WORKER), "--", str(folder), "package"]
-    with log.open("wb") as output, subprocess.Popen(command, cwd=folder, stdin=subprocess.DEVNULL,
-                                                    stdout=output, stderr=subprocess.STDOUT) as worker:
+    with log.open("wb") as output, external_popen(command, cwd=folder, stdin=subprocess.DEVNULL,
+                                                 stdout=output, stderr=subprocess.STDOUT) as worker:
         deadline = monotonic() + 90
         try:
             while worker.poll() is None:

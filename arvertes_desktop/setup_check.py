@@ -8,16 +8,18 @@ from shutil import disk_usage, which
 import subprocess
 
 from arvertes_studio.core.asset_package import json_bytes
+from .process_runtime import system_dll_search
 from .resources import MIB, cpu_capacity, reading, reserve
 from .settings import validate_blender_path
 
 
 def _tool_version(command, pattern):
     try:
-        output = subprocess.run(command, stdin=subprocess.DEVNULL, capture_output=True,
-                                env={"PATH":os.defpath, **({"SYSTEMROOT":os.environ["SYSTEMROOT"]}
-                                                           if "SYSTEMROOT" in os.environ else {})},
-                                timeout=4, check=True)
+        with system_dll_search():
+            output = subprocess.run(command, stdin=subprocess.DEVNULL, capture_output=True,
+                                    env={"PATH":os.defpath, **({"SYSTEMROOT":os.environ["SYSTEMROOT"]}
+                                                               if "SYSTEMROOT" in os.environ else {})},
+                                    timeout=4, check=True)
         return pattern.search(output.stdout[:8192].decode("utf-8", "replace"))
     except (OSError, subprocess.SubprocessError):
         return None
@@ -35,7 +37,7 @@ def _vram():
     return {"free_mib":free, "total_mib":total} if 0 <= free <= total else None
 
 
-def diagnose(workspace, blender=None, agents=None, config=None):
+def diagnose(workspace, blender=None, agents=None, config=None, *, agents_python=None):
     source = blender or which("blender")
     match = None
     if source:
@@ -53,7 +55,7 @@ def diagnose(workspace, blender=None, agents=None, config=None):
         if entry.is_file():
             from .character_production import _atlas
             try:
-                if "blender_procedural" in _atlas(agents, "list_production_executors"):
+                if "blender_procedural" in _atlas(agents, "list_production_executors", python=agents_python):
                     agent_status = "compatible"
             except (ValueError, OSError, subprocess.SubprocessError):
                 pass
@@ -90,15 +92,17 @@ def diagnose(workspace, blender=None, agents=None, config=None):
                             "remote_executor":"authorization_and_artifact_handoff_required"}}
 
 
-def main():
+def main(argv=None):
     parser = ArgumentParser(description=__doc__)
     parser.add_argument("--workspace", default=Path.cwd(), type=Path)
     parser.add_argument("--blender", type=Path)
     parser.add_argument("--agents", type=Path)
+    parser.add_argument("--agents-python", type=Path)
     parser.add_argument("--config", type=Path)
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     try:
-        print(json_bytes(diagnose(args.workspace, args.blender, args.agents, args.config)).decode(), end="")
+        print(json_bytes(diagnose(args.workspace, args.blender, args.agents, args.config,
+                                  agents_python=args.agents_python)).decode(), end="")
     except (ValueError, OSError) as error:
         parser.exit(2, f"Diagnóstico interrompido. {error}\n")
 
